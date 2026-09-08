@@ -288,6 +288,7 @@ class DirectVelocityEvidence:
     position_log_variance: Tensor | None = None
     position_valid_mask: Tensor | None = None
     axis_valid_mask: Tensor | None = None
+    correlated_with_prior: bool = False
 
     def validate(self) -> None:
         if self.velocity.ndim != 3 or self.velocity.shape[-1] != 3:
@@ -300,6 +301,8 @@ class DirectVelocityEvidence:
             raise ValueError("direct velocity confidence must have shape [B,N]")
         if self.valid_mask.dtype != torch.bool:
             raise TypeError("direct velocity valid_mask must be torch.bool")
+        if type(self.correlated_with_prior) is not bool:
+            raise TypeError("direct velocity correlated_with_prior must be boolean")
         if self.axis_valid_mask is not None:
             if self.axis_valid_mask.shape != self.velocity.shape:
                 raise ValueError("direct velocity axis_valid_mask must have shape [B,N,3]")
@@ -371,4 +374,5 @@ class DirectVelocityEvidence:
             axis_valid_mask=(
                 self.axis_valid_mask.detach() if self.axis_valid_mask is not None else None
             ),
+            correlated_with_prior=self.correlated_with_prior,
         )

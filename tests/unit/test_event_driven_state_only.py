@@ -7,7 +7,8 @@ from dataclasses import replace
 import torch
 
 from world_model.belief import BeliefFactory
-from world_model.dynamics import DynamicsModel
+from world_model.dynamics import DynamicsModel, WorldImpulseAction
+from world_model.training.dynamic_set_planning import _concatenate_beliefs
 
 
 def _belief(
@@ -210,3 +211,49 @@ def test_unequal_drag_uses_the_unchanged_authoritative_path() -> None:
 
     torch.testing.assert_close(actual.positions, expected.positions, rtol=0.0, atol=0.0)
     torch.testing.assert_close(actual.velocities, expected.velocities, rtol=0.0, atol=0.0)
+
+
+def test_public_rollout_matches_independent_rows_with_nonuniform_queries_and_actions() -> None:
+    first = _belief()
+    second = _belief(
+        positions=(-0.65, 0.65),
+        velocities=(1.20, -0.80),
+    )
+    batched = _concatenate_beliefs((first, second))
+    model = _model(first, event_driven=True)
+    query_offsets = first.timestamp.new_tensor([[0.10, 0.25, 0.50], [0.05, 0.35, 0.50]])
+    action = WorldImpulseAction(
+        timestamp=first.timestamp.new_tensor([0.15, 0.30]),
+        object_id=torch.tensor([10, 20], dtype=torch.int64),
+        impulse_world=first.timestamp.new_tensor([[0.10, 0.00, 0.00], [-0.05, 0.00, 0.00]]),
+    )
+
+    batched_trajectory = model.rollout(batched, query_offsets, action=action)
+    for index, belief in enumerate((first, second)):
+        single_action = WorldImpulseAction(
+            timestamp=action.timestamp[index : index + 1],
+            object_id=action.object_id[index : index + 1],
+            impulse_world=action.impulse_world[index : index + 1],
+        )
+        single = model.rollout(
+            belief,
+            query_offsets[index : index + 1],
+            action=single_action,
+        )
+        for name in (
+            "timestamps",
+            "positions",
+            "velocities",
+            "orientations",
+            "motion_mode_logits",
+            "fast_log_variance",
+            "active_mask",
+            "event_logits",
+        ):
+            assert torch.equal(
+                getattr(batched_trajectory, name)[index : index + 1],
+                getattr(single, name),
+            ), name
+        assert batched_trajectory.auxiliary.keys() == single.auxiliary.keys()
+        for name, value in batched_trajectory.auxiliary.items():
+            assert torch.equal(value[index : index + 1], single.auxiliary[name]), name

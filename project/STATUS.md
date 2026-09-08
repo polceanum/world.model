@@ -1,5 +1,69 @@
 # Project status
 
+## Active capability-first development — 2026-09-07
+
+The active direction has moved away from constructing another known-action
+qualification successor. The compact dynamic-set implementation is now used
+directly through `scripts/run_world_model_workbench.py`: balanced public
+training, all 22 count/contact/lifecycle cells, and required K=8/K=32 planning
+over N=1--6. The historical one-shot qualification code and terminal artifacts
+remain available for audit but are not on the development critical path.
+
+The first complete public smoke was
+`runs/20260907-capability-smoke-v3`. It trained one balanced 24-example update,
+evaluated 22 physical episodes and 12 planning tasks, and completed in
+`306.717 s`. The model has 21,859 parameters / 87,436 learned bytes; the update
+took `12.913 s`, paired physical evaluation `217.096 s`, and paired planning
+evaluation `53.868 s`. Its supported score weight is 0.90 because one physical
+cycle does not support every lifecycle aggregate.
+
+All 12 planning tasks resolved their observable target, selected the oracle
+winner, achieved zero normalized regret, preserved the active set/source
+belief, and matched serial/vectorized costs exactly. One invalid frozen
+N=5/K=32 scene (development ordinal 10) was recorded and replaced by ordinal
+16 in the same slice. The old planning path had also been unusable with the
+real runtime because `torch.inference_mode()` removed tensor version counters
+and candidate batching reapplied the narrower historical uncertainty bound;
+both defects now have direct regression coverage.
+
+The one-update score change was only about 0.001%. Its main weakness was
+nominal-90% uncertainty coverage of `0.7632--0.8478`. Diagnosis found both a
+float32 covariance-cancellation bug and repeated contraction from treating
+overlapping sliding-window velocity fits as independent. The correlation-safe
+velocity variance floor `4e-13`, fitted only on public physical cycle 0, was
+then checked on different scenes in
+`runs/20260907-capability-calibration-heldout-v1`: all 22 cells moved into
+`0.8649--0.9471` coverage without changing current-position means or adding a
+parameter; all 12 planning tasks remained exact.
+
+The completed development result is
+`runs/20260907-capability-development-v2`. It evaluates 66 physical episodes
+(three held-out public cycles) and 24 planning tasks against an equally
+calibrated structured initializer. Every sampled physical gate and every
+required planning gate passes for both models. Target resolution, oracle-winner
+accuracy, and successful-oracle goal success are `1.0`; regret and
+serial/vectorized cost difference are zero. K=8/K=32 planning latency is
+`0.0176/0.0283 s` for the retained model, B1 perception is `0.0814 s`, six-
+horizon rollout is `0.0132 s`, learned weights are 87,436 bytes, and persistent
+tensors are 152,849 bytes.
+
+The 32-update learned candidate is not retained. Its complete supported score
+is `0.01116114` versus `0.01107353` for the structured model, a `0.791%`
+regression driven by horizon-velocity error (`0.0013680` versus
+`0.00005285`). The workbench therefore writes the calibrated zero-residual
+model to `selected_checkpoint.pt` and preserves the trained candidate in
+`checkpoint.pt` for diagnosis. A separate bug exposed by the full planning
+cover is also fixed: heterogeneous batch rows now receive exact B1 integration
+semantics, while homogeneous candidate batches remain vectorized. Batch
+independence is green for both variants.
+
+The current best model is consequently the compact calibrated structured
+incumbent, not a widened or longer-trained residual. The next capability step
+is to introduce one genuinely broader public factor at a time (measurement
+noise, physical-parameter variation, or broader action distributions), measure
+where the analytic model becomes biased, and train only the smallest owner of
+that supported error. Evaluation throughput remains the primary tooling cost.
+
 ## Active generalization program — 2026-09-06
 
 The pre-generalization public base was commit

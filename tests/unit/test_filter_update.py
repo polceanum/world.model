@@ -66,6 +66,23 @@ def test_explicit_low_calibration_bound_reaches_below_legacy_numerical_floor() -
     assert torch.isfinite(calibrated.log_variance).all()
 
 
+def test_precise_measurement_covariance_does_not_collapse_from_float32_cancellation() -> None:
+    prior = torch.zeros(1, 1)
+    measurement = torch.zeros_like(prior)
+    measurement_log_variance = torch.full_like(prior, torch.log(torch.tensor(1.0e-10)))
+
+    posterior = diagonal_kalman_update(
+        prior,
+        torch.zeros_like(prior),
+        measurement,
+        measurement_log_variance,
+        minimum_log_variance=-32.0,
+    )
+
+    ratio = posterior.log_variance.exp() / measurement_log_variance.exp()
+    assert 0.99 < ratio.item() <= 1.0
+
+
 def test_zero_innovation_leaves_mean_and_outlier_is_robustly_clipped() -> None:
     prior = torch.zeros(1, 2)
     prior_lv = torch.zeros_like(prior)
@@ -1003,6 +1020,49 @@ def test_post_association_direct_velocity_updates_only_valid_active_slots() -> N
     assert posterior.objects.velocity[0, 0, 2] > 0.375
     torch.testing.assert_close(posterior.objects.velocity[0, 1], torch.zeros(3))
     assert updater.last_diagnostics is sentinel
+
+
+def test_correlated_temporal_velocity_does_not_double_count_its_variance() -> None:
+    factory = BeliefFactory(max_objects=1, appearance_dim=4)
+    base = factory.create()
+    belief = base.replace(
+        objects=base.objects.replace(
+            active=torch.tensor([[True]]),
+            object_id=torch.tensor([[5]]),
+            velocity=torch.zeros(1, 1, 3),
+            fast_log_variance=torch.full_like(
+                base.objects.fast_log_variance,
+                -12.0,
+            ),
+        )
+    )
+    updater = BeliefUpdater(
+        fast_state_dim=factory.fast_state_dim,
+        num_motion_modes=NUM_MOTION_MODES,
+        config=BeliefUpdaterConfig(
+            enable_learned_corrector=False,
+            minimum_log_variance=-20.0,
+        ),
+    )
+    evidence_log_variance = torch.full((1, 1, 3), -14.0)
+
+    posterior = updater.correct_direct_velocity(
+        belief,
+        DirectVelocityEvidence(
+            velocity=torch.zeros(1, 1, 3),
+            log_variance=evidence_log_variance,
+            valid_mask=torch.tensor([[True]]),
+            confidence=torch.ones(1, 1),
+            correlated_with_prior=True,
+        ),
+    )
+
+    torch.testing.assert_close(
+        posterior.objects.fast_log_variance[..., 3:6],
+        evidence_log_variance,
+        rtol=0.0,
+        atol=0.0,
+    )
 
 
 def test_direct_velocity_fifth_positional_argument_remains_position() -> None:

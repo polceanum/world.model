@@ -59,6 +59,27 @@ _PUBLIC_ACTION_HANDLE = torch.tensor(
 )
 
 
+def test_collision_probability_transform_preserves_exact_symmetry() -> None:
+    logits = torch.tensor(
+        [
+            [0.0, -4.00001, 3.25],
+            [-4.00001, 0.0, -17.75],
+            [3.25, -17.75, 0.0],
+        ],
+        dtype=torch.float32,
+    )
+
+    probability = evaluation._exact_symmetric_probability(logits)
+
+    assert torch.equal(probability, probability.transpose(0, 1))
+    torch.testing.assert_close(
+        torch.triu(probability),
+        torch.triu(logits.sigmoid()),
+        rtol=0.0,
+        atol=0.0,
+    )
+
+
 def _protected_ledger(
     tmp_path: Path, protocol_sha256: str
 ) -> tuple[OrderedSplitLedger, SplitPermit]:

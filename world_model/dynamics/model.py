@@ -1044,9 +1044,19 @@ class DynamicsModel(nn.Module):
     ) -> RolloutStep:
         """Integrate nonuniform action-split rows with exact B1 semantics."""
 
-        if belief.batch_size == 1 or torch.equal(
-            elapsed,
-            elapsed[:1].expand_as(elapsed),
+        positive_elapsed = elapsed.masked_select(elapsed > 0.0)
+        # Zero-duration rows are already isolated by ``advance_mask``.  When
+        # every advancing row has the same duration, the shared microstep grid
+        # is exactly its B1 grid and the established vectorized fast path is
+        # both independent and cheaper. Split only genuinely heterogeneous
+        # positive durations.
+        if (
+            belief.batch_size == 1
+            or positive_elapsed.numel() == 0
+            or torch.equal(
+                positive_elapsed,
+                positive_elapsed[:1].expand_as(positive_elapsed),
+            )
         ):
             return self._predict_step(
                 belief,
@@ -1384,7 +1394,18 @@ class DynamicsModel(nn.Module):
                     dim=-1,
                 )
             elif name == "learned_effect_evaluation_count":
-                value = before_value + after_value
+                # A vectorized action batch may contain rows that do not own
+                # the action.  Their post-action duration is exactly zero,
+                # while other rows still cause the shared analytic step to
+                # report its (global) learned-effect evaluation count.  Do
+                # not attribute those other rows' work to an untouched
+                # candidate: its public diagnostic must remain identical to
+                # the ordinary no-action rollout.
+                value = before_value + torch.where(
+                    use_after,
+                    after_value,
+                    torch.zeros_like(after_value),
+                )
             else:
                 value = self._where_batch(use_after, after_value, before_value)
             auxiliary[name] = value
@@ -1840,7 +1861,7 @@ class DynamicsModel(nn.Module):
 
         if action is None:
             return self.rollout_engine.rollout(
-                lambda current, dt: self._predict_step(current, dt),
+                lambda current, dt: self._predict_step_batch_independent(current, dt),
                 belief,
                 query_times,
                 return_events=return_events,
@@ -1864,7 +1885,7 @@ class DynamicsModel(nn.Module):
             )
             if not owns_action.any().detach().cpu().item():
                 return self._without_applied_action(
-                    self._predict_step(current, elapsed),
+                    self._predict_step_batch_independent(current, elapsed),
                     action,
                 )
             result = self._predict_step_with_validated_action(

@@ -257,6 +257,10 @@ def _repeat_belief_for_candidates(belief: WorldBelief, count: int) -> WorldBelie
             for item in fields(belief.camera)
         }
     )
+    # A valid runtime may use the dynamic-set profile's -32 lower uncertainty
+    # bound. Candidate expansion must preserve that state instead of applying
+    # the narrower historical WorldBelief default during a structural batch
+    # operation.
     return belief.replace(
         timestamp=torch.cat([belief.timestamp] * count, dim=0),
         objects=objects,
@@ -265,7 +269,7 @@ def _repeat_belief_for_candidates(belief: WorldBelief, count: int) -> WorldBelie
         global_code=torch.cat([belief.global_code] * count, dim=0),
         global_log_variance=torch.cat([belief.global_log_variance] * count, dim=0),
         next_object_id=torch.cat([belief.next_object_id] * count, dim=0),
-    ).validate()
+    ).validate(log_variance_bounds=(-32.0, 20.0))
 
 
 def _slice_candidate_trajectory(

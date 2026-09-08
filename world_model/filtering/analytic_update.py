@@ -75,12 +75,21 @@ def diagonal_kalman_update(
         confidence_tensor = confidence_tensor.unsqueeze(-1)
     confidence_tensor = confidence_tensor.clamp(0.0, 1.0)
     gain = prior_variance / total_variance
-    effective_gain = gain * confidence_tensor * influence
+    evidence_fraction = confidence_tensor * influence
+    effective_gain = gain * evidence_fraction
     correction = effective_gain * residual
     posterior_mean = prior_mean + correction
-    posterior_variance = (prior_variance * (1.0 - effective_gain)).clamp_min(
-        numerical_variance_floor
-    )
+    # ``prior * (1 - gain)`` catastrophically cancels in float32 when a broad
+    # prior meets very precise evidence: ``gain`` rounds to one and the result
+    # falls to the numerical clamp instead of the measurement scale.  This is
+    # the same covariance update written without subtracting nearly equal
+    # values.  It also preserves partial confidence/robust influence exactly
+    # in real arithmetic.
+    posterior_variance = (
+        prior_variance
+        * (measurement_variance + prior_variance * (1.0 - evidence_fraction))
+        / total_variance
+    ).clamp_min(numerical_variance_floor)
     posterior_log_variance = posterior_variance.log().clamp(
         minimum_log_variance,
         maximum_log_variance,

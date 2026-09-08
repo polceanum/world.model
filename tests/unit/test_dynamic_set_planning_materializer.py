@@ -17,7 +17,9 @@ from world_model.belief import BeliefFactory, MotionMode
 from world_model.dynamics import AnalyticFreeMotionDynamics
 from world_model.observations import ObservationPacket
 from world_model.observations.rgbd.temporal import RGBDTemporalPositionHistory
+from world_model.runtime import OnlineWorldModel
 from world_model.runtime.state import RuntimeState, runtime_stream_key
+from world_model.training.dynamic_set_config import load_config
 from world_model.training.dynamic_set_planning import PlanningTaskOutcome
 from world_model.training.dynamic_set_planning_materializer import (
     PLANNING_DYNAMIC_BIRTH_FRAME,
@@ -38,11 +40,17 @@ from world_model.training.dynamic_set_planning_materializer import (
     validate_planning_population_evaluation_result,
     validate_public_planning_history,
 )
-from world_model.training.dynamic_set_protocol import PlanningManifestRow, canonical_sha256
+from world_model.training.dynamic_set_protocol import (
+    PlanningManifestRow,
+    canonical_sha256,
+    planning_manifest,
+)
 from world_model.training.qualification_core import (
     OrderedSplitLedger,
     QualificationArtifactDirectory,
 )
+
+_PROFILE = Path(__file__).parents[2] / "configs" / "rgbd_dynamic_set_planning_cpu.yaml"
 
 
 def _row(
@@ -461,6 +469,21 @@ def test_public_checkpoint_binding_uses_real_temporal_history(previously_dynamic
     assert torch.all(task.history_evidence.valid_sample_count[task.frozen_active_mask] == 16)
     assert int(task.frozen_active_mask.sum()) == row.object_count
     assert task.target_object_id.item() >= 700
+
+
+def test_real_online_world_model_planning_history_keeps_version_tracking() -> None:
+    """The public planner must support prepared propagation used by the real runtime."""
+
+    config = load_config(_PROFILE)
+    with torch.random.fork_rng(devices=[]):
+        torch.manual_seed(161_061)
+        model = OnlineWorldModel.from_config(config, device="cpu")
+    item = materialize_planning_task(planning_manifest("development")[0])
+
+    task = infer_and_bind_public_planning_task(model, item.public_history, item.template)
+
+    assert int(task.frozen_active_mask.sum()) == 1
+    assert torch.all(task.history_evidence.valid_sample_count[task.frozen_active_mask] == 16)
 
 
 def test_unresolved_maturity_becomes_outcome_without_opening_oracle() -> None:

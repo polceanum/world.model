@@ -148,6 +148,7 @@ class PlanningTaskConfig:
 
 
 DEFAULT_PLANNING_TASK_CONFIG = PlanningTaskConfig().validate()
+PLANNING_LOG_VARIANCE_BOUNDS = (-32.0, 20.0)
 
 
 @dataclass(frozen=True)
@@ -701,7 +702,7 @@ def materialize_public_planning_template(
     _validate_manifest_row(row)
     if not isinstance(reference_belief, WorldBelief):
         raise TypeError("reference_belief must be a WorldBelief")
-    reference_belief.validate()
+    reference_belief.validate(log_variance_bounds=PLANNING_LOG_VARIANCE_BOUNDS)
     if reference_belief.batch_size != 1:
         raise ValueError("one PlanningManifestRow materialises exactly one B1 template")
     if int(reference_belief.objects.active.sum()) != row.object_count:
@@ -712,7 +713,12 @@ def materialize_public_planning_template(
 
     # Stage one is ledger-only.  Strip arbitrary metadata and all gradients
     # before deriving any fixed task value.
-    reference = reference_belief.detach().clone().replace(metadata={}).validate()
+    reference = (
+        reference_belief.detach()
+        .clone()
+        .replace(metadata={})
+        .validate(log_variance_bounds=PLANNING_LOG_VARIANCE_BOUNDS)
+    )
     if not isinstance(appearance_handle, Tensor):
         raise TypeError("appearance_handle must be an independently supplied tensor")
     appearance_handle = appearance_handle.detach().clone()
@@ -832,7 +838,7 @@ def bind_public_planning_task(
     _validate_public_template(template)
     if not isinstance(belief, WorldBelief):
         raise TypeError("belief must be a WorldBelief")
-    belief.validate()
+    belief.validate(log_variance_bounds=PLANNING_LOG_VARIANCE_BOUNDS)
     if belief.batch_size != 1:
         raise ValueError("one public planning template binds exactly one B1 belief")
     if int(belief.objects.active.sum()) != template.row.object_count:
@@ -847,7 +853,12 @@ def bind_public_planning_task(
         minimum_samples=template.config.minimum_mature_samples,
     )
 
-    source_belief = belief.detach().clone().replace(metadata={}).validate()
+    source_belief = (
+        belief.detach()
+        .clone()
+        .replace(metadata={})
+        .validate(log_variance_bounds=PLANNING_LOG_VARIANCE_BOUNDS)
+    )
     frozen_template = _clone_public_template(template)
     frozen_history = PlanningHistoryEvidence(
         valid_sample_count=history_evidence.valid_sample_count.detach().clone(),
@@ -1149,7 +1160,7 @@ def _validate_public_task(task: PublicPlanningTask) -> PublicPlanningTask:
     template = _validate_public_template(task.template)
     if task.row != template.row or task.template_sha256 != template.template_sha256:
         raise ValueError("public planning binding refers to a different fixed template")
-    task.source_belief.validate()
+    task.source_belief.validate(log_variance_bounds=PLANNING_LOG_VARIANCE_BOUNDS)
     if task.source_belief.batch_size != 1:
         raise ValueError("public planning task must remain B1")
     if not torch.equal(task.source_belief.timestamp, template.source_timestamp):
@@ -1454,7 +1465,7 @@ def _concatenate_beliefs(beliefs: Sequence[WorldBelief]) -> WorldBelief:
         raise ValueError("batch-independence diagnostics require at least two beliefs")
     first = beliefs[0]
     for belief in beliefs:
-        belief.validate()
+        belief.validate(log_variance_bounds=PLANNING_LOG_VARIANCE_BOUNDS)
         if (
             belief.objects.max_objects != first.objects.max_objects
             or belief.objects.appearance_dim != first.objects.appearance_dim
@@ -1484,7 +1495,7 @@ def _concatenate_beliefs(beliefs: Sequence[WorldBelief]) -> WorldBelief:
         global_log_variance=torch.cat([belief.global_log_variance for belief in beliefs], dim=0),
         next_object_id=torch.cat([belief.next_object_id for belief in beliefs], dim=0),
         metadata={},
-    ).validate()
+    ).validate(log_variance_bounds=PLANNING_LOG_VARIANCE_BOUNDS)
 
 
 def _trajectory_batch_row_matches(

@@ -1,5 +1,37 @@
 # Tasks
 
+## Capability-first world model — active 2026-09-07
+
+- [x] Replace the blocked v5/1.61 qualification critical path with a direct,
+  repeatable public-development workbench.
+- [x] Cover all 22 physical cells and all 12 N=1--6, K=8/32 planning slices in
+  the smoke profile; keep planning out of the optimized loss.
+- [x] Fix real-runtime planning inference so prepared propagation retains
+  tensor version tracking and vectorized planning accepts the configured
+  dynamic-set uncertainty range.
+- [x] Preflight planning scenes before expensive physical evaluation, replace
+  invalid rows only within their N/K slice, and report every substitution.
+- [x] Run the first complete smoke and record accuracy, planning, support,
+  parameters, memory, latency, and end-to-end wall time.
+- [x] Calibrate systematic nominal-90% uncertainty undercoverage without
+  changing accurate position means or adding parameters; hold out the three
+  evaluation cycles from the calibration cycle.
+- [x] Run the 32-update development profile with three lifecycle cycles, two
+  planning tasks per N/K slice, and the complete planning invariant/latency
+  pass; compare against the identical structured initializer.
+- [x] Fix heterogeneous-batch rollout dependence on another row's microstep
+  count and prove exact B1 parity over nonuniform queries and known actions.
+- [x] Make checkpoint retention capability-based: require a 3% score gain and
+  zero sampled physical/planning gate failures; retain the calibrated
+  structured model after the learned residual regresses by 0.791%.
+- [ ] Reduce paired evaluation wall time through semantics-preserving public
+  evidence reuse/batching, measuring numerical parity before changing the
+  default.
+- [ ] Add measurement noise, variable physical parameters, and broader actions
+  one factor at a time on disjoint public development scenes. Reuse the current
+  model first; add learned capacity only when an owner-specific ablation
+  localizes a supported error.
+
 ## General differentiable world model — active
 
 - [x] Synchronize the canonical checkout with verified GitHub `main`.
@@ -358,7 +390,8 @@
   balance, CPU AdamW objectives without task-choice loss, screen/convergence
   controls, selection/bootstrap gates, public/private boundary evidence,
   resource checks, and reusable qualification primitives.
-- [ ] Add a reviewed causal provisional-attempt path before advertising the
+- [x] Superseded by the 2026-09-07 capability-first workflow: do not add a
+  causal provisional-attempt path before advertising the
   optional second architecture attempt. Current source correctly rejects a
   remaining-hours shortcut and cannot mint the required 3,584-update timing
   admission evidence in the formal coordinator.
@@ -419,7 +452,8 @@
   `0242921bff0440af94e507af32ae9ce43d5601b9` published cleanly, but the sole
   attempt terminated at formal configuration routing before any completed row;
   the conditional protected sequence therefore remained unopened.
-- [ ] Review—but do not infer authorization for—a fresh v5 successor that
+- [x] Superseded by the user-authorized capability-first direction: do not
+  review or implement a fresh v5 successor that
   explicitly separates known-action runtime configuration from the accepted
   dependency view, routes the `1e-6` profile through episode construction,
   public model execution, palette controls, preflight, and metric reduction,
@@ -432,10 +466,12 @@
 - [x] Do not optimize winner, regret, ranking, or task success. Treat planning
   only as a mandatory downstream acceptance gate which can promote or reject
   an otherwise physically accurate checkpoint.
-- [ ] At every rung require state/velocity/horizon accuracy, uncertainty,
+- [x] Superseded as a one-shot rung task; the active workbench now reports
+  state/velocity/horizon accuracy, uncertainty,
   support, gradient, memory, and throughput non-regression; stop failed
   architecture families instead of marginal retuning.
-- [ ] After the rung passes, update its exact evidence, rerun proportional
+- [x] Superseded as a governed-promotion task. If protected qualification is
+  explicitly requested later, update its exact evidence, rerun proportional
   gates, commit and push the reviewed branch, and promote only the exact
   reviewed net tree to GitHub `main` without failed experiment history.
 Historical completed and rejected work through specification 1.51 is retained

@@ -47,6 +47,7 @@ from world_model.training.dynamic_set_physics import (
     prevalidated_sphere_pair_cache,
 )
 from world_model.training.dynamic_set_planning import (
+    PLANNING_LOG_VARIANCE_BOUNDS,
     PlanningEvaluationReduction,
     PlanningHistoryEvidence,
     PlanningTaskOutcome,
@@ -1349,7 +1350,13 @@ def infer_and_bind_public_planning_task(
     model.eval()
     beliefs: list[WorldBelief] = []
     try:
-        with torch.inference_mode():
+        # Prepared propagation validates tensor version counters so that a
+        # stale or mutated belief cannot be replayed. ``inference_mode``
+        # removes those counters and therefore made every real
+        # ``OnlineWorldModel`` planning history fail before it could resolve a
+        # target. Gradients are unnecessary here, but version tracking is a
+        # correctness property, so use the lighter-weight no-grad context.
+        with torch.no_grad():
             for frame in public_history.frames:
                 belief = ingest(frame.packet())
                 if not isinstance(belief, WorldBelief):
@@ -1362,7 +1369,13 @@ def infer_and_bind_public_planning_task(
     except (RuntimeError, TypeError, ValueError) as error:
         raise PlanningTaskUnresolvedError(f"checkpoint RGB-D inference failed: {error}") from error
     returned_final = beliefs[-1]
-    final = _model_belief(model).detach().clone().replace(metadata={}).validate()
+    final = (
+        _model_belief(model)
+        .detach()
+        .clone()
+        .replace(metadata={})
+        .validate(log_variance_bounds=PLANNING_LOG_VARIANCE_BOUNDS)
+    )
     if final.device.type != "cpu" or final.dtype is not torch.float32:
         raise PlanningTaskUnresolvedError("planning checkpoint must execute CPU float32")
     if (
@@ -1405,11 +1418,12 @@ def _evaluate_one_materialization(
     dynamics = getattr(model, "dynamics", None)
     if dynamics is None:
         raise TypeError("planning evaluation model must expose dynamics")
-    evaluation = evaluate_certified_planning_task(
-        dynamics,
-        task,
-        materialization.private_oracle,
-    )
+    with torch.no_grad():
+        evaluation = evaluate_certified_planning_task(
+            dynamics,
+            task,
+            materialization.private_oracle,
+        )
     _validate_complete_materialization(materialization)
     return PlanningTaskOutcome.evaluated(evaluation), task
 
@@ -1474,36 +1488,37 @@ def _evaluate_one_paired_materialization(
 
     candidate_evaluation = None
     reference_evaluation = None
-    if candidate_task is not None and reference_task is not None:
-        candidate_dynamics = getattr(candidate_model, "dynamics", None)
-        reference_dynamics = getattr(reference_model, "dynamics", None)
-        if candidate_dynamics is None or reference_dynamics is None:
-            raise TypeError("paired planning models must expose dynamics")
-        candidate_evaluation, reference_evaluation = evaluate_certified_planning_task_pair(
-            candidate_dynamics,
-            candidate_task,
-            reference_dynamics,
-            reference_task,
-            materialization.private_oracle,
-        )
-    elif candidate_task is not None:
-        candidate_dynamics = getattr(candidate_model, "dynamics", None)
-        if candidate_dynamics is None:
-            raise TypeError("candidate planning model must expose dynamics")
-        candidate_evaluation = evaluate_certified_planning_task(
-            candidate_dynamics,
-            candidate_task,
-            materialization.private_oracle,
-        )
-    elif reference_task is not None:
-        reference_dynamics = getattr(reference_model, "dynamics", None)
-        if reference_dynamics is None:
-            raise TypeError("reference planning model must expose dynamics")
-        reference_evaluation = evaluate_certified_planning_task(
-            reference_dynamics,
-            reference_task,
-            materialization.private_oracle,
-        )
+    with torch.no_grad():
+        if candidate_task is not None and reference_task is not None:
+            candidate_dynamics = getattr(candidate_model, "dynamics", None)
+            reference_dynamics = getattr(reference_model, "dynamics", None)
+            if candidate_dynamics is None or reference_dynamics is None:
+                raise TypeError("paired planning models must expose dynamics")
+            candidate_evaluation, reference_evaluation = evaluate_certified_planning_task_pair(
+                candidate_dynamics,
+                candidate_task,
+                reference_dynamics,
+                reference_task,
+                materialization.private_oracle,
+            )
+        elif candidate_task is not None:
+            candidate_dynamics = getattr(candidate_model, "dynamics", None)
+            if candidate_dynamics is None:
+                raise TypeError("candidate planning model must expose dynamics")
+            candidate_evaluation = evaluate_certified_planning_task(
+                candidate_dynamics,
+                candidate_task,
+                materialization.private_oracle,
+            )
+        elif reference_task is not None:
+            reference_dynamics = getattr(reference_model, "dynamics", None)
+            if reference_dynamics is None:
+                raise TypeError("reference planning model must expose dynamics")
+            reference_evaluation = evaluate_certified_planning_task(
+                reference_dynamics,
+                reference_task,
+                materialization.private_oracle,
+            )
 
     # The oracle is now authenticated independently by the scorer; bind it
     # back to the exact materialization only after all possible public passes.
@@ -1792,19 +1807,20 @@ def _finish_population_result(
             dynamics = getattr(model, "dynamics", None)
             if dynamics is None:
                 raise TypeError("planning evaluation model must expose dynamics")
-            measured = evaluate_required_planning_invariants(
-                dynamics,
-                cover[0],
-                peer,
-                latency_k8_tasks[0],
-                latency_k32_tasks[0],
-                additional_invariant_tasks=cover[2:],
-                additional_latency_k8_tasks=latency_k8_tasks[1:],
-                additional_latency_k32_tasks=latency_k32_tasks[1:],
-                numerical_tolerance=config.cost_tolerance,
-                latency_warmup_runs=config.latency_warmup_runs,
-                latency_measured_runs=config.latency_measured_runs,
-            )
+            with torch.no_grad():
+                measured = evaluate_required_planning_invariants(
+                    dynamics,
+                    cover[0],
+                    peer,
+                    latency_k8_tasks[0],
+                    latency_k32_tasks[0],
+                    additional_invariant_tasks=cover[2:],
+                    additional_latency_k8_tasks=latency_k8_tasks[1:],
+                    additional_latency_k32_tasks=latency_k32_tasks[1:],
+                    numerical_tolerance=config.cost_tolerance,
+                    latency_warmup_runs=config.latency_warmup_runs,
+                    latency_measured_runs=config.latency_measured_runs,
+                )
             invariants = replace(
                 measured,
                 serial_vectorized_winner_parity=(

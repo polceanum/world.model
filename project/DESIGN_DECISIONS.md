@@ -6,6 +6,69 @@ to make every heading unambiguous; the suffixes do not imply precedence, no
 substantive decision or chronology changed, and the one corresponding
 cross-reference was disambiguated.
 
+## ADR-179 — Make learned capacity earn retention on behavior
+
+- **Date:** 2026-09-07
+- **Status:** accepted; calibrated structured model retained
+- **Context:** Public calibration isolated two uncertainty defects, and a
+  32-update balanced run changed every perception/relation tensor but worsened
+  the complete supported score by `0.791%`. Its horizon-position component
+  improved slightly, but horizon-velocity error increased from `0.00005285` to
+  `0.0013680`; planning was already exact for both models. The full invariant
+  cover also found that heterogeneous batch rows shared a global microstep
+  count, allowing another row's query/action schedule to alter contact
+  integration.
+- **Decision:** Compare learned candidates against an equally calibrated
+  analytic/zero-residual initializer. Retain learned weights only after a
+  gate-clean public-development score improvement of at least 3%; otherwise
+  write the structured model as the selected checkpoint and preserve the
+  candidate only for diagnosis. Correct heterogeneous batches by using exact
+  B1 integration when row elapsed times differ, without serializing homogeneous
+  K-candidate planning batches. Treat overlapping temporal velocity fits as
+  correlated evidence and use the public-cycle-0 calibrated `4e-13` variance
+  floor.
+- **Consequences:** On 66 physical episodes and 24 planning tasks, both models
+  pass every sampled physical and planning gate. Planning has perfect target
+  resolution/winner/success, zero regret and cost difference, exact batch
+  independence, and retained-model K=8/K=32 latency `0.0176/0.0283 s`.
+  `runs/20260907-capability-development-v2/selected_checkpoint.pt` contains the
+  calibrated structured incumbent; the non-promoted learned candidate remains
+  separately inspectable. The next experiment must add a genuinely broader
+  public factor and localize its error owner before adding capacity or training
+  longer. This is public development evidence, not protected qualification.
+
+## ADR-178 — Make behavioral capability the development authority
+
+- **Date:** 2026-09-07
+- **Status:** accepted; capability-first iteration active
+- **Context:** Three successive known-action specifications ended in
+  orchestration/configuration failures or narrow numerical rejection before
+  the already-implemented dynamic-set model could be iterated normally. The
+  process was optimizing its acceptance machinery more than world-model
+  behavior. The user explicitly redirected the project toward general
+  capability, accuracy, convergence, and efficiency.
+- **Decision:** Retain the historical qualification shell for audit, but remove
+  it from the development critical path. Compose the existing compact set
+  proposer, causal belief, lifecycle/contact dynamics, physical objectives,
+  and counterfactual planner in a public-development workbench. Require
+  planning downstream across N=1--6 and K=8/32, never as a task loss. Report
+  incomplete metric support explicitly, preflight cheap failure-prone work
+  before expensive evaluation, and make the largest measured behavioral error
+  the next experiment owner. Keep the full causal/parity/latency stress suite
+  in the development profile while the smoke profile runs direct planning
+  outcomes and serial/vectorized comparisons without redundant stress reruns.
+- **Alternatives considered:** implement specification 1.60.3/v5 and another
+  one-shot protocol; launch the dormant 66,000-episode campaign unchanged;
+  remove planning from acceptance; or widen the 21.9k-parameter model before
+  measuring it.
+- **Consequences:** Real planning immediately exposed and fixed incompatible
+  inference-mode/version-counter and uncertainty-bound validation paths. The
+  first complete smoke covers all physical/planning slices, is effectively
+  unchanged after one update, and localizes current model work to uncertainty
+  calibration rather than capacity. Evaluation throughput is now visible as a
+  separate engineering bottleneck. No protected split was opened and no
+  qualification or promotion is claimed.
+
 ## ADR-177 — Close 1.60.2 on its formal configuration-routing error
 
 - **Date:** 2026-09-06

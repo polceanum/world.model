@@ -804,6 +804,21 @@ def _clone_cpu(value: Tensor) -> Tensor:
     return value.detach().to(device="cpu").clone()
 
 
+def _exact_symmetric_probability(logits: Tensor) -> Tensor:
+    """Apply sigmoid while retaining exact pair-matrix symmetry.
+
+    Some vectorized CPU sigmoid kernels can round equal transposed entries one
+    ulp differently because they occupy different SIMD lanes. The learned
+    logits have already passed an exact-symmetry boundary, so selecting one
+    triangle after the elementwise transform preserves the same mathematical
+    probability and the public exact-symmetry contract.
+    """
+
+    probability = logits.sigmoid()
+    upper = torch.triu(probability)
+    return upper + torch.triu(probability, diagonal=1).transpose(-1, -2)
+
+
 _PUBLIC_BOUNDARY_PROJECTION_FIELDS = (
     "frame_count",
     "exact_frame_type_count",
@@ -1128,7 +1143,7 @@ def _belief_frame_trace(
             raise DynamicSetEvaluationError(
                 "runtime pair collision logits must be finite symmetric [1,6,6]"
             )
-        pair_collision_probability = interval_pair_collision_logits.sigmoid()
+        pair_collision_probability = _exact_symmetric_probability(interval_pair_collision_logits)
     return BeliefFrameTrace(
         frame_index=frame_index,
         timestamp=float(timestamp),
@@ -1293,7 +1308,7 @@ def _belief_batch_frame_traces(
             "runtime pair collision logits must be finite symmetric [B,6,6]"
         )
     else:
-        pair_collision_probability = interval_pair_collision_logits.sigmoid()
+        pair_collision_probability = _exact_symmetric_probability(interval_pair_collision_logits)
     proposals = _measurement_batch_traces(measurement, batch_size=batch_size)
     return tuple(
         BeliefFrameTrace(

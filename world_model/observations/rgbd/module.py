@@ -982,6 +982,10 @@ class RGBDObservationModule(ObservationModule):
             valid_mask=fit_valid,
             confidence=fit_valid.to(posterior.dtype),
             axis_valid_mask=fit_valid.unsqueeze(-1).expand_as(fit.velocity),
+            # Consecutive estimates reuse almost the entire sliding history.
+            # They are not independent observations of the prior velocity and
+            # therefore must not repeatedly contract below their own variance.
+            correlated_with_prior=self.config.observation_mode == "set",
         )
         evidence.validate()
         return evidence, resolved

@@ -2,6 +2,54 @@
 
 ## Unreleased — 2026-07-28
 
+### 2026-09-07 capability-first dynamic world-model loop
+
+- Added `scripts/run_world_model_workbench.py` and its small reusable training
+  module. Smoke now means one balanced 24-example update, all 22 public
+  physical cells, and one task from every N=1--6/K=8,32 planning slice;
+  development expands to 32 updates, three physical cycles, two tasks per
+  planning slice, and the complete planning invariant/latency pass.
+- Kept counterfactual planning mandatory downstream while structurally
+  excluding winner, regret, ranking, and task-success losses from training.
+  Partial public runs report their supported score weight instead of claiming
+  complete qualification.
+- Fixed real-runtime planning inference by replacing `torch.inference_mode()`
+  with version-tracked `torch.no_grad()` around prepared propagation, applying
+  the configured `-32` dynamic-set uncertainty bound through task binding,
+  candidate expansion, and batch-independence construction, and avoiding
+  graph construction during planning evaluation.
+- Added deterministic same-slice replacement for development planning rows
+  that fail scene/oracle preflight. The first smoke recorded development row
+  10 as invalid and replaced it with row 16 in the same N=5/K=32 slice.
+- Completed `runs/20260907-capability-smoke-v3`: 21,859 parameters / 87,436
+  bytes, `12.913 s` for one update, 22 physical episodes, 12 planning tasks,
+  and `306.717 s` total. All planning outcomes were exact on this small sample;
+  the supported aggregate changed only about 0.001% and is treated as
+  unchanged. Nominal-90% uncertainty coverage of `0.7632--0.8478` is the next
+  model bottleneck; paired evaluation throughput is the next tooling
+  bottleneck. No protected data or promotion claim is involved.
+- Repaired float32 Kalman covariance cancellation for very precise evidence
+  and marked overlapping set-mode temporal fits as correlated with the current
+  posterior. A `4e-13` velocity variance floor fitted on public cycle 0 passes
+  all 22 held-out cells at `0.8649--0.9471` nominal-90% coverage without
+  changing current-position means or model capacity.
+- Made ordinary dynamics rollouts exactly batch-independent for heterogeneous
+  elapsed times and action schedules by preserving B1 microstep semantics only
+  on those rows; homogeneous counterfactual candidate batches retain the fast
+  vectorized path. Fixed exact collision-probability symmetry after CPU sigmoid
+  and added direct regressions for both numerical boundaries.
+- Added gate-aware development checkpoint retention. Learned weights must
+  improve the equally calibrated structured initializer by at least 3% and
+  pass all sampled physical and required-planning gates; the trained candidate
+  and selected incumbent are stored separately.
+- Completed `runs/20260907-capability-development-v2`: 66 physical episodes,
+  24 planning tasks, all sampled physical/planning gates green, exact
+  serial/vectorized and batch parity, zero planning error, and retained-model
+  K=8/K=32 latency `0.0176/0.0283 s`. The 32-update residual regressed the
+  supported score by `0.791%`, principally through horizon velocity, so the
+  calibrated structured checkpoint was retained. No protected data or
+  promotion claim is involved.
+
 ### 2026-08-30 terminal identifiable-drag development family
 
 - Reconciled the failed identifiable-drag branch without merging its source.

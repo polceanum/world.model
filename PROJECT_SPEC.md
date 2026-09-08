@@ -5,7 +5,7 @@
 **Status:** Living authoritative specification
 **Version:** 1.60.2
 **Date:** 26 July 2026; predictive-abstraction and interpretable-physics amendments 27 July 2026; shared-regime selection amendment 28 July 2026; sustained-training and broad-checkpoint-selection amendment 30 July 2026; convergence-integrity, identifiable-forecast, runtime-invariant, and continuation-integrity amendments 1 August 2026; supported-causal-optimization and hierarchical-gradient-stability amendment 2 August 2026; lifecycle, identity, supervision, perception-gradient-integrity, validation-support, launch-failure-integrity, cadence-semantics, progress-observability, finite-state, integration-grid, prepared-propagation, and launch-QoS amendments 3 August 2026; mutable-optimisation and long-run resource-integrity amendments 6 August 2026; modular-qualification and fast-ROI isolation amendment 7 August 2026; trainable-path objective-integrity and staged-scope amendments 8 August 2026; perception-local auxiliary-gradient routing, rollout uncertainty-gradient isolation, scenario-balanced optimization, innovation-anchored correction, and staged abstraction-attention scaling amendments 9 August 2026; axis-isolated correction recovery, fast-ROI ownership stability, zero-initialized typed-attention pilot, live scene-context, mixed-unit scene-conditioning, collision-head gradient isolation, complete typed-attention gradient localization, force-head isolation, and evidence-gated capacity scaling amendments 10 August 2026; typed-output, impulse-jump, accumulated node-gradient isolation, measured compute/data scaling, function-preserving architecture-handoff, identity-initialized appended-depth, pooled training-trend observability, aggregate recursive semantic-gradient budgeting, and residual-parsimony amendments 11 August 2026; non-vacuous protected-checkpoint audit, functional residual-activity, context-sensitive drift, exact absolute-index learning-rate schedule, residual-prior gradient-alignment, and relation-first typed-attention qualification amendments 12 August 2026; fixed-boundary checkpoint, optimizer-step, and exclusive trend-window audit-integrity amendments 13 August 2026; evidence-bounded heterogeneous mental-simulation, low-noise live-monitoring, familiar-simulator, independent-RGB-evidence, clean-evaluation, semantic-versioning, and staged-convergence amendments 15 August 2026
-**Amendment:** observation-completeness, calibrated temporal uncertainty, finite differentiable-event, causal-objective-support, and campaign-cadence amendments 16 August 2026; production-MPS event-hazard numerical-integrity amendment 20 August 2026; dynamics elapsed-time synchronization, validation-anchor batching, auxiliary-gradient ownership, zero-output residual elision, live-update observability, and measured phase-device policy amendments 21 August 2026; convergence-first differentiable toy, repository cleanup, staged generalization, differentiable temporal identification, terminal monocular-temporal evidence, observable-depth next-rung, seed-free RGB-D metric-measurement, and parameter-free RGB-D temporal-protocol amendments 26 August 2026; public `OnlineWorldModel` RGB-D bridge, atomic temporal-ingest, warmup-aware evaluation, pre-development qualification, exactly-once bridge-acceptance evidence, two-visible-object differentiable source-freeze, and exactly-once two-visible-object acceptance amendments 27 August 2026; exactly-two-visible known-calibrated orbital-camera RGB-D source-freeze and exactly-once qualification-acceptance amendments 28 August 2026; known-action counterfactual-planning qualification amendment 4 September 2026; terminal known-action foundation and dormant dynamic-set implementation amendments 6 September 2026; authorized 1.60.1 materializer-order and authorized/terminal 1.60.2 metric-geometry calibration successor amendments 6 September 2026
+**Amendment:** observation-completeness, calibrated temporal uncertainty, finite differentiable-event, causal-objective-support, and campaign-cadence amendments 16 August 2026; production-MPS event-hazard numerical-integrity amendment 20 August 2026; dynamics elapsed-time synchronization, validation-anchor batching, auxiliary-gradient ownership, zero-output residual elision, live-update observability, and measured phase-device policy amendments 21 August 2026; convergence-first differentiable toy, repository cleanup, staged generalization, differentiable temporal identification, terminal monocular-temporal evidence, observable-depth next-rung, seed-free RGB-D metric-measurement, and parameter-free RGB-D temporal-protocol amendments 26 August 2026; public `OnlineWorldModel` RGB-D bridge, atomic temporal-ingest, warmup-aware evaluation, pre-development qualification, exactly-once bridge-acceptance evidence, two-visible-object differentiable source-freeze, and exactly-once two-visible-object acceptance amendments 27 August 2026; exactly-two-visible known-calibrated orbital-camera RGB-D source-freeze and exactly-once qualification-acceptance amendments 28 August 2026; known-action counterfactual-planning qualification amendment 4 September 2026; terminal known-action foundation and dormant dynamic-set implementation amendments 6 September 2026; authorized 1.60.1 materializer-order and authorized/terminal 1.60.2 metric-geometry calibration successor amendments 6 September 2026; capability-first iterative development amendment 7 September 2026
 **Intended location in repository:** `/PROJECT_SPEC.md`  
 **Primary local environment:** conda environment `orpheus`, PyTorch with Apple MPS support  
 **Initial runtime modality:** synthetic RGB, with privileged simulator state used only for supervision, evaluation, and debugging  
@@ -55,6 +55,58 @@ A coding agent may refine internal implementations, but it must not silently rem
 After placing this file at the repository root, give Codex this instruction:
 
 > Read `PROJECT_SPEC.md` in full before writing code. Treat it as the authoritative specification. Start from the empty repository and implement the complete first vertical slice described under “Implementation programme” and “Milestone 1 definition of done,” not merely a scaffold. Create and maintain all repository memory files required by the specification. Use the existing conda environment `orpheus`; do not reinstall or replace PyTorch. Keep the user-facing workflow to `python train.py`, `python evaluate.py`, and `python demo.py` with YAML configuration. Run tests and the toy end-to-end validation locally. Record decisions, current status, commands run, known limitations, and next tasks in the repository. Do not stop at placeholder classes, pseudocode, or an oracle-only demonstration.
+
+## 0A. Current capability-first development directive
+
+As of 7 September 2026, the active development workflow prioritizes general
+world-model behavior, accuracy, convergence, and efficiency. The earlier
+single-attempt known-action and dynamic-set qualification machinery is retained
+as historical audit code, but it no longer controls ordinary model iteration.
+No new v5-style governance successor should be built unless a future user
+explicitly requests protected qualification.
+
+The active model target is one compact CPU-first RGB-D model spanning one to
+six unordered objects, persistent identity, birth/removal, pair contact, known
+actions, and counterfactual planning. Preserve the persistent `WorldBelief`,
+causal predict--observe--correct loop, analytic geometry/contact authority,
+small zero-initialized residuals, and legacy one/two-object compatibility.
+Increase capacity only after direct evidence localizes an accuracy bottleneck.
+
+Development uses a short, repeatable loop:
+
+1. train on balanced public regimes;
+2. evaluate every count/contact/lifecycle cell with explicit support;
+3. require downstream K=8 and K=32 planning across all six cardinalities;
+4. report accuracy, uncertainty calibration, parameter count, latency, memory,
+   and wall time separately; and
+5. change the smallest subsystem that owns the largest observed error.
+
+Planning remains an evaluation requirement and must never become a winner,
+ranking, regret, or task-success training loss. Public development may replace
+a deterministically invalid generated scene only with the next valid scene in
+the same declared slice, recording the failed row and reason. Small runs report
+their supported metric weight and may not impersonate complete qualification.
+
+The direct entry point is:
+
+```bash
+conda run -n orpheus python scripts/run_world_model_workbench.py --profile smoke
+conda run -n orpheus python scripts/run_world_model_workbench.py --profile development
+```
+
+The smoke profile exercises all 22 physical cells and all 12 `(N,K)` planning
+slices with one balanced optimizer update. The development profile uses 32
+updates, three physical cycles, two tasks per planning slice, and the complete
+planning invariant/latency stress pass. Protected selector/final access and
+one-shot promotion are outside this iterative loop.
+
+The workbench compares training against an equally calibrated structured
+initializer. A completed optimizer run is not itself progress: learned weights
+are retained only after at least a 3% public-development score improvement with
+no sampled physical or required-planning gate failure. Otherwise the selected
+checkpoint contains the calibrated analytic/zero-residual incumbent and the
+trained checkpoint is preserved separately for diagnosis. This rule keeps
+capacity subordinate to observable accuracy and planning utility.
 
 ---
 

@@ -730,6 +730,16 @@ class BeliefUpdater(nn.Module):
                 minimum_log_variance=self.config.minimum_log_variance,
                 maximum_log_variance=self.config.maximum_log_variance,
             )
+            velocity_log_variance = analytic_velocity.log_variance
+            if evidence.correlated_with_prior:
+                # Sliding-window temporal estimates share samples with the
+                # current posterior. Keep their mean correction, but do not
+                # count the same observations twice by reporting a posterior
+                # variance narrower than the current evidence itself.
+                velocity_log_variance = torch.maximum(
+                    velocity_log_variance,
+                    evidence.log_variance[batch_index, belief_index],
+                )
             updated_packed[batch_index, belief_index, velocity_slice] = torch.where(
                 component_valid,
                 analytic_velocity.mean,
@@ -737,7 +747,7 @@ class BeliefUpdater(nn.Module):
             )
             updated_log_variance[batch_index, belief_index, velocity_slice] = torch.where(
                 component_valid,
-                analytic_velocity.log_variance,
+                velocity_log_variance,
                 prior_velocity_log_variance,
             )
         if batch_index.numel() == 0 and position_update_count == 0:
