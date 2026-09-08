@@ -51,13 +51,24 @@ class RGBDSetProposalOutput:
     query_features: Tensor
 
 
-def _set_anchor_grid() -> Tensor:
-    """Return the fixed eight-anchor image cover in ``[-1,1]`` coordinates."""
+def _set_anchor_grid(proposal_count: int = SET_PROPOSAL_COUNT) -> Tensor:
+    """Return a deterministic near-square image cover in ``[-1,1]``.
 
-    x_axis = torch.linspace(-0.75, 0.75, 4)
-    y_axis = torch.linspace(-0.50, 0.50, 2)
+    The historical eight-proposal profile remains the exact 4-by-2 grid.  A
+    different capacity changes only the non-persistent anchor rows; learned
+    operations stay shared and therefore carry no slot identity.
+    """
+
+    if isinstance(proposal_count, bool) or not isinstance(proposal_count, int):
+        raise TypeError("proposal_count must be an integer")
+    if proposal_count <= 0:
+        raise ValueError("proposal_count must be positive")
+    columns = math.ceil(math.sqrt(2.0 * proposal_count))
+    rows = math.ceil(proposal_count / columns)
+    x_axis = torch.linspace(-0.75, 0.75, columns)
+    y_axis = torch.linspace(-0.50, 0.50, rows)
     yy, xx = torch.meshgrid(y_axis, x_axis, indexing="ij")
-    return torch.stack((xx.flatten(), yy.flatten()), dim=-1)
+    return torch.stack((xx.flatten(), yy.flatten()), dim=-1)[:proposal_count]
 
 
 class _AnchorCrossAttentionBlock(nn.Module):
@@ -112,8 +123,10 @@ class RGBDSetProposer(nn.Module):
         log_variance_residual_limit: float = SET_MAX_LOG_VARIANCE_RESIDUAL,
     ) -> None:
         super().__init__()
-        if proposal_count != SET_PROPOSAL_COUNT:
-            raise ValueError(f"set proposer requires exactly {SET_PROPOSAL_COUNT} proposals")
+        if isinstance(proposal_count, bool) or not isinstance(proposal_count, int):
+            raise TypeError("set proposer proposal_count must be an integer")
+        if proposal_count <= 0:
+            raise ValueError("set proposer proposal_count must be positive")
         if appearance_dim != SET_APPEARANCE_DIM:
             raise ValueError(f"set proposer requires appearance_dim={SET_APPEARANCE_DIM}")
         if feature_dim not in {SET_FEATURE_DIM, 2 * SET_FEATURE_DIM}:
@@ -157,7 +170,11 @@ class RGBDSetProposer(nn.Module):
         self.existence_residual_head = nn.Linear(feature_dim, 1)
         self.appearance_residual_head = nn.Linear(feature_dim, appearance_dim)
         self.log_variance_residual_head = nn.Linear(feature_dim, 3)
-        self.register_buffer("anchor_points", _set_anchor_grid(), persistent=False)
+        self.register_buffer(
+            "anchor_points",
+            _set_anchor_grid(proposal_count),
+            persistent=False,
+        )
 
         nn.init.zeros_(self.mask_residual_projection.weight)
         nn.init.zeros_(self.mask_residual_projection.bias)
@@ -378,10 +395,10 @@ class RGBDSetProposer(nn.Module):
             and not torch.is_grad_enabled()
             and self._residual_heads_are_exact_zero()
         ):
-            mask_residual = image.new_zeros((batch, SET_PROPOSAL_COUNT, height, width))
+            mask_residual = image.new_zeros((batch, self.proposal_count, height, width))
             full_mask_logits = base_full_mask_logits
             full_mask_probability = self._normalized_full_masks(full_mask_logits)
-            query_features = image.new_zeros((batch, SET_PROPOSAL_COUNT, self.feature_dim))
+            query_features = image.new_zeros((batch, self.proposal_count, self.feature_dim))
             return RGBDSetProposalOutput(
                 slot_mask_logits=base_logits,
                 base_slot_mask_logits=base_logits,
@@ -390,11 +407,11 @@ class RGBDSetProposer(nn.Module):
                 base_full_mask_logits=base_full_mask_logits,
                 background_mask_logits=full_mask_logits[:, :1],
                 mask_residual=mask_residual,
-                existence_residual=image.new_zeros((batch, SET_PROPOSAL_COUNT)),
+                existence_residual=image.new_zeros((batch, self.proposal_count)),
                 appearance_residual=image.new_zeros(
-                    (batch, SET_PROPOSAL_COUNT, self.appearance_dim)
+                    (batch, self.proposal_count, self.appearance_dim)
                 ),
-                log_variance_residual=image.new_zeros((batch, SET_PROPOSAL_COUNT, 3)),
+                log_variance_residual=image.new_zeros((batch, self.proposal_count, 3)),
                 anchor_points=anchors,
                 query_features=query_features,
             )
@@ -426,7 +443,7 @@ class RGBDSetProposer(nn.Module):
 
         mask_queries = self.mask_residual_projection(queries)
         mask_residual = torch.einsum("bpc,blc->bpl", mask_queries, memory)
-        mask_residual = mask_residual.reshape(batch, SET_PROPOSAL_COUNT, height, width)
+        mask_residual = mask_residual.reshape(batch, self.proposal_count, height, width)
         mask_residual = mask_residual / math.sqrt(self.feature_dim)
         existence_residual = self.existence_residual_head(queries).squeeze(-1)
         appearance_residual = self.appearance_residual_head(queries)

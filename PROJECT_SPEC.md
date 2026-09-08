@@ -6,6 +6,7 @@
 **Version:** 1.60.2
 **Date:** 26 July 2026; predictive-abstraction and interpretable-physics amendments 27 July 2026; shared-regime selection amendment 28 July 2026; sustained-training and broad-checkpoint-selection amendment 30 July 2026; convergence-integrity, identifiable-forecast, runtime-invariant, and continuation-integrity amendments 1 August 2026; supported-causal-optimization and hierarchical-gradient-stability amendment 2 August 2026; lifecycle, identity, supervision, perception-gradient-integrity, validation-support, launch-failure-integrity, cadence-semantics, progress-observability, finite-state, integration-grid, prepared-propagation, and launch-QoS amendments 3 August 2026; mutable-optimisation and long-run resource-integrity amendments 6 August 2026; modular-qualification and fast-ROI isolation amendment 7 August 2026; trainable-path objective-integrity and staged-scope amendments 8 August 2026; perception-local auxiliary-gradient routing, rollout uncertainty-gradient isolation, scenario-balanced optimization, innovation-anchored correction, and staged abstraction-attention scaling amendments 9 August 2026; axis-isolated correction recovery, fast-ROI ownership stability, zero-initialized typed-attention pilot, live scene-context, mixed-unit scene-conditioning, collision-head gradient isolation, complete typed-attention gradient localization, force-head isolation, and evidence-gated capacity scaling amendments 10 August 2026; typed-output, impulse-jump, accumulated node-gradient isolation, measured compute/data scaling, function-preserving architecture-handoff, identity-initialized appended-depth, pooled training-trend observability, aggregate recursive semantic-gradient budgeting, and residual-parsimony amendments 11 August 2026; non-vacuous protected-checkpoint audit, functional residual-activity, context-sensitive drift, exact absolute-index learning-rate schedule, residual-prior gradient-alignment, and relation-first typed-attention qualification amendments 12 August 2026; fixed-boundary checkpoint, optimizer-step, and exclusive trend-window audit-integrity amendments 13 August 2026; evidence-bounded heterogeneous mental-simulation, low-noise live-monitoring, familiar-simulator, independent-RGB-evidence, clean-evaluation, semantic-versioning, and staged-convergence amendments 15 August 2026
 **Amendment:** observation-completeness, calibrated temporal uncertainty, finite differentiable-event, causal-objective-support, and campaign-cadence amendments 16 August 2026; production-MPS event-hazard numerical-integrity amendment 20 August 2026; dynamics elapsed-time synchronization, validation-anchor batching, auxiliary-gradient ownership, zero-output residual elision, live-update observability, and measured phase-device policy amendments 21 August 2026; convergence-first differentiable toy, repository cleanup, staged generalization, differentiable temporal identification, terminal monocular-temporal evidence, observable-depth next-rung, seed-free RGB-D metric-measurement, and parameter-free RGB-D temporal-protocol amendments 26 August 2026; public `OnlineWorldModel` RGB-D bridge, atomic temporal-ingest, warmup-aware evaluation, pre-development qualification, exactly-once bridge-acceptance evidence, two-visible-object differentiable source-freeze, and exactly-once two-visible-object acceptance amendments 27 August 2026; exactly-two-visible known-calibrated orbital-camera RGB-D source-freeze and exactly-once qualification-acceptance amendments 28 August 2026; known-action counterfactual-planning qualification amendment 4 September 2026; terminal known-action foundation and dormant dynamic-set implementation amendments 6 September 2026; authorized 1.60.1 materializer-order and authorized/terminal 1.60.2 metric-geometry calibration successor amendments 6 September 2026; capability-first iterative development amendment 7 September 2026
+**Current amendment:** general-capability factor evaluation, configurable set capacity, packed active-pair execution, compact static progress reporting, and manifest-scoped 250 MiB artifact retention, 8 September 2026
 **Intended location in repository:** `/PROJECT_SPEC.md`  
 **Primary local environment:** conda environment `orpheus`, PyTorch with Apple MPS support  
 **Initial runtime modality:** synthetic RGB, with privileged simulator state used only for supervision, evaluation, and debugging  
@@ -107,6 +108,49 @@ no sampled physical or required-planning gate failure. Otherwise the selected
 checkpoint contains the calibrated analytic/zero-residual incumbent and the
 trained checkpoint is preserved separately for diagnosis. This rule keeps
 capacity subordinate to observable accuracy and planning utility.
+
+## 0B. General-capability and compact-progress directive
+
+As of 8 September 2026, the calibrated structured checkpoint in
+`runs/20260907-capability-development-v2/selected_checkpoint.pt` is the
+incumbent. Historical one-shot qualification machinery is audit-only. The
+active objective is a compact CPU-first online RGB-D world model that remains
+persistent, uncertainty-aware, dynamic under changing object sets, and useful
+for downstream planning while broadening cleanly to sensor noise, varied
+physical conditions, calibrated camera motion, broader known actions, and
+short occlusion/recovery.
+
+The public `OnlineWorldModel`, `WorldBelief`, observation, rollout, and action
+interfaces remain stable. Dynamic-set capacity is `max_objects` plus two birth
+proposals rather than a hard-coded 6/8 validation pair. The 1--6 object visual
+phase remains the only perceptual promotion surface. Packed learned pair
+execution is an internal opt-in optimization that reconstructs the established
+dense result; N=8/12/16 are state-only scalability probes and not broader
+perception claims.
+
+Before optimization, evaluate the incumbent on the five single-factor
+families and one compositional holdout. Generator controls never cross the
+runtime boundary. Diagnose error through clean-observation, truth-association,
+truth-parameter, and truth-state-dynamics ablations, then modify only the
+smallest supported owner. Planning winner, regret, and goal metrics are
+required acceptance tests and remain absent from training objectives.
+
+Runs use deterministic seed-only manifests, streamed materialization, online
+metric reduction, and versioned `CapabilityRunSummary` evidence. Every
+validation may atomically replace its summary, portable `report.html`, and
+self-contained `runs/progress/index.html`; unmeasured families remain visibly
+unmeasured. Generated artifacts are managed by valid run manifests under a
+250 MiB rolling budget. Summaries and HTML are retained, the incumbent and
+pinned material are protected, `.archive` is reported separately, and cleanup
+fails closed for invalid, absent, escaping, or symlinked manifests.
+
+The bounded campaign begins with 64 examples / 256 updates, then 2,048 updates
+with validation every 256 and optional 1,024-update extensions. It stops by
+8,192 updates, 24 hours, or a four-validation <1% plateau. Promotion requires
+all absolute physical/planning/resource floors, at least 3% paired score
+improvement with positive lower 95% bootstrap bound, at least 1% improvement
+in the worst factor family, no accepted-like regression above 2%, and latency
+no more than 10% worse than the incumbent.
 
 ---
 

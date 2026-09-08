@@ -37,6 +37,7 @@ class RGBDConfig(_BaseRGBDConfig):
 
     observation_mode: str = "legacy"
     max_objects: int = 6
+    birth_proposals: int = 2
     set_feature_dim: int = 32
     set_log_variance_residual_limit: float = 4.0
 
@@ -51,6 +52,7 @@ class DynamicsConfig(_BaseDynamicsConfig):
     node_acceleration_enabled: bool = True
     event_driven_state_only_enabled: bool = False
     relation_process_uncertainty_enabled: bool = False
+    packed_interactions_enabled: bool = False
 
 
 @dataclass(frozen=True)
@@ -88,7 +90,13 @@ class OrpheusConfig(_BaseOrpheusConfig):
                 proposal_count=1,
                 temporal_min_samples=rgbd.temporal_history_size,
             )
-            simulator = replace(simulator, min_objects=1, max_objects=1)
+            simulator = replace(
+                simulator,
+                min_objects=1,
+                max_objects=1,
+                radius_range=(rgbd.world_radius, rgbd.world_radius),
+                drag_range=(rgbd.linear_drag, rgbd.linear_drag),
+            )
             model_max_objects = 1
             filter_config = replace(filter_config, direct_metric_position_update=False)
         model = _base_dataclass(
@@ -126,16 +134,26 @@ class OrpheusConfig(_BaseOrpheusConfig):
             or (rgbd.max_objects <= 0)
         ):
             raise ValueError("model.rgbd.max_objects must be a positive integer")
+        if (
+            isinstance(rgbd.birth_proposals, bool)
+            or not isinstance(rgbd.birth_proposals, int)
+            or rgbd.birth_proposals <= 0
+        ):
+            raise ValueError("model.rgbd.birth_proposals must be a positive integer")
         if isinstance(rgbd.proposal_count, bool) or not isinstance(rgbd.proposal_count, int):
             if rgbd.observation_mode == "legacy":
                 raise ValueError("model.rgbd.proposal_count must be integer one or two")
             raise ValueError("model.rgbd.proposal_count must be an integer")
         if rgbd.observation_mode == "legacy" and rgbd.proposal_count not in {1, 2}:
             raise ValueError("model.rgbd.proposal_count must be integer one or two in legacy mode")
-        if rgbd.observation_mode == "set" and rgbd.proposal_count != 8:
-            raise ValueError("set model.rgbd requires proposal_count=8")
-        if rgbd.observation_mode == "set" and rgbd.max_objects != 6:
-            raise ValueError("set model.rgbd requires max_objects=6")
+        if rgbd.observation_mode == "set" and rgbd.proposal_count != (
+            rgbd.max_objects + rgbd.birth_proposals
+        ):
+            raise ValueError(
+                "set model.rgbd proposal_count must equal max_objects + birth_proposals"
+            )
+        if rgbd.observation_mode == "legacy" and rgbd.birth_proposals != 2:
+            raise ValueError("legacy model.rgbd requires birth_proposals=2")
         if (
             isinstance(rgbd.set_feature_dim, bool)
             or not isinstance(rgbd.set_feature_dim, int)
@@ -167,21 +185,13 @@ class OrpheusConfig(_BaseOrpheusConfig):
         if rgbd.enabled:
             if rgbd.observation_mode == "set":
                 if model.max_objects != rgbd.max_objects:
-                    raise ValueError("set model.rgbd requires model.max_objects=6")
-                if (simulator.min_objects, simulator.max_objects) != (1, 6):
-                    raise ValueError("set model.rgbd requires simulator object counts 1 through 6")
+                    raise ValueError("set model.rgbd max_objects must equal model.max_objects")
+                if simulator.min_objects < 1 or simulator.max_objects > rgbd.max_objects:
+                    raise ValueError(
+                        "set simulator object counts must fit inside model.rgbd.max_objects"
+                    )
                 if model.state.appearance_dim != 8:
                     raise ValueError("set model.rgbd requires model.state.appearance_dim=8")
-                if simulator.radius_range != (rgbd.world_radius, rgbd.world_radius):
-                    raise ValueError(
-                        "the first model.rgbd bridge requires its checkpointed world_radius "
-                        "to equal the fixed simulator radius"
-                    )
-                if simulator.drag_range != (rgbd.linear_drag, rgbd.linear_drag):
-                    raise ValueError(
-                        "the first model.rgbd bridge requires its checkpointed linear_drag "
-                        "to equal the fixed simulator drag"
-                    )
             if model.filter.direct_metric_position_update:
                 if self.runtime.modality != "rgbd":
                     raise ValueError("direct metric position updates require the RGB-D runtime")
@@ -203,6 +213,7 @@ class OrpheusConfig(_BaseOrpheusConfig):
                 "relation_process_uncertainty_enabled",
                 dynamics.relation_process_uncertainty_enabled,
             ),
+            ("packed_interactions_enabled", dynamics.packed_interactions_enabled),
         ):
             if not isinstance(value, bool):
                 raise ValueError(f"model.dynamics.{name} must be boolean")
@@ -245,6 +256,15 @@ def load_config(
     if not isinstance(loaded, dict):
         raise TypeError("Top-level configuration must be a mapping")
     merged = _deep_merge(loaded, parse_overrides(overrides))
+    model_values = merged.get("model")
+    if isinstance(model_values, dict):
+        rgbd_values = model_values.get("rgbd")
+        if isinstance(rgbd_values, dict) and rgbd_values.get("observation_mode") == "set":
+            max_objects = int(rgbd_values.get("max_objects", model_values.get("max_objects", 6)))
+            birth_proposals = int(rgbd_values.get("birth_proposals", 2))
+            rgbd_values.setdefault("max_objects", max_objects)
+            rgbd_values.setdefault("birth_proposals", birth_proposals)
+            rgbd_values.setdefault("proposal_count", max_objects + birth_proposals)
     merged["source_path"] = str(source)
     config = _strict_construct(OrpheusConfig, merged, "config")
     config.validate()

@@ -451,6 +451,7 @@ class OnlineWorldModel(nn.Module):
                 RGBDObservationConfig(
                     observation_mode=getattr(rgbd_config, "observation_mode", "legacy"),
                     max_objects=getattr(rgbd_config, "max_objects", 6),
+                    birth_proposals=getattr(rgbd_config, "birth_proposals", 2),
                     set_feature_dim=getattr(rgbd_config, "set_feature_dim", 32),
                     set_log_variance_residual_limit=getattr(
                         rgbd_config,

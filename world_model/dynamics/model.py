@@ -162,6 +162,10 @@ class DynamicsConfig:
     # Give the relation edge's signed process-noise output a direct, bounded
     # gradient path into propagated variance. Disabled is historical behavior.
     relation_process_uncertainty_enabled: bool = False
+    # Opt-in relation execution that evaluates the learned edge MLP only on
+    # active candidate pairs while reconstructing the established dense
+    # result. False preserves historical checkpoint/runtime behavior.
+    packed_interactions_enabled: bool = False
 
     @property
     def fast_state_dim(self) -> int:
@@ -211,6 +215,7 @@ class DynamicsConfig:
                 "relation_process_uncertainty_enabled",
                 self.relation_process_uncertainty_enabled,
             ),
+            ("packed_interactions_enabled", self.packed_interactions_enabled),
         ):
             if not isinstance(value, bool):
                 raise ValueError(f"{name} must be boolean")
@@ -338,6 +343,7 @@ class DynamicsModel(nn.Module):
             continuous_pair_force_enabled=self.config.continuous_pair_force_enabled,
             node_acceleration_enabled=self.config.node_acceleration_enabled,
             bounded_event_calibration_enabled=(self.config.event_driven_state_only_enabled),
+            packed_interactions_enabled=self.config.packed_interactions_enabled,
         )
         self.attention_interactions = (
             TypedAttentionInteractionResidual(
@@ -484,6 +490,9 @@ class DynamicsModel(nn.Module):
             ),
             relation_process_uncertainty_enabled=bool(
                 getattr(dynamics, "relation_process_uncertainty_enabled", False)
+            ),
+            packed_interactions_enabled=bool(
+                getattr(dynamics, "packed_interactions_enabled", False)
             ),
             uncertainty_hidden_dim=max(16, int(dynamics.hidden_dim) // 2),
             interaction_radius=float(dynamics.interaction_radius),

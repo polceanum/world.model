@@ -6,6 +6,48 @@ to make every heading unambiguous; the suffixes do not imply precedence, no
 substantive decision or chronology changed, and the one corresponding
 cross-reference was disambiguated.
 
+## ADR-180 — Broaden behavior through evidence and make progress compactly visible
+
+- **Date:** 2026-09-08
+- **Status:** accepted and implemented; broadened factor execution pending
+- **Context:** The nominal 1--6-object structured incumbent is accurate,
+  planning-capable, and compact, while its trained residual failed to improve.
+  The previous process over-invested in one-shot qualification mechanics and
+  did not make general capability, unsupported regions, efficiency, or disk
+  growth easy to see. The next useful question is how the same model behaves
+  under controlled sensor, physics, camera, action, and recovery shifts—not
+  whether another large governance shell can be built.
+- **Decision:** Keep public model/belief/action interfaces and the calibrated
+  structured incumbent. Derive set proposals from configurable object capacity
+  plus two birth queries; preserve the 6/8 checkpoint and action-free function.
+  Add an opt-in packed learned-pair backend that reconstructs the dense output,
+  retaining dense N<=6 as numerical oracle and treating N=8/12/16 as
+  state-only scalability evidence. Evaluate five disjoint controlled factor
+  families and one composition before training. Factor controls remain on the
+  generator side of an explicit truth-free runtime contract. Use
+  clean-observation, truth-association, truth-parameter, and truth-state
+  ablations to identify the smallest owner before changing capacity. Planning
+  is required downstream and structurally absent from the training loss.
+- **Decision:** Make every validation produce a versioned compact summary and
+  self-contained HTML/SVG evidence. Adapt historical reports read-only and
+  display missing/malformed/unmeasured evidence rather than synthesizing it.
+  Manage only manifest-listed artifacts under a 250 MiB rolling budget;
+  preserve summaries/reports, incumbent, two prior promotions, pins,
+  unmanifested/corrupt paths, and `.archive`. Cleanup is dry-run unless
+  explicitly applied, rejects symlinks/path escape, and retains bounded debug
+  material only for the newest failed run.
+- **Alternatives considered:** another exactly-once qualification successor;
+  widening perception/relation before locating error; feeding factor tags or
+  simulator parameters to the runtime; using a database/dashboard service;
+  saving generated episodes or frame directories; or pruning unknown legacy
+  directories by age.
+- **Consequences:** The broad campaign is deterministic, bounded, inspectable,
+  and storage-safe. The current dashboard may honestly show only nominal
+  evidence until factor runs execute. Parameter variation can reveal the
+  fixed-prior observer's limitations without silently replacing observable
+  metric geometry. No broadened capability or promotion is claimed by this
+  implementation alone.
+
 ## ADR-179 — Make learned capacity earn retention on behavior
 
 - **Date:** 2026-09-07

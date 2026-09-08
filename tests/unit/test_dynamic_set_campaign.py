@@ -294,6 +294,17 @@ def test_discarded_attempt_time_is_sunk_and_enforces_reserve_boundary() -> None:
     assert projection.limit_hit_reason == "training_reserve_boundary"
 
 
+def test_reserve_boundary_is_stable_within_float_reconstruction_precision() -> None:
+    mutation_limit = DEFAULT_CAMPAIGN.training_mutation_seconds
+    projection = project_minimum_update_feasibility(
+        completed_update_seconds=(),
+        prior_attempt_cumulative_seconds=math.nextafter(mutation_limit, -math.inf),
+    )
+
+    assert projection.remaining_mutation_seconds == 0.0
+    assert projection.limit_hit_reason == "training_reserve_boundary"
+
+
 def test_second_attempt_projection_charges_prior_attempt_and_active_screen_once() -> None:
     config = _tiny_timing_campaign()
     projection = project_minimum_update_feasibility(

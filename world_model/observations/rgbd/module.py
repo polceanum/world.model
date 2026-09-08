@@ -46,7 +46,6 @@ from world_model.observations.rgbd.set_proposer import (
     SET_MAX_CONFIGURABLE_LOG_VARIANCE_RESIDUAL,
     SET_MAX_LOG_VARIANCE_RESIDUAL,
     SET_MAX_OBJECTS,
-    SET_PROPOSAL_COUNT,
     RGBDSetProposer,
 )
 from world_model.observations.rgbd.sphere_centres import (
@@ -91,6 +90,7 @@ class RGBDObservationConfig:
     fit_conditioning_limit: float = 100.0
     observation_mode: str = "legacy"
     max_objects: int = SET_MAX_OBJECTS
+    birth_proposals: int = 2
     set_feature_dim: int = SET_FEATURE_DIM
     set_log_variance_residual_limit: float = SET_MAX_LOG_VARIANCE_RESIDUAL
 
@@ -103,16 +103,24 @@ class RGBDObservationConfig:
             or self.max_objects <= 0
         ):
             raise ValueError("RGB-D max_objects must be a positive integer")
+        if (
+            isinstance(self.birth_proposals, bool)
+            or not isinstance(self.birth_proposals, int)
+            or self.birth_proposals <= 0
+        ):
+            raise ValueError("RGB-D birth_proposals must be a positive integer")
         if isinstance(self.proposal_count, bool) or not isinstance(self.proposal_count, int):
             if self.observation_mode == "legacy":
                 raise ValueError("RGB-D proposal_count must be integer one or two")
             raise ValueError("RGB-D proposal_count must be an integer")
         if self.observation_mode == "legacy" and self.proposal_count not in {1, 2}:
             raise ValueError("RGB-D proposal_count must be integer one or two in legacy mode")
-        if self.observation_mode == "set" and self.proposal_count != SET_PROPOSAL_COUNT:
-            raise ValueError(f"set RGB-D observation requires proposal_count={SET_PROPOSAL_COUNT}")
-        if self.observation_mode == "set" and self.max_objects != SET_MAX_OBJECTS:
-            raise ValueError(f"set RGB-D observation requires max_objects={SET_MAX_OBJECTS}")
+        if self.observation_mode == "set" and self.proposal_count != (
+            self.max_objects + self.birth_proposals
+        ):
+            raise ValueError("set RGB-D proposal_count must equal max_objects + birth_proposals")
+        if self.observation_mode == "legacy" and self.birth_proposals != 2:
+            raise ValueError("legacy RGB-D requires birth_proposals=2")
         if self.set_feature_dim not in {SET_FEATURE_DIM, 2 * SET_FEATURE_DIM}:
             raise ValueError("RGB-D set_feature_dim must be 32 or 64")
         if self.observation_mode == "legacy" and self.set_feature_dim != SET_FEATURE_DIM:

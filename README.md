@@ -31,6 +31,52 @@ analytic + modal + interaction + event dynamics
     arbitrary-time future rollout
 ```
 
+## Capability progress
+
+The active phase keeps the calibrated structured 1--6-object RGB-D checkpoint
+as the incumbent and broadens behavior through controlled sensor, physics,
+camera, known-action, and short-recovery factors. Planning is a required
+downstream acceptance test and is never an optimized winner/ranking loss.
+Historical one-shot qualification code is audit-only.
+
+Build and open the portable static dashboard directly—no server or external
+assets are required:
+
+```bash
+conda run -n orpheus python scripts/world_model_progress.py build
+```
+
+Then open `runs/progress/index.html` in any browser (or double-click it).
+
+The dashboard shows incumbent/candidate score, run trends, physical-cell and
+factor coverage, horizon and uncertainty behavior, K=8/K=32 planning,
+N=8/12/16 state-only scaling, latency/memory/weights/disk usage, bottlenecks,
+and explicit unsupported claims. Current historical reports are adapted
+read-only; broadened factors display as `unmeasured` until actually executed.
+
+Inspect or safely manage local artifacts with:
+
+```bash
+conda run -n orpheus python scripts/world_model_progress.py list
+conda run -n orpheus python scripts/world_model_progress.py prune
+conda run -n orpheus python scripts/world_model_progress.py prune --apply
+conda run -n orpheus python scripts/world_model_progress.py clear --category media --apply
+```
+
+`prune` is a dry-run unless `--apply` is present. Only files listed by a valid
+run manifest are eligible. The incumbent, pinned files, summaries/HTML, two
+recent promoted checkpoints, invalid or unmanifested directories, symlinks,
+path escapes, and `.archive` are protected. The rolling run budget is 250 MiB;
+archive usage is reported separately. Completed workbench runs stream episode
+tensors, retain no frame directories, and discard optimizer state.
+
+The bounded model-development entry points remain:
+
+```bash
+conda run -n orpheus python scripts/run_world_model_workbench.py --profile smoke
+conda run -n orpheus python scripts/run_world_model_workbench.py --profile development
+```
+
 The first vertical slice uses a deterministic synthetic RGB sphere world with
 collisions, occlusion, camera motion, and variable drag/restitution. Simulator
 state is reserved for labels, evaluation, tests, and a clearly marked debug

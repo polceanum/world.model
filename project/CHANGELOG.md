@@ -2,6 +2,46 @@
 
 ## Unreleased — 2026-07-28
 
+### 2026-09-08 general capability and compact visual progress
+
+- Established the reconciled capability workbench baseline as commit
+  `c428da2`, retaining the calibrated structured development-v2 checkpoint as
+  incumbent and treating one-shot qualification machinery as audit-only.
+- Replaced the fixed dynamic-set 6/8 validator with configurable object
+  capacity plus two birth proposals. The existing 6/8 tensor schema and legacy
+  one/two-object paths remain unchanged, while broader simulator physics
+  ranges can now be evaluated against the same observable priors.
+- Added opt-in packed learned active-pair execution that scatters into the
+  existing dense result, plus finite/batch-independent state-only N=8/12/16
+  probes. Dense N<=6 remains the numerical oracle; this is not perceptual
+  qualification above six objects.
+- Added deterministic balanced manifests for sensor noise/dropout, variable
+  physical parameters, calibrated camera motion, broader known actions, short
+  partial visibility/recovery, and a separate compositional holdout. Added
+  constant-memory reduction, explicit truth-free runtime contracts, supported
+  owner ablations, the bounded 64/256-to-8,192 convergence schedule, and all
+  absolute/paired promotion rules. Planning remains absent from training loss.
+- Added `CapabilityRunSummary`, portable terminal `report.html`, and the
+  self-contained `runs/progress/index.html` dashboard with inline data/SVG.
+  Current workbench reports are adapted without mutation; older formats are
+  shown through minimal read-only adapters and unsupported factors remain
+  visibly unmeasured.
+- Added `scripts/world_model_progress.py build|list|prune|clear`. Future runs
+  receive compact manifests; pruning is dry-run by default, scoped only to
+  listed regular files, ordered by safe artifact class, capped at 250 MiB, and
+  fail-closed for incumbents, pins, missing/corrupt manifests, symlinks, path
+  escape, and `.archive`.
+- Changed physical workbench evaluation to stream materializations and terminal
+  checkpoints to omit optimizer state. Added exact cleanup, dashboard,
+  capacity, permutation, packed/dense parity, manifest, streaming, promotion,
+  and scalability regressions.
+- Preserved package specification 1.60.2 for legacy checkpoint compatibility
+  while recording the new capability work as an amendment. Hardened the old
+  audit-only 48-hour mutation boundary against a one-ULP timing reconstruction
+  shortfall without changing its 48-hour training / 12-hour audit policy.
+- Passed the final implementation gate: `2376 passed, 16 skipped in 3986.80 s`,
+  Ruff lint and format-check, compileall, and diff integrity.
+
 ### 2026-09-07 capability-first dynamic world-model loop
 
 - Added `scripts/run_world_model_workbench.py` and its small reusable training

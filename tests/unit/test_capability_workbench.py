@@ -66,6 +66,19 @@ def test_candidate_velocity_calibration_does_not_add_parameters() -> None:
     assert tuple(candidate.state_dict()) == tuple(reference.state_dict())
 
 
+def test_previous_workbench_checkpoint_defaults_remain_compatible() -> None:
+    config = load_config(_PROFILE).to_dict()
+    historical = {**config, "model": {**config["model"]}}
+    historical["model"]["rgbd"] = {**historical["model"]["rgbd"]}
+    historical["model"]["dynamics"] = {**historical["model"]["dynamics"]}
+    historical["model"]["rgbd"].pop("birth_proposals")
+    historical["model"]["dynamics"].pop("packed_interactions_enabled")
+
+    assert workbench._checkpoint_config_semantics(historical) == (
+        workbench._checkpoint_config_semantics(config)
+    )
+
+
 def test_planning_preflight_replaces_a_failed_row_in_the_same_slice(monkeypatch) -> None:
     class _Materialization:
         def __init__(self, row):

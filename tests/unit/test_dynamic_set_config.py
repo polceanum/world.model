@@ -3,6 +3,7 @@ from dataclasses import replace
 from pathlib import Path
 
 import pytest
+import yaml
 
 from world_model.runtime.online_world_model import OnlineWorldModel
 from world_model.training.dynamic_set_campaign import (
@@ -85,6 +86,7 @@ def test_dynamic_set_profile_loads_with_exact_specification_contract() -> None:
     assert config.model.state.fast_log_variance_min == -32.0
     assert config.model.rgbd.observation_mode == "set"
     assert config.model.rgbd.proposal_count == 8
+    assert config.model.rgbd.birth_proposals == 2
     assert config.model.rgbd.set_log_variance_residual_limit == 20.0
     assert config.model.rgbd.temporal_history_size == 16
     assert config.model.rgbd.temporal_min_samples == 3
@@ -97,6 +99,7 @@ def test_dynamic_set_profile_loads_with_exact_specification_contract() -> None:
     assert not config.model.dynamics.node_acceleration_enabled
     assert config.model.dynamics.event_driven_state_only_enabled
     assert config.model.dynamics.relation_process_uncertainty_enabled
+    assert not config.model.dynamics.packed_interactions_enabled
     assert config.model.dynamics.process_noise_position == 1.0e-14
     assert config.model.dynamics.process_noise_velocity == 1.0e-14
     assert not config.model.dynamics.attention_residual_enabled
@@ -105,6 +108,45 @@ def test_dynamic_set_profile_loads_with_exact_specification_contract() -> None:
     assert config.training.steps == 32_768
     assert config.training.checkpoint_every == 512
     assert config.evaluation.horizons_seconds == (0.05, 0.10, 0.25, 0.50, 1.0, 2.0)
+
+
+def test_set_proposal_capacity_is_derived_from_configurable_object_capacity(
+    tmp_path: Path,
+) -> None:
+    raw = yaml.safe_load(PROFILE.read_text(encoding="utf-8"))
+    raw["model"]["max_objects"] = 12
+    raw["model"]["rgbd"]["max_objects"] = 12
+    raw["model"]["rgbd"].pop("proposal_count")
+    raw["simulator"]["max_objects"] = 6
+    path = tmp_path / "capacity.yaml"
+    path.write_text(yaml.safe_dump(raw), encoding="utf-8")
+
+    config = load_config(path)
+    assert config.model.max_objects == 12
+    assert config.model.rgbd.max_objects == 12
+    assert config.model.rgbd.birth_proposals == 2
+    assert config.model.rgbd.proposal_count == 14
+
+    model = OnlineWorldModel.from_config(config)
+    module = model.observation_modules["rgbd"]
+    assert module.config.proposal_count == 14
+    assert module.set_proposer.anchor_points.shape == (14, 2)
+
+
+def test_set_profile_accepts_broader_physical_parameter_ranges(tmp_path: Path) -> None:
+    raw = yaml.safe_load(PROFILE.read_text(encoding="utf-8"))
+    raw["simulator"]["radius_range"] = [0.16, 0.28]
+    raw["simulator"]["mass_range"] = [0.6, 1.8]
+    raw["simulator"]["drag_range"] = [0.01, 0.16]
+    raw["simulator"]["restitution_range"] = [0.45, 0.90]
+    raw["simulator"]["friction_range"] = [0.05, 0.35]
+    path = tmp_path / "varied-physics.yaml"
+    path.write_text(yaml.safe_dump(raw), encoding="utf-8")
+
+    config = load_config(path)
+    assert config.simulator.radius_range == (0.16, 0.28)
+    assert config.simulator.mass_range == (0.6, 1.8)
+    assert config.simulator.drag_range == (0.01, 0.16)
 
 
 def test_dynamic_set_profile_instantiates_below_every_capacity_limit() -> None:

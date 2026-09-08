@@ -589,7 +589,12 @@ def project_minimum_update_feasibility(
     cumulative_validation = float(math.fsum(validation_samples))
     cumulative = float(math.fsum((prior_attempt, screen, *samples, discarded, *validation_samples)))
     mutation_limit = config.training_mutation_seconds
-    remaining = max(0.0, mutation_limit - cumulative)
+    # Authenticated timing can be repartitioned across hundreds of samples.
+    # Treat a reconstruction within a few representable floats of the exact
+    # policy boundary as exhausted so summation layout cannot reopen mutation.
+    boundary_tolerance = 4.0 * math.ulp(mutation_limit)
+    reserve_boundary_reached = cumulative >= mutation_limit - boundary_tolerance
+    remaining = 0.0 if reserve_boundary_reached else mutation_limit - cumulative
     required_minimum_validations = config.minimum_updates // config.validation_interval_updates
     remaining_validations = max(0, required_minimum_validations - len(validation_samples))
     validation_support = bool(validation_samples) or remaining_validations == 0
@@ -614,7 +619,7 @@ def project_minimum_update_feasibility(
         projected_envelope = float(projected + config.reserved_audit_seconds)
         feasible = projected_envelope <= config.maximum_training_hours * 3600.0
 
-    if cumulative >= mutation_limit:
+    if reserve_boundary_reached:
         reason: LimitHitReason = "training_reserve_boundary"
     elif (
         support

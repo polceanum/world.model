@@ -75,6 +75,7 @@ class InteractionGraph(nn.Module):
         continuous_pair_force_enabled: bool = True,
         node_acceleration_enabled: bool = True,
         bounded_event_calibration_enabled: bool = False,
+        packed_interactions_enabled: bool = False,
     ) -> None:
         super().__init__()
         if residual_dynamics_dim < 0 or global_code_dim < 0:
@@ -98,9 +99,12 @@ class InteractionGraph(nn.Module):
             raise TypeError("node_acceleration_enabled must be boolean")
         if not isinstance(bounded_event_calibration_enabled, bool):
             raise TypeError("bounded_event_calibration_enabled must be boolean")
+        if not isinstance(packed_interactions_enabled, bool):
+            raise TypeError("packed_interactions_enabled must be boolean")
         self.continuous_pair_force_enabled = continuous_pair_force_enabled
         self.node_acceleration_enabled = node_acceleration_enabled
         self.bounded_event_calibration_enabled = bounded_event_calibration_enabled
+        self.packed_interactions_enabled = packed_interactions_enabled
         self.edge_network = _MLP(
             self.edge_feature_dim,
             resolved_relation_hidden_dim,
@@ -233,7 +237,20 @@ class InteractionGraph(nn.Module):
                 diagonal=1,
             ).unsqueeze(0)
         )
-        edge_values = self.edge_network(features)
+        if self.packed_interactions_enabled:
+            # Evaluate the learned relation only for active, geometrically
+            # admissible unordered pairs, then scatter back to the established
+            # dense public result.  Dense N<=6 execution remains available as
+            # the numerical oracle and the output contract is unchanged.
+            packed_features = features[upper_mask]
+            packed_values = self.edge_network(packed_features)
+            edge_values = features.new_zeros((*features.shape[:-1], self.edge_output_dim))
+            edge_values = edge_values.masked_scatter(
+                upper_mask.unsqueeze(-1).expand_as(edge_values),
+                packed_values.reshape(-1),
+            )
+        else:
+            edge_values = self.edge_network(features)
         edge_values = edge_values * upper_mask.unsqueeze(-1)
         contact_upper = edge_values[..., 0]
         collision_upper = edge_values[..., 1]

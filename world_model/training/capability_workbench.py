@@ -16,6 +16,7 @@ import random
 import time
 from collections import Counter
 from collections.abc import Callable, Mapping, Sequence
+from copy import deepcopy
 from dataclasses import asdict, dataclass, fields, is_dataclass, replace
 from datetime import datetime, timezone
 from pathlib import Path
@@ -26,6 +27,11 @@ import numpy as np
 import torch
 from torch import Tensor
 
+from world_model.evaluation.capability_summary import (
+    summary_from_workbench_report,
+    write_capability_summary,
+)
+from world_model.evaluation.scalability import compare_dense_and_packed_scalability
 from world_model.runtime import OnlineWorldModel
 from world_model.training.dynamic_set_adapter import DynamicSetEpisodeObjectiveAdapter
 from world_model.training.dynamic_set_config import OrpheusConfig, load_config
@@ -64,11 +70,34 @@ from world_model.training.dynamic_set_trainer import (
     DynamicSetUpdateReport,
 )
 from world_model.utils.io import atomic_write_text
+from world_model.utils.run_artifacts import (
+    enforce_run_budget,
+    inventory_runs,
+    write_run_manifest,
+)
+from world_model.visualisation.progress import build_progress_dashboard, write_run_report
 
 WORKBENCH_SCHEMA = "world_model_capability_workbench_v1"
 DEFAULT_CAPABILITY_VELOCITY_VARIANCE_FLOOR = 4.0e-13
 DEFAULT_DEVELOPMENT_RETENTION_IMPROVEMENT = 0.03
 ProgressHook = Callable[[str], None]
+
+
+def _checkpoint_config_semantics(value: object) -> object:
+    """Fill only parameter-free defaults absent from older workbench runs."""
+
+    if not isinstance(value, Mapping):
+        return value
+    normalized = deepcopy(dict(value))
+    model = normalized.get("model")
+    if isinstance(model, dict):
+        rgbd = model.get("rgbd")
+        if isinstance(rgbd, dict):
+            rgbd.setdefault("birth_proposals", 2)
+        dynamics = model.get("dynamics")
+        if isinstance(dynamics, dict):
+            dynamics.setdefault("packed_interactions_enabled", False)
+    return normalized
 
 
 @dataclass(frozen=True)
@@ -718,7 +747,9 @@ def run_capability_workbench(
         loaded = torch.load(resumed_path, map_location="cpu", weights_only=False)
         if not isinstance(loaded, Mapping) or loaded.get("schema") != WORKBENCH_SCHEMA:
             raise ValueError("resume checkpoint is not a capability-workbench checkpoint")
-        if loaded.get("model_config") != model_config.to_dict():
+        if _checkpoint_config_semantics(loaded.get("model_config")) != (
+            _checkpoint_config_semantics(model_config.to_dict())
+        ):
             raise ValueError("resume checkpoint model configuration differs")
         saved_settings = loaded.get("workbench_settings")
         if not isinstance(saved_settings, Mapping):
@@ -762,13 +793,10 @@ def run_capability_workbench(
                 f"objective={training_reports[-1].objective:.6f}"
             )
 
-    trainer_checkpoint = (
-        resumed_checkpoint.get("trainer_checkpoint")
-        if resumed_checkpoint is not None
-        else None
-        if trainer is None
-        else trainer.checkpoint_payload()
-    )
+    # This function writes only terminal runs. Optimizer state is useful while
+    # a campaign is resumable, but retaining it after successful completion is
+    # unnecessary storage and conflicts with the compact artifact policy.
+    trainer_checkpoint = None
     completed_updates = (
         int(resumed_checkpoint.get("completed_updates", 0))
         if resumed_checkpoint is not None
@@ -817,19 +845,27 @@ def run_capability_workbench(
         settings.physical_cycles,
         cycle_offset=settings.physical_cycle_offset,
     )
-    update(f"materializing {len(physical_rows)} balanced public physical episodes")
-    materialize_physical_started = time.perf_counter()
-    physical_materializations = tuple(materialize_dynamic_set_episode(row) for row in physical_rows)
-    physical_materialization_seconds = time.perf_counter() - materialize_physical_started
+    update(f"streaming {len(physical_rows)} balanced public physical episodes")
+    physical_materialization_seconds = 0.0
+
+    def physical_materializations():
+        nonlocal physical_materialization_seconds
+        for row in physical_rows:
+            row_started = time.perf_counter()
+            materialization = materialize_dynamic_set_episode(row)
+            physical_materialization_seconds += time.perf_counter() - row_started
+            yield materialization
+
     update("evaluating physical behavior against the identical initializer")
     physical_started = time.perf_counter()
     physical_pair: DynamicSetPairedEvaluationResult = evaluate_paired_dynamic_set_materializations(
         candidate,
         reference,
-        physical_materializations,
+        physical_materializations(),
         require_all_cells=False,
     )
-    physical_seconds = time.perf_counter() - physical_started
+    physical_total_seconds = time.perf_counter() - physical_started
+    physical_seconds = max(0.0, physical_total_seconds - physical_materialization_seconds)
 
     candidate_score = _score_payload(physical_pair.candidate, planning_pair.candidate)
     reference_score = _score_payload(physical_pair.reference, planning_pair.reference)
@@ -864,6 +900,12 @@ def run_capability_workbench(
     capacity_bytes = sum(
         parameter.numel() * parameter.element_size() for parameter in candidate.parameters()
     )
+    update("probing state-only N=8/12/16 scalability")
+    scalability = compare_dense_and_packed_scalability(
+        selected_model.dynamics,
+        warmup_runs=1,
+        measured_runs=3,
+    )
     total_seconds = time.perf_counter() - started
     report: dict[str, Any] = {
         "schema": WORKBENCH_SCHEMA,
@@ -893,10 +935,12 @@ def run_capability_workbench(
             },
         },
         "capacity": {"parameters": capacity_parameters, "weight_bytes": capacity_bytes},
+        "scalability": scalability,
         "training": {
             **_training_payload(training_reports),
             "completed_updates": completed_updates,
             "resumed_from": resumed_from,
+            "optimizer_state_retained": False,
         },
         "candidate": {
             "capability_score": candidate_score,
@@ -939,6 +983,46 @@ def run_capability_workbench(
         json.dumps(_jsonable(report), allow_nan=False, indent=2) + "\n",
     )
     atomic_write_text(output / "report.md", _markdown(report))
+    archive_root = output.parent.parent / ".archive"
+    summary = summary_from_workbench_report(
+        report,
+        run_id=output.name,
+        artifacts={
+            "run_bytes": sum(
+                path.stat().st_size
+                for path in output.iterdir()
+                if path.is_file() and not path.is_symlink()
+            ),
+            "archive_bytes": inventory_runs(
+                output.parent,
+                archive_root=archive_root,
+            )["archive_bytes"],
+        },
+    )
+    write_capability_summary(summary, output / "capability_summary.json")
+    write_run_report(summary, output)
+    write_run_manifest(
+        output,
+        role="candidate",
+        status="completed",
+        artifacts={
+            "capability_summary.json": "summary",
+            "report.json": "summary",
+            "report.md": "report",
+            "report.html": "report",
+            "selected_checkpoint.pt": "checkpoint",
+            "checkpoint.pt": (
+                "checkpoint" if selection["learned_weights_retained"] else "rejected"
+            ),
+        },
+    )
+    cleanup = enforce_run_budget(output.parent, archive_root=archive_root)
+    build_progress_dashboard(output.parent, archive_root=archive_root)
+    if cleanup.warnings:
+        update(
+            f"artifact policy reported {len(cleanup.warnings)} protected/retention warnings; "
+            "use world_model_progress.py list or prune for details"
+        )
     update(f"completed with status={status}; report={output / 'report.md'}")
     return report
 

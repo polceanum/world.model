@@ -1,5 +1,76 @@
 # Project status
 
+## General capability with compact visual progress — 2026-09-09
+
+The active goal is now the 8 September general-capability amendment on the
+legacy-compatible package specification 1.60.2. The
+calibrated structured checkpoint at
+`runs/20260907-capability-development-v2/selected_checkpoint.pt` remains the
+incumbent; the learned 32-update candidate remains rejected. One-shot
+qualification coordinators are audit-only, and downstream planning remains a
+required evaluation rather than a training loss.
+
+The model interfaces remain stable. Dynamic-set RGB-D now derives proposal
+capacity from configurable `max_objects + birth_proposals` (two birth
+proposals by default), while the existing 6/8 profile and checkpoint tensor
+schema remain exact. Learned relation execution has an opt-in packed active-
+pair path that scatters back to the dense public output; dense N<=6 is its
+numerical oracle. State-only finite/batch-independent N=8/12/16 probes are
+available and explicitly do not claim visual qualification above six objects.
+
+The new deterministic capability protocol covers sensor noise/dropout,
+variable radius/mass/drag/restitution/friction, calibrated orbital/translating
+cameras, broader known impulses, partial visibility/recovery, and one
+compositional holdout. Its factor controls are generator-only; runtime inputs
+remain calibrated RGB-D plus public known actions. Constant-memory reducers,
+truth-owner ablation attribution, the 64-example/256-update screen, bounded
+2,048--8,192 update schedule, and complete promotion floors are encoded. No
+broad factor run has yet been executed, so the dashboard correctly labels
+those families unmeasured rather than extrapolating the nominal result.
+The 170-row development manifest SHA-256 is
+`28002e4952da9165828bd6b8c6a078097dba809fedc2244577af84119a61d7eb`;
+the separate 34-row compositional-holdout digest is
+`7380de55a581ec3e650ffbf4d0a389b1813a32320de1eb83681bed8df9ec5262`.
+
+`runs/progress/index.html` is now a dependency-free static dashboard built
+from versioned capability summaries and read-only historical adapters. On the
+current tree it lands on the completed capability-reporting smoke, includes
+the incumbent comparison and historical trend, and shows nominal
+physical/planning evidence plus explicit unsupported claims. The active run
+tree including the dashboard is about 6.8 MB; `.archive` is about
+34.3 MB and is displayed separately.
+
+New runs receive manifest-scoped compact retention: summaries/HTML are kept,
+optimizer state is dropped at terminal completion, debug data is capped at
+25 MiB on only the newest failed run, and total run artifacts are bounded by a
+250 MiB rolling cap. Cleanup is dry-run by default and cannot touch incumbents,
+pinned data, invalid/unmanifested directories, symlinks/path escapes, or
+`.archive`.
+
+The bounded artifact-pipeline integration run is
+`runs/20260908-capability-reporting-smoke`. It used no optimizer updates,
+streamed 22 nominal physical episodes, evaluated all 12 N/K planning slices,
+and wrote 12-task exact winner/parity evidence. Candidate and incumbent scores
+are both `0.0021676422` at supported weight `0.9`; the selected model remains
+the calibrated structured baseline. Dense state-only N=8/12/16 six-horizon
+latencies were `0.01206/0.01188/0.01185 s`, all finite and exactly
+batch-independent. Its complete terminal directory is about 0.52 MiB,
+including two 132 KiB checkpoints, a 144 KiB JSON report, 64 KiB summary, 56
+KiB portable HTML, Markdown, and manifest. This is a reporting/integration
+check, not broadened factor evidence.
+
+The pre-change baseline is commit `c428da2`. Its focused capability/planning
+set passed 56 tests. The first complete gate executed all tests and found two
+cross-candidate diagnostic-count failures after 2,352 passes; the auxiliary
+masking fix then passed the entire implicated planner/dynamics focused set.
+The implementation focused gate passed 100 tests. The final complete gate is
+green at `2376 passed, 16 skipped in 3986.80 s`; Ruff lint, Ruff format-check,
+compileall, and diff integrity are also green. During the first final-suite
+attempt, a pre-existing exact-48-hour audit test exposed one-ULP timing
+reconstruction sensitivity. The reserve policy remains exactly 48 training
+hours plus 12 audit hours; a four-ULP boundary comparison and direct
+regression now prevent sample repartitioning from reopening mutation.
+
 ## Active capability-first development — 2026-09-07
 
 The active direction has moved away from constructing another known-action

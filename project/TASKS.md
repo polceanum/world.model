@@ -1,5 +1,33 @@
 # Tasks
 
+## General-capability world model — active 2026-09-09
+
+- [x] Reconcile and commit the calibrated capability-first workbench baseline
+  as `c428da2`; preserve its selected structured checkpoint as incumbent.
+- [x] Keep legacy interfaces/checkpoint tensors stable while deriving set
+  proposal capacity from configurable `max_objects + birth_proposals`.
+- [x] Add opt-in packed learned active-pair execution with the dense result as
+  numerical oracle, plus finite batch-independent N=8/12/16 state-only probes.
+- [x] Freeze deterministic, disjoint, balanced manifests for sensor noise,
+  varied physical parameters, calibrated camera motion, broader known actions,
+  short partial visibility/recovery, and their compositional holdout.
+- [x] Add constant-memory reduction, runtime truth-isolation contracts,
+  owner-specific ablation attribution, bounded convergence scheduling, and the
+  complete absolute/paired promotion gates.
+- [x] Add versioned capability summaries, portable per-run HTML, a self-
+  contained static progress dashboard, and read-only historical adapters.
+- [x] Add manifest-scoped run inventory/prune/clear management with a 250 MiB
+  rolling cap, protected incumbent/pins/archive, and fail-closed path safety.
+- [x] Stream physical workbench episodes and remove terminal optimizer state;
+  keep ordinary terminal artifacts compact.
+- [ ] Execute the incumbent across all five new single-factor families and the
+  compositional holdout. Until then, keep each dashboard family unmeasured.
+- [ ] Run clean-observation/truth-association/truth-parameter/truth-state
+  ablations on supported failures; admit a training screen only after all
+  incumbent factor evaluations exist.
+- [x] Run the final complete pytest/Ruff/format/compile/diff gate: `2376
+  passed, 16 skipped`; commit the verified general-capability implementation.
+
 ## Capability-first world model — active 2026-09-07
 
 - [x] Replace the blocked v5/1.61 qualification critical path with a direct,
