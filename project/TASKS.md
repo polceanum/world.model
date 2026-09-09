@@ -16,6 +16,10 @@
   complete absolute/paired promotion gates.
 - [x] Add versioned capability summaries, portable per-run HTML, a self-
   contained static progress dashboard, and read-only historical adapters.
+- [x] Add three lightweight best/representative/worst trajectory animations as
+  bounded inline SVG evidence: 15 vector keyframes, 64 KiB per-example ceiling,
+  pause/replay and reduced-motion support, with no retained frame media. The
+  complete repository gate passes with `2404 passed, 16 skipped`.
 - [x] Add manifest-scoped run inventory/prune/clear management with a 250 MiB
   rolling cap, protected incumbent/pins/archive, and fail-closed path safety.
 - [x] Stream physical workbench episodes and remove terminal optimizer state;

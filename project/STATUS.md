@@ -41,10 +41,23 @@ rewriting old reports or relabeling nominal evidence. Physical-cell RMSE and
 coverage heatmaps, a factor metric matrix using the actual single-factor and
 compositional floors, planning slices and latency, separate like-for-like trend
 axes, scalability, resource use, storage, bottlenecks, and unsupported claims
-are visible in one portable file. The managed run tree is `10,902,100` bytes
-(about 10.40 MiB) against the 250 MiB cap; `.archive` is a separately displayed
-`34,315,899` bytes (about 32.73 MiB). The dashboard itself is about 124 KiB and
-contains no external assets.
+are visible in one portable file. It now includes three pauseable/replayable
+inline-SVG trajectory examples: best, representative, and worst by current-
+position error. A real public compositional rerun stores only 15 rounded world
+X--Z keyframes per example; all three payloads total `8,265` bytes, with no
+retained RGB-D, images, GIF, or video. Reduced-motion preferences disable
+autoplay.
+
+The managed run tree is `11,225,919` bytes (about 10.71 MiB) against the 250
+MiB cap; `.archive` is a separately displayed `34,315,899` bytes (about 32.73
+MiB). The dashboard itself is `145,636` bytes and contains no external assets.
+The animation evidence run is
+`runs/20260909-capability-compositional-physical-v5`. It passed all declared
+compositional physical gates, retained three 15-keyframe examples, and occupies
+`302,921` bytes in total. The selected examples span N=2 best, N=6
+representative, and N=1 worst episodes and visibly annotate birth, collision,
+and known-action onsets where present. Artifact-policy dry-run proposes no
+deletion.
 
 The real 22-cell single-factor screens are compact (about 0.20 MiB each) and
 retain no generated episodes or checkpoints. Calibrated camera motion and
@@ -95,8 +108,8 @@ histories are unstable and fine impulse magnitude selection under the combined
 shift remains a real downstream rejection. Failed task populations mark the
 invariant cover unmeasured rather than fabricating individual violations.
 
-The exact post-change repository gate passes with `2402 passed, 16 skipped`
-and 13 established governed-execution thread-setting warnings in `3972.91 s`.
+The exact post-change repository gate passes with `2404 passed, 16 skipped`
+and 13 established governed-execution thread-setting warnings in `4030.05 s`.
 The 139-test focused capability gate, Ruff lint/format, Python compilation, and
 diff-integrity checks also pass.
 

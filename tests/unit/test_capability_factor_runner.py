@@ -4,6 +4,7 @@ import json
 import math
 from itertools import islice
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 import torch
@@ -11,7 +12,9 @@ import torch
 import world_model.evaluation.capability_factor_runner as runner
 from scripts.run_capability_factor import arguments, main
 from world_model.evaluation.capability_factor_runner import (
+    CAPABILITY_ANIMATION_MAX_BYTES,
     SUPPORTED_CAPABILITY_FACTORS,
+    _compact_animation_payload,
     factor_physical_rows,
     materialize_capability_physical_episode,
 )
@@ -93,6 +96,42 @@ def test_sensor_noise_is_deterministic_observable_only_and_truth_isolated() -> N
         )
     _frames, boundary = first.public_frames_with_boundary()
     assert boundary.truth_leakage_count == 0
+
+
+def test_qualitative_animation_keeps_only_bounded_vector_keyframes() -> None:
+    capability_row, physical_row = factor_physical_rows("sensor_noise")[0]
+    materialization = materialize_capability_physical_episode(
+        capability_row,
+        physical_row,
+        apply_factor=True,
+    )
+    objects = materialization.episode["objects"]
+    trace = SimpleNamespace(
+        frames=tuple(
+            SimpleNamespace(
+                object_id=objects["id"][frame_index],
+                active=objects["active"][frame_index],
+                position=objects["position"][frame_index],
+                timestamp=frame_index / 20.0,
+            )
+            for frame_index in range(56)
+        )
+    )
+
+    animation = _compact_animation_payload(
+        materialization,
+        trace,
+        label="representative",
+        current_position_rmse_m=0.001234,
+    )
+    encoded = json.dumps(animation, separators=(",", ":")).encode("utf-8")
+
+    assert animation["schema"] == "world_model_compact_animation_v1"
+    assert len(animation["frames"]) == 15
+    assert animation["frames"][-1]["frame"] == 55
+    assert len(encoded) <= CAPABILITY_ANIMATION_MAX_BYTES
+    assert "rgb" not in encoded.decode("utf-8")
+    assert "depth" not in encoded.decode("utf-8")
 
 
 def test_sensor_noise_switches_component_discovery_to_public_depth() -> None:

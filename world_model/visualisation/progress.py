@@ -333,6 +333,16 @@ def _merge_latest_factor_evidence(
             if summary.cell_metrics and summary.resources:
                 evidence_source = summary
                 break
+    qualitative = dict(latest.qualitative)
+    animation_source: str | None = None
+    if not isinstance(qualitative.get("animations"), list) or not qualitative.get("animations"):
+        for summary in reversed(summaries):
+            if isinstance(summary.qualitative.get("animations"), list) and summary.qualitative.get(
+                "animations"
+            ):
+                qualitative["animations"] = summary.qualitative["animations"]
+                animation_source = summary.run_id
+                break
     return CapabilityRunSummary.from_dict(
         {
             **latest.to_dict(),
@@ -346,10 +356,12 @@ def _merge_latest_factor_evidence(
                 **evidence_source.resources,
                 "source_run": evidence_source.run_id,
             },
+            "qualitative": qualitative,
             "unsupported_claims": unsupported,
             "provenance": {
                 **latest.provenance,
                 **({} if planning_source is None else {"planning_source_run": planning_source}),
+                **({} if animation_source is None else {"animation_source_run": animation_source}),
             },
         }
     )
@@ -452,6 +464,143 @@ def _budget_utilization(artifacts: Mapping[str, Any]) -> float | None:
     return None
 
 
+_ANIMATION_PALETTE = (
+    "#69d6c5",
+    "#f3bc61",
+    "#ff7b91",
+    "#8aa7ff",
+    "#c68cff",
+    "#8bd46e",
+    "#ff9f68",
+    "#63c5ef",
+)
+
+
+def _animation_cards(summary: CapabilityRunSummary) -> str:
+    animations = summary.qualitative.get("animations")
+    if not isinstance(animations, list) or not animations:
+        return ""
+    cards: list[str] = []
+    for animation_index, animation in enumerate(animations[:3]):
+        if not isinstance(animation, Mapping):
+            continue
+        frames = animation.get("frames")
+        bounds = animation.get("bounds")
+        if not isinstance(frames, list) or not frames or not isinstance(bounds, Mapping):
+            continue
+        x_bounds = bounds.get("x")
+        z_bounds = bounds.get("z")
+        if (
+            not isinstance(x_bounds, list)
+            or len(x_bounds) != 2
+            or not isinstance(z_bounds, list)
+            or len(z_bounds) != 2
+        ):
+            continue
+        try:
+            x_low, x_high = (float(value) for value in x_bounds)
+            z_low, z_high = (float(value) for value in z_bounds)
+        except (TypeError, ValueError):
+            continue
+        if not all(map(math.isfinite, (x_low, x_high, z_low, z_high))):
+            continue
+        if x_high <= x_low or z_high <= z_low or not isinstance(frames[0], Mapping):
+            continue
+        object_ids: set[int] = set()
+        for frame in frames:
+            if not isinstance(frame, Mapping):
+                continue
+            for role in ("truth", "model"):
+                points = frame.get(role)
+                if not isinstance(points, list):
+                    continue
+                for point in points:
+                    if isinstance(point, list) and len(point) == 3 and isinstance(point[0], int):
+                        object_ids.add(point[0])
+        first = frames[0]
+
+        def initial(
+            role: str,
+            object_id: int,
+            *,
+            first_frame: Mapping[str, Any] = first,
+            x_min: float = x_low,
+            x_max: float = x_high,
+            z_min: float = z_low,
+            z_max: float = z_high,
+        ) -> tuple[float, float] | None:
+            points = first_frame.get(role)
+            if not isinstance(points, list):
+                return None
+            for point in points:
+                if not isinstance(point, list) or len(point) != 3 or point[0] != object_id:
+                    continue
+                try:
+                    x_value, z_value = float(point[1]), float(point[2])
+                except (TypeError, ValueError):
+                    return None
+                if not math.isfinite(x_value) or not math.isfinite(z_value):
+                    return None
+                x = 28.0 + 280.0 * (x_value - x_min) / (x_max - x_min)
+                y = 202.0 - 184.0 * (z_value - z_min) / (z_max - z_min)
+                return x, y
+            return None
+
+        circles: list[str] = []
+        for palette_index, object_id in enumerate(sorted(object_ids)):
+            color = _ANIMATION_PALETTE[palette_index % len(_ANIMATION_PALETTE)]
+            for role, radius in (("truth", 7), ("model", 4)):
+                coordinates = initial(role, object_id)
+                display = "none" if coordinates is None else "inline"
+                x, y = coordinates or (0.0, 0.0)
+                circles.append(
+                    f'<circle class="animation-{role}" data-role="{role}" '
+                    f'data-object-id="{object_id}" cx="{x:.2f}" cy="{y:.2f}" '
+                    f'r="{radius}" style="--object-color:{color};display:{display}"/>'
+                )
+        event_kinds = animation.get("events", [])
+        event_labels = sorted(
+            {
+                str(item.get("kind"))
+                for item in event_kinds
+                if isinstance(item, Mapping) and item.get("kind")
+            }
+        )
+        cards.append(
+            '<article class="animation-card" '
+            f'data-world-animation="{animation_index}">'
+            f"<h3>{_escape(animation.get('label', 'example')).title()}</h3>"
+            f'<p class="animation-meta">{_escape(animation.get("episode", "unknown episode"))}'
+            f" · N={_escape(animation.get('object_count', '?'))}"
+            f" · RMSE {_format_number(animation.get('current_position_rmse_m'))} m</p>"
+            '<svg class="world-animation" viewBox="0 0 336 220" role="img" '
+            f'aria-label="{_escape(animation.get("label", "example"))} model versus reference world trajectory">'
+            '<rect x="28" y="18" width="280" height="184" rx="7" class="animation-stage"/>'
+            '<path d="M28 64H308M28 110H308M28 156H308M98 18V202M168 18V202M238 18V202" '
+            'class="animation-grid-lines"/>'
+            f"{''.join(circles)}"
+            '<text x="34" y="34" class="animation-clock" data-animation-clock>frame 0</text>'
+            '<text x="34" y="194" class="animation-event" data-animation-event></text>'
+            "</svg>"
+            '<div class="animation-legend"><span class="model-key">● model</span>'
+            '<span class="truth-key">○ reference</span><span>world X–Z</span></div>'
+            f'<p class="animation-events">Events: {_escape(", ".join(event_labels) or "none")}</p>'
+            '<div class="animation-controls">'
+            f'<button type="button" data-animation-toggle="{animation_index}">Pause</button>'
+            f'<button type="button" data-animation-replay="{animation_index}">Replay</button>'
+            "</div></article>"
+        )
+    if not cards:
+        return ""
+    return (
+        "<section><h2>Lightweight trajectory examples</h2>"
+        '<p class="animation-intro">Filled markers are model state; rings are private '
+        "reference positions opened only after public RGB-D inference. Animations use bounded "
+        "downsampled vector keyframes—no video or retained image frames.</p>"
+        f'<div class="animation-grid">{"".join(cards)}</div></section>'
+    )
+
+
 def _summary_section(summary: CapabilityRunSummary) -> str:
     candidate_score = _score_value(summary, "candidate")
     incumbent_score = _score_value(summary, "incumbent")
@@ -500,12 +649,124 @@ def _summary_section(summary: CapabilityRunSummary) -> str:
       <dt>Worst</dt><dd>{_escape(summary.qualitative.get("worst_episode", "unavailable"))}</dd>
       <dt>Representative</dt><dd>{_escape(summary.qualitative.get("representative_episode", "unavailable"))}</dd>
     </dl></article></section>
+    {_animation_cards(summary)}
     <section class="grid two"><article><h2>Unsupported claims</h2>{_list(summary.unsupported_claims)}</article><article><h2>Explicit scope limits</h2>{_list(summary.scope_limitations)}</article></section>
     """
 
 
 _STYLE = """
-:root{color-scheme:dark;--bg:#0b1017;--panel:#141c27;--muted:#91a0b5;--ink:#f5f7fb;--accent:#69d6c5;--line:#344154}*{box-sizing:border-box}body{margin:0;background:radial-gradient(circle at top right,#172a37,var(--bg) 42%);color:var(--ink);font:14px/1.45 ui-sans-serif,system-ui,sans-serif}main{max-width:1180px;margin:auto;padding:28px}.hero{display:flex;justify-content:space-between;align-items:end;border-top:3px solid var(--accent);padding-top:18px}.hero h1{font-size:clamp(26px,4vw,48px);margin:.1em 0}.hero p,.metric+ p{color:var(--muted)}.eyebrow,.tag{font-size:11px;letter-spacing:.08em;text-transform:uppercase}.score{background:var(--panel);padding:18px 22px;border-radius:12px;display:grid;min-width:240px}.score strong,.metric{font-size:25px;color:var(--accent)}.grid{display:grid;gap:14px;margin:14px 0}.two{grid-template-columns:repeat(2,minmax(0,1fr))}.three{grid-template-columns:repeat(3,minmax(0,1fr))}article,section:not(.hero){background:color-mix(in srgb,var(--panel) 94%,transparent);border:1px solid var(--line);border-radius:12px;padding:16px;margin:14px 0;overflow:auto}section.grid{background:none;border:0;padding:0}section.grid article{margin:0}h2{margin:0 0 12px;font-size:16px}h3{font-size:13px;color:var(--muted)}table{border-collapse:collapse;width:100%}th,td{text-align:left;border-bottom:1px solid var(--line);padding:7px}.tag{padding:3px 6px;border-radius:9px;background:#303947}.tag.measured,.tag.passed{background:#165449}.tag.failed{background:#6b2737}.metric-matrix td{font-variant-numeric:tabular-nums}.metric-pass{background:#123d35}.metric-fail{background:#51232e;color:#ffdce4}.metric-info{background:#1c2d3b}.unmeasured{color:var(--muted)}.empty{color:var(--muted);padding:24px;text-align:center;border:1px dashed var(--line);border-radius:8px}svg{width:100%;min-width:520px}svg line{stroke:var(--line)}svg polyline{fill:none;stroke:var(--accent);stroke-width:3}svg circle{fill:var(--accent)}svg text{fill:var(--muted);font-size:11px}.chart-title{fill:var(--ink);font-size:13px}.cell-label{fill:white;font-size:8px}.cell-value{fill:white;font-size:11px;font-weight:700}dl{display:grid;grid-template-columns:1fr 1fr;gap:7px}dt{color:var(--muted)}dd{margin:0;text-align:right}.run-list a{color:var(--accent)}.notice{border-left:3px solid #f3bc61;padding-left:10px;color:var(--muted)}footer{color:var(--muted);padding:20px 0}@media(max-width:760px){.two,.three{grid-template-columns:1fr}.hero{display:block}.score{margin-top:12px}}
+:root{color-scheme:dark;--bg:#0b1017;--panel:#141c27;--muted:#91a0b5;--ink:#f5f7fb;--accent:#69d6c5;--line:#344154}*{box-sizing:border-box}body{margin:0;background:radial-gradient(circle at top right,#172a37,var(--bg) 42%);color:var(--ink);font:14px/1.45 ui-sans-serif,system-ui,sans-serif}main{max-width:1180px;margin:auto;padding:28px}.hero{display:flex;justify-content:space-between;align-items:end;border-top:3px solid var(--accent);padding-top:18px}.hero h1{font-size:clamp(26px,4vw,48px);margin:.1em 0}.hero p,.metric+ p{color:var(--muted)}.eyebrow,.tag{font-size:11px;letter-spacing:.08em;text-transform:uppercase}.score{background:var(--panel);padding:18px 22px;border-radius:12px;display:grid;min-width:240px}.score strong,.metric{font-size:25px;color:var(--accent)}.grid{display:grid;gap:14px;margin:14px 0}.two{grid-template-columns:repeat(2,minmax(0,1fr))}.three{grid-template-columns:repeat(3,minmax(0,1fr))}article,section:not(.hero){background:color-mix(in srgb,var(--panel) 94%,transparent);border:1px solid var(--line);border-radius:12px;padding:16px;margin:14px 0;overflow:auto}section.grid{background:none;border:0;padding:0}section.grid article{margin:0}h2{margin:0 0 12px;font-size:16px}h3{font-size:13px;color:var(--muted)}table{border-collapse:collapse;width:100%}th,td{text-align:left;border-bottom:1px solid var(--line);padding:7px}.tag{padding:3px 6px;border-radius:9px;background:#303947}.tag.measured,.tag.passed{background:#165449}.tag.failed{background:#6b2737}.metric-matrix td{font-variant-numeric:tabular-nums}.metric-pass{background:#123d35}.metric-fail{background:#51232e;color:#ffdce4}.metric-info{background:#1c2d3b}.unmeasured{color:var(--muted)}.empty{color:var(--muted);padding:24px;text-align:center;border:1px dashed var(--line);border-radius:8px}svg{width:100%;min-width:520px}svg line{stroke:var(--line)}svg polyline{fill:none;stroke:var(--accent);stroke-width:3}svg circle{fill:var(--accent)}svg text{fill:var(--muted);font-size:11px}.chart-title{fill:var(--ink);font-size:13px}.cell-label{fill:white;font-size:8px}.cell-value{fill:white;font-size:11px;font-weight:700}dl{display:grid;grid-template-columns:1fr 1fr;gap:7px}dt{color:var(--muted)}dd{margin:0;text-align:right}.animation-intro,.animation-meta,.animation-events{color:var(--muted)}.animation-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}.animation-card{margin:0!important;padding:12px!important}.animation-card h3{margin:0;color:var(--ink);text-transform:capitalize}.animation-meta{min-height:38px;font-size:12px}.world-animation{display:block;min-width:0;background:#0a1119;border:1px solid var(--line);border-radius:8px}.animation-stage{fill:#0c1621;stroke:#344154}.animation-grid-lines{fill:none;stroke:#253444;stroke-width:1}.animation-model{fill:var(--object-color);stroke:#081018;stroke-width:1.5}.animation-truth{fill:none;stroke:var(--object-color);stroke-width:2;stroke-dasharray:2 2}.animation-clock{fill:#c9d3df;font-variant-numeric:tabular-nums}.animation-event{fill:#f3bc61;font-weight:700}.animation-legend{display:flex;gap:12px;margin-top:8px;color:var(--muted);font-size:12px}.model-key{color:var(--accent)}.truth-key{color:#f3bc61}.animation-events{min-height:38px;font-size:12px}.animation-controls{display:flex;gap:8px}.animation-controls button{border:1px solid var(--line);border-radius:7px;background:#1c2d3b;color:var(--ink);padding:5px 11px;cursor:pointer}.animation-controls button:hover{border-color:var(--accent)}.run-list a{color:var(--accent)}.notice{border-left:3px solid #f3bc61;padding-left:10px;color:var(--muted)}footer{color:var(--muted);padding:20px 0}@media(max-width:900px){.animation-grid{grid-template-columns:1fr}}@media(max-width:760px){.two,.three{grid-template-columns:1fr}.hero{display:block}.score{margin-top:12px}}@media(prefers-reduced-motion:reduce){.animation-controls button{outline:1px solid var(--muted)}}
+"""
+
+
+_ANIMATION_SCRIPT = r"""
+<script>
+(() => {
+  const dataNode = document.getElementById("capability-run-summary");
+  if (!dataNode) return;
+  const summary = JSON.parse(dataNode.textContent);
+  const animations = summary.qualitative && summary.qualitative.animations;
+  if (!Array.isArray(animations)) return;
+  const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const states = new Map();
+  let pendingFrame = null;
+  const indexPoints = points => new Map((Array.isArray(points) ? points : []).map(p => [String(p[0]), p]));
+  const position = (point, bounds) => ({
+    x: 28 + 280 * (point[1] - bounds.x[0]) / (bounds.x[1] - bounds.x[0]),
+    y: 202 - 184 * (point[2] - bounds.z[0]) / (bounds.z[1] - bounds.z[0])
+  });
+  const render = (root, animation, progress) => {
+    const frames = animation.frames;
+    if (!Array.isArray(frames) || frames.length === 0) return;
+    const scaled = Math.min(frames.length - 1, progress * (frames.length - 1));
+    const leftIndex = Math.floor(scaled);
+    const rightIndex = Math.min(frames.length - 1, leftIndex + 1);
+    const mix = scaled - leftIndex;
+    const left = frames[leftIndex];
+    const right = frames[rightIndex];
+    for (const role of ["truth", "model"]) {
+      const leftPoints = indexPoints(left[role]);
+      const rightPoints = indexPoints(right[role]);
+      for (const circle of root.querySelectorAll(`circle[data-role="${role}"]`)) {
+        const objectId = circle.dataset.objectId;
+        const a = leftPoints.get(objectId);
+        const b = rightPoints.get(objectId);
+        const point = a && b
+          ? [a[0], a[1] + mix * (b[1] - a[1]), a[2] + mix * (b[2] - a[2])]
+          : (mix < 0.5 ? a : b);
+        if (!point) {
+          circle.style.display = "none";
+          continue;
+        }
+        const screen = position(point, animation.bounds);
+        circle.setAttribute("cx", screen.x.toFixed(2));
+        circle.setAttribute("cy", screen.y.toFixed(2));
+        circle.style.display = "inline";
+      }
+    }
+    const actualFrame = left.frame + mix * (right.frame - left.frame);
+    const clock = root.querySelector("[data-animation-clock]");
+    if (clock) clock.textContent = `frame ${Math.round(actualFrame)} · ${(actualFrame / 20).toFixed(2)} s`;
+    const eventNode = root.querySelector("[data-animation-event]");
+    if (eventNode) {
+      const nearby = (animation.events || [])
+        .filter(event => Math.abs(event.frame - actualFrame) < 1.5)
+        .map(event => event.kind);
+      eventNode.textContent = [...new Set(nearby)].join(" · ");
+    }
+  };
+  for (const root of document.querySelectorAll("[data-world-animation]")) {
+    const index = Number(root.dataset.worldAnimation);
+    const animation = animations[index];
+    if (!animation) continue;
+    const state = {progress: 0, paused: reducedMotion, previous: performance.now()};
+    states.set(index, state);
+    const toggle = document.querySelector(`[data-animation-toggle="${index}"]`);
+    const replay = document.querySelector(`[data-animation-replay="${index}"]`);
+    if (toggle) {
+      toggle.textContent = state.paused ? "Play" : "Pause";
+      toggle.addEventListener("click", () => {
+        state.paused = !state.paused;
+        state.previous = performance.now();
+        toggle.textContent = state.paused ? "Play" : "Pause";
+        schedule();
+      });
+    }
+    if (replay) replay.addEventListener("click", () => {
+      state.progress = 0;
+      state.paused = false;
+      state.previous = performance.now();
+      if (toggle) toggle.textContent = "Pause";
+      render(root, animation, 0);
+      schedule();
+    });
+    render(root, animation, 0);
+  }
+  function schedule() {
+    if (pendingFrame === null && [...states.values()].some(state => !state.paused)) {
+      pendingFrame = window.requestAnimationFrame(tick);
+    }
+  }
+  function tick(now) {
+    pendingFrame = null;
+    let running = false;
+    for (const root of document.querySelectorAll("[data-world-animation]")) {
+      const index = Number(root.dataset.worldAnimation);
+      const animation = animations[index];
+      const state = states.get(index);
+      if (!animation || !state) continue;
+      if (!state.paused) {
+        state.progress = (state.progress + (now - state.previous) / 6500) % 1;
+        running = true;
+      }
+      state.previous = now;
+      render(root, animation, state.progress);
+    }
+    if (running) pendingFrame = window.requestAnimationFrame(tick);
+  }
+  schedule();
+})();
+</script>
 """
 
 
@@ -535,7 +796,8 @@ def render_summary_html(
         if notices
         else ""
     )
-    return f"""<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">{refresh}<title>{_escape(title)}</title><style>{_STYLE}</style></head><body><main>{_summary_section(summary)}{notice_html}<section class="run-list"><h2>Capability trend</h2>{_trend_charts(history)}<ol>{history_rows}</ol></section><footer>Portable report · schema {CAPABILITY_SUMMARY_SCHEMA} · no external assets</footer></main><script type="application/json" id="capability-run-summary">{embedded}</script></body></html>"""
+    animation_script = _ANIMATION_SCRIPT if _animation_cards(summary) else ""
+    return f"""<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">{refresh}<title>{_escape(title)}</title><style>{_STYLE}</style></head><body><main>{_summary_section(summary)}{notice_html}<section class="run-list"><h2>Capability trend</h2>{_trend_charts(history)}<ol>{history_rows}</ol></section><footer>Portable report · schema {CAPABILITY_SUMMARY_SCHEMA} · no external assets</footer></main><script type="application/json" id="capability-run-summary">{embedded}</script>{animation_script}</body></html>"""
 
 
 def _directory_size(path: Path) -> int:

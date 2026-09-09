@@ -241,6 +241,73 @@ def test_trends_do_not_mix_physical_and_planning_score_scales() -> None:
     assert "Lower-is-better score across runs" not in content
 
 
+def test_dashboard_keeps_three_lightweight_vector_animations_from_latest_evidence(
+    tmp_path: Path,
+) -> None:
+    animation = {
+        "schema": "world_model_compact_animation_v1",
+        "label": "best",
+        "episode": "development:1/seed=2",
+        "object_count": 1,
+        "contact": False,
+        "dynamic_membership": False,
+        "current_position_rmse_m": 0.001,
+        "projection": "world_xz",
+        "bounds": {"x": [-1.0, 1.0], "z": [-1.0, 1.0]},
+        "frames": [
+            {
+                "frame": 0,
+                "time_s": 0.0,
+                "truth": [[0, -0.5, 0.0]],
+                "model": [[0, -0.49, 0.01]],
+            },
+            {
+                "frame": 55,
+                "time_s": 2.75,
+                "truth": [[0, 0.5, 0.0]],
+                "model": [[0, 0.49, -0.01]],
+            },
+        ],
+        "events": [{"frame": 28, "kind": "known action"}],
+        "reference": "private simulator truth used only after public inference",
+    }
+    runs = tmp_path / "runs"
+    physical_directory = runs / "physical"
+    planning_directory = runs / "planning"
+    physical_directory.mkdir(parents=True)
+    planning_directory.mkdir()
+    physical = replace(
+        _summary("physical"),
+        created_at_utc="2026-09-08T00:00:00+00:00",
+        source_format="world_model_capability_factor_report_v1",
+        qualitative={**_summary("physical").qualitative, "animations": [animation] * 4},
+    )
+    planning = replace(
+        _summary("planning"),
+        created_at_utc="2026-09-08T01:00:00+00:00",
+        source_format="world_model_capability_planning_report_v1",
+        qualitative={
+            **_summary("planning").qualitative,
+            "best_episode": "latest-planning-qualitative-marker",
+        },
+    )
+    write_capability_summary(physical, physical_directory / "capability_summary.json")
+    write_capability_summary(planning, planning_directory / "capability_summary.json")
+
+    content = build_progress_dashboard(runs).read_text(encoding="utf-8")
+
+    assert "Lightweight trajectory examples" in content
+    assert content.count('class="animation-card"') == 3
+    assert "● model" in content and "○ reference" in content
+    assert "Pause" in content and "Replay" in content
+    assert "requestAnimationFrame" in content
+    assert '"animation_source_run": "physical"' in content
+    assert "latest-planning-qualitative-marker" in content
+    assert "<video" not in content and "<img" not in content
+    assert "data:image" not in content
+    assert len(content.encode("utf-8")) < 250_000
+
+
 def test_compositional_metric_matrix_uses_holdout_gates_only() -> None:
     summary = replace(
         _summary("compositional"),

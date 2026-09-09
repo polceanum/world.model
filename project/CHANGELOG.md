@@ -4,6 +4,14 @@
 
 ### 2026-09-09 streamed capability evidence
 
+- Added three bounded model-versus-reference trajectory animations to portable
+  run reports and the progress dashboard. Best, representative, and worst
+  examples are selected from the evaluated current-position evidence, then
+  rerun through the public RGB-D path before private reference comparison.
+  Each retains 15 rounded world X--Z keyframes under a 64 KiB hard ceiling and
+  renders with inline SVG/JavaScript, play/pause/replay controls, and reduced-
+  motion support; no frames, GIF, video, or external dependency is retained.
+  The complete repository gate passes with `2404 passed, 16 skipped`.
 - Added factor-conditioned downstream planning for every sensor, physics,
   camera, action, recovery, and compositional family. Each compact run spans
   all N=1--6/K=8,32 slices, opens private oracle evidence only after the public

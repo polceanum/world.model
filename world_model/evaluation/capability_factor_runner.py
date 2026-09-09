@@ -54,9 +54,11 @@ from world_model.training.dynamic_set_config import OrpheusConfig, load_config
 from world_model.training.dynamic_set_evaluation import (
     BinaryCounts,
     DynamicSetCellAccumulator,
+    DynamicSetEpisodeTrace,
     DynamicSetEvaluationError,
     DynamicSetEvaluationResult,
     evaluate_dynamic_set_materializations,
+    run_public_dynamic_set_episode,
 )
 from world_model.training.dynamic_set_materializer import (
     DynamicSetKnownAction,
@@ -85,6 +87,9 @@ from world_model.utils.run_artifacts import enforce_run_budget, inventory_runs, 
 from world_model.visualisation.progress import build_progress_dashboard, write_run_report
 
 CAPABILITY_FACTOR_REPORT_SCHEMA = "world_model_capability_factor_report_v1"
+CAPABILITY_ANIMATION_SAMPLE_STRIDE = 4
+CAPABILITY_ANIMATION_MAX_EXAMPLES = 3
+CAPABILITY_ANIMATION_MAX_BYTES = 64 * 1024
 SUPPORTED_CAPABILITY_FACTORS = (
     "sensor_noise",
     "physical_parameters",
@@ -766,24 +771,207 @@ def _coverage_range(result: DynamicSetEvaluationResult) -> list[float]:
     return [] if not values else [min(values), max(values)]
 
 
-def _qualitative_rows(result: DynamicSetEvaluationResult) -> dict[str, str]:
-    values: list[tuple[str, float]] = []
+def _ranked_qualitative_records(result: DynamicSetEvaluationResult) -> list[tuple[Any, float]]:
+    values: list[tuple[Any, float]] = []
     for record in result.per_example_score_evidence:
         squared, support = record.additive.current_position
         value = math.sqrt(squared / support) if support else math.inf
-        values.append((f"development:{record.ordinal}/seed={record.seed}", value))
-    ordered = sorted(values, key=lambda item: item[1])
+        values.append((record, value))
+    return sorted(values, key=lambda item: item[1])
+
+
+def _qualitative_rows(result: DynamicSetEvaluationResult) -> dict[str, str]:
+    ordered = _ranked_qualitative_records(result)
     if not ordered:
         return {
             "best_episode": "unavailable",
             "worst_episode": "unavailable",
             "representative_episode": "unavailable",
         }
+
+    def label(item: tuple[Any, float]) -> str:
+        record, _ = item
+        return f"development:{record.ordinal}/seed={record.seed}"
+
     return {
-        "best_episode": ordered[0][0],
-        "worst_episode": ordered[-1][0],
-        "representative_episode": ordered[len(ordered) // 2][0],
+        "best_episode": label(ordered[0]),
+        "worst_episode": label(ordered[-1]),
+        "representative_episode": label(ordered[len(ordered) // 2]),
     }
+
+
+def _frame_points(
+    object_id: Tensor,
+    active: Tensor,
+    position: Tensor,
+) -> list[list[float | int]]:
+    points: list[list[float | int]] = []
+    for slot in torch.nonzero(active, as_tuple=False).flatten().tolist():
+        identifier = int(object_id[slot])
+        coordinates = position[slot]
+        if identifier < 0 or not bool(torch.isfinite(coordinates).all()):
+            continue
+        # The compact animation is a world X-Z top-down view. Four decimal
+        # places are materially finer than the declared centimetre accuracy
+        # floors while keeping all three examples comfortably below 64 KiB.
+        points.append(
+            [
+                identifier,
+                round(float(coordinates[0]), 4),
+                round(float(coordinates[2]), 4),
+            ]
+        )
+    return points
+
+
+def _animation_events(materialization: DynamicSetMaterialization) -> list[dict[str, Any]]:
+    episode_events = materialization.episode["events"]
+    if not isinstance(episode_events, Mapping):
+        raise TypeError("animation evidence requires the private event ledger")
+    events: list[dict[str, Any]] = []
+    masks = (
+        ("created", "birth"),
+        ("removed", "removal"),
+        ("known_action_observed", "known action"),
+        ("collision", "collision"),
+    )
+    for source, label in masks:
+        value = episode_events.get(source)
+        if not isinstance(value, Tensor) or value.shape[0] != DYNAMIC_SET_FRAMES:
+            raise ValueError(f"animation event {source} must have one row per frame")
+        active = value.reshape(DYNAMIC_SET_FRAMES, -1).bool().any(dim=-1)
+        onset = active & ~torch.cat((active.new_zeros(1), active[:-1]))
+        for frame_index in torch.nonzero(onset, as_tuple=False).flatten().tolist():
+            events.append({"frame": frame_index, "kind": label})
+    return sorted(events, key=lambda item: (int(item["frame"]), str(item["kind"])))
+
+
+def _compact_animation_payload(
+    materialization: DynamicSetMaterialization,
+    trace: DynamicSetEpisodeTrace,
+    *,
+    label: str,
+    current_position_rmse_m: float,
+) -> dict[str, Any]:
+    """Reduce one evaluated episode to bounded vector-animation keyframes."""
+
+    if len(trace.frames) != DYNAMIC_SET_FRAMES:
+        raise ValueError("animation trace must cover the complete episode")
+    objects = materialization.episode["objects"]
+    if not isinstance(objects, Mapping):
+        raise TypeError("animation evidence requires the private object ledger")
+    truth_id = objects.get("id")
+    truth_active = objects.get("active")
+    truth_position = objects.get("position")
+    if (
+        not isinstance(truth_id, Tensor)
+        or truth_id.shape != (DYNAMIC_SET_FRAMES, DYNAMIC_SET_MAX_OBJECTS)
+        or not isinstance(truth_active, Tensor)
+        or truth_active.shape != truth_id.shape
+        or not isinstance(truth_position, Tensor)
+        or truth_position.shape != (DYNAMIC_SET_FRAMES, DYNAMIC_SET_MAX_OBJECTS, 3)
+    ):
+        raise ValueError("animation truth tensors have unexpected shapes")
+    frame_indices = list(range(0, DYNAMIC_SET_FRAMES, CAPABILITY_ANIMATION_SAMPLE_STRIDE))
+    if frame_indices[-1] != DYNAMIC_SET_FRAMES - 1:
+        frame_indices.append(DYNAMIC_SET_FRAMES - 1)
+    frames: list[dict[str, Any]] = []
+    all_points: list[list[float | int]] = []
+    for frame_index in frame_indices:
+        model_frame = trace.frames[frame_index]
+        truth_points = _frame_points(
+            truth_id[frame_index],
+            truth_active[frame_index],
+            truth_position[frame_index],
+        )
+        model_points = _frame_points(
+            model_frame.object_id,
+            model_frame.active,
+            model_frame.position,
+        )
+        all_points.extend(truth_points)
+        all_points.extend(model_points)
+        frames.append(
+            {
+                "frame": frame_index,
+                "time_s": round(float(model_frame.timestamp), 3),
+                "truth": truth_points,
+                "model": model_points,
+            }
+        )
+    if not all_points:
+        raise ValueError("animation evidence contains no active object positions")
+    x_values = [float(point[1]) for point in all_points]
+    z_values = [float(point[2]) for point in all_points]
+
+    def bounds(values: Sequence[float]) -> list[float]:
+        low, high = min(values), max(values)
+        padding = max(0.10 * (high - low), 0.10)
+        return [round(low - padding, 4), round(high + padding, 4)]
+
+    payload = {
+        "schema": "world_model_compact_animation_v1",
+        "label": label,
+        "episode": (f"development:{materialization.row.ordinal}/seed={materialization.row.seed}"),
+        "object_count": materialization.row.object_count,
+        "contact": materialization.row.contact,
+        "dynamic_membership": materialization.row.dynamic_membership,
+        "current_position_rmse_m": round(float(current_position_rmse_m), 6),
+        "projection": "world_xz",
+        "bounds": {"x": bounds(x_values), "z": bounds(z_values)},
+        "frames": frames,
+        "events": _animation_events(materialization),
+        "reference": "private simulator truth used only after public inference",
+    }
+    encoded = json.dumps(payload, separators=(",", ":"), allow_nan=False).encode("utf-8")
+    if len(encoded) > CAPABILITY_ANIMATION_MAX_BYTES:
+        raise ValueError("compact animation exceeds its 64 KiB serialized ceiling")
+    return payload
+
+
+def _qualitative_animations(
+    model: OnlineWorldModel,
+    factor_rows: Sequence[tuple[CapabilityManifestRow, PhysicalManifestRow]],
+    result: DynamicSetEvaluationResult,
+) -> list[dict[str, Any]]:
+    """Re-run only best/median/worst rows and retain position keyframes."""
+
+    ranked = _ranked_qualitative_records(result)
+    if not ranked:
+        return []
+    selected = (
+        ("best", ranked[0]),
+        ("representative", ranked[len(ranked) // 2]),
+        ("worst", ranked[-1]),
+    )
+    rows_by_key = {
+        (physical.ordinal, physical.seed, physical.cell_index): (capability, physical)
+        for capability, physical in factor_rows
+    }
+    animations: list[dict[str, Any]] = []
+    for label, (record, error) in selected[:CAPABILITY_ANIMATION_MAX_EXAMPLES]:
+        key = (record.ordinal, record.seed, record.cell_index)
+        try:
+            capability_row, physical_row = rows_by_key[key]
+        except KeyError as missing:
+            raise ValueError("qualitative row is absent from the factor manifest") from missing
+        materialization = materialize_capability_physical_episode(
+            capability_row,
+            physical_row,
+            apply_factor=True,
+        )
+        trace = run_public_dynamic_set_episode(model, materialization.public_frames())
+        animations.append(
+            _compact_animation_payload(
+                materialization,
+                trace,
+                label=label,
+                current_position_rmse_m=error,
+            )
+        )
+        # The materialized RGB-D episode and complete trace leave scope here;
+        # only the small detached keyframe payload reaches durable evidence.
+    return animations
 
 
 def _make_summary(
@@ -797,6 +985,7 @@ def _make_summary(
     gate_failures: Sequence[str],
     provenance: Mapping[str, Any],
     scalability: Mapping[str, Any],
+    qualitative_animations: Sequence[Mapping[str, Any]],
     artifact_bytes: int,
     archive_bytes: int,
     created_at_utc: str,
@@ -890,6 +1079,7 @@ def _make_summary(
         },
         qualitative={
             **_qualitative_rows(factor_result),
+            "animations": [dict(animation) for animation in qualitative_animations],
             "preview_image": "not retained",
             "diagnostic_contact_sheets": [],
         },
@@ -1152,6 +1342,10 @@ def run_incumbent_factor_evaluation(
         warmup_runs=1,
         measured_runs=3,
     )
+    animation_started = time.perf_counter()
+    update("capturing three compact model-versus-reference trajectory examples")
+    qualitative_animations = _qualitative_animations(model, rows, factor_result)
+    animation_seconds = time.perf_counter() - animation_started
     report: dict[str, Any] = {
         "schema": CAPABILITY_FACTOR_REPORT_SCHEMA,
         "created_at_utc": created,
@@ -1165,9 +1359,11 @@ def run_incumbent_factor_evaluation(
         "provenance": provenance,
         "resources": _jsonable(factor_result.resources),
         "scalability": scalability,
+        "qualitative_animations": qualitative_animations,
         "timing_seconds": {
             "factor_evaluation": factor_seconds,
             "clean_ablation": clean_seconds,
+            "qualitative_examples": animation_seconds,
             "total": time.perf_counter() - started,
         },
         "artifact_policy": {
@@ -1193,6 +1389,7 @@ def run_incumbent_factor_evaluation(
         gate_failures=gate_failures,
         provenance=provenance,
         scalability=scalability,
+        qualitative_animations=qualitative_animations,
         artifact_bytes=artifact_bytes,
         archive_bytes=archive_bytes,
         created_at_utc=created,

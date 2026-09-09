@@ -54,6 +54,10 @@ N=8/12/16 state-only scaling, latency/memory/weights/disk usage, bottlenecks,
 and explicit unsupported claims. Current historical reports are adapted
 read-only. The dashboard merges each family's newest evidence and labels the
 source run, while keeping nominal and factor-conditioned planning distinct.
+Its best, representative, and worst trajectory examples animate the public
+model state against the post-inference private reference in a top-down world
+view. They are pauseable/replayable inline SVG: each keeps only 15 rounded
+position keyframes, with no GIF, video, image directory, or external asset.
 
 Run or reproduce one streamed physical factor without retaining its episodes:
 

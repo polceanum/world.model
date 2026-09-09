@@ -6,6 +6,30 @@ to make every heading unambiguous; the suffixes do not imply precedence, no
 substantive decision or chronology changed, and the one corresponding
 cross-reference was disambiguated.
 
+## ADR-183 — Retain vector trajectories, not rendered animation media
+
+- **Date:** 2026-09-09
+- **Status:** accepted and implemented
+- **Context:** Aggregate charts expose trends and gates, but they do not make
+  identity, lifecycle, contact, or action-timing behavior immediately legible.
+  Conventional GIF/video output would duplicate generated frames and steadily
+  consume the deliberately small artifact budget.
+- **Decision:** Select at most three episodes from existing current-position
+  evidence: best, median representative, and worst. Re-run only those public
+  RGB-D inputs, open private truth after inference, and reduce both trajectories
+  to 15 rounded world X--Z keyframes plus sparse event onsets. Enforce a 64 KiB
+  serialized ceiling per example. Render the retained vectors as inline SVG
+  with a tiny embedded controller, play/pause/replay controls, and
+  `prefers-reduced-motion`; retain no RGB-D tensor, frame image, GIF, video, or
+  external asset. If the newest family summary lacks animations, the dashboard
+  may reuse the newest explicit animation evidence and must label its source.
+- **Consequences:** A real 22-episode compositional rerun retains three examples
+  in 8,265 serialized bytes; its entire terminal directory is 302,921 bytes and
+  the portable dashboard is 145,636 bytes. The examples show public model state
+  against scoring-only reference positions without changing inference or loss.
+  They are diagnostic evidence, not perceptual qualification or a saved replay
+  of the source observations.
+
 ## ADR-182 — Repair observable structure before adding capacity
 
 - **Date:** 2026-09-09
