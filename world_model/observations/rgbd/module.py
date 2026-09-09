@@ -536,7 +536,17 @@ class RGBDObservationModule(ObservationModule):
         # behavior for synthetic/non-spherical callers whose surface system is
         # unidentifiable; evaluation records which branch supplied each row.
         use_surface_fit = surface_fit_valid
-        valid_mask = geometry.valid_mask & (surface_fit_valid | centre_metric.valid_mask)
+        # Depth-topology discovery is invoked only after an observable RGB-D
+        # disagreement. Its doubled support floor rejects small dropout lobes
+        # that can otherwise become persistent ghost births during contact.
+        robust_component_support = (~proposal.depth_component_discovery[:, None]) | (
+            geometry.mass >= 2.0 * self.config.minimum_mass
+        )
+        valid_mask = (
+            geometry.valid_mask
+            & robust_component_support
+            & (surface_fit_valid | centre_metric.valid_mask)
+        )
         value_gate = valid_mask.unsqueeze(-1)
         selected_world_position = torch.where(
             use_surface_fit.unsqueeze(-1),
@@ -548,6 +558,15 @@ class RGBDObservationModule(ObservationModule):
             selected_world_position,
             torch.zeros_like(selected_world_position),
         )
+        fitted_radius_relative_error = (
+            fitted_radius - expected_radius
+        ).abs() / expected_radius.clamp_min(torch.finfo(rgb.dtype).eps)
+        measured_world_radius = torch.where(
+            surface_fit_valid & (fitted_radius_relative_error > 0.02),
+            fitted_radius,
+            expected_radius,
+        )
+        observed_radius_change = surface_fit_valid & (fitted_radius_relative_error > 0.02)
         appearance = self._set_appearance(
             rgb,
             geometry.effective_masks,
@@ -613,10 +632,12 @@ class RGBDObservationModule(ObservationModule):
                 "world_log_variance": log_variance,
                 "world_position_log_variance": log_variance,
                 "world_position_independent_axis_mask": valid_axes,
-                "world_radius": rgb.new_full(
-                    (batch, proposals, 1),
-                    self.config.world_radius,
-                ),
+                # Births retain the checkpointed prior. Persistent tracks
+                # accept the separate observable candidate only after runtime
+                # confirmation across two associated frames.
+                "world_radius": expected_radius.unsqueeze(-1),
+                "observed_world_radius": measured_world_radius.unsqueeze(-1),
+                "observed_world_radius_change": observed_radius_change,
                 "position_confidence": confidence,
                 "visibility_logit": existence_logits,
                 "metric_confidence": confidence,
@@ -628,9 +649,7 @@ class RGBDObservationModule(ObservationModule):
                 "surface_fit_valid": surface_fit_valid,
                 "surface_fit_condition_number": fit_condition_number,
                 "surface_fit_radius": fitted_radius,
-                "surface_fit_radius_relative_error": (
-                    (fitted_radius - expected_radius).abs() / expected_radius.clamp_min(epsilon)
-                ),
+                "surface_fit_radius_relative_error": fitted_radius_relative_error,
                 "image_centres": geometry.centres,
                 "image_radius_pixels": geometry.radius_pixels,
                 "foreground_mass": geometry.mass,
@@ -641,6 +660,7 @@ class RGBDObservationModule(ObservationModule):
                 "set_existence_residual": proposal.existence_residual,
                 "set_appearance_residual": proposal.appearance_residual,
                 "set_log_variance_residual": proposal.log_variance_residual,
+                "set_depth_component_discovery": proposal.depth_component_discovery,
             },
         )
         result.validate()

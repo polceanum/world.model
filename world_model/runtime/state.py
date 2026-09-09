@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
+from torch import Tensor
+
 from world_model.belief import TentativeBirthState, WorldBelief
 from world_model.observations.base import ModalityCache, ModalityHistory
 
@@ -23,11 +25,28 @@ def runtime_stream_key(modality: str, sensor_id: str) -> str:
 
 
 @dataclass
+class RadiusConfirmationState:
+    """One pending observable-radius candidate per persistent object."""
+
+    object_ids: Tensor
+    candidate: Tensor
+    count: Tensor
+
+    def detach(self) -> RadiusConfirmationState:
+        return RadiusConfirmationState(
+            object_ids=self.object_ids.detach(),
+            candidate=self.candidate.detach(),
+            count=self.count.detach(),
+        )
+
+
+@dataclass
 class RuntimeState:
     belief: WorldBelief | None = None
     caches: dict[str, ModalityCache] = field(default_factory=dict)
     temporal_histories: dict[str, ModalityHistory] = field(default_factory=dict)
     tentative_births: dict[tuple[str, str], TentativeBirthState] = field(default_factory=dict)
+    radius_confirmations: dict[str, RadiusConfirmationState] = field(default_factory=dict)
     batch_size: int = 1
     ingest_count: int = 0
 
@@ -40,6 +59,9 @@ class RuntimeState:
                 for sensor_id, history in self.temporal_histories.items()
             },
             tentative_births={key: state.detach() for key, state in self.tentative_births.items()},
+            radius_confirmations={
+                key: state.detach() for key, state in self.radius_confirmations.items()
+            },
             batch_size=self.batch_size,
             ingest_count=self.ingest_count,
         )

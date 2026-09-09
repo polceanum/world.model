@@ -16,7 +16,10 @@ import torch
 import torch.nn.functional as F
 from torch import Tensor, nn
 
-from world_model.observations.rgb.structured_centres import structured_disc_centres
+from world_model.observations.rgb.structured_centres import (
+    StructuredCentreOutput,
+    structured_disc_centres,
+)
 
 SET_MAX_OBJECTS = 6
 SET_PROPOSAL_COUNT = 8
@@ -29,6 +32,7 @@ SET_ATTENTION_MEMORY_STRIDE = 4
 SET_ANCHOR_TEMPERATURE = 0.25
 SET_COMPONENT_TEMPERATURE = 0.05
 SET_FOREGROUND_TEMPERATURE_FLOOR = 0.10
+SET_RGB_DEPTH_DISAGREEMENT_FRACTION = 0.01
 SET_MAX_LOG_VARIANCE_RESIDUAL = 4.0
 SET_MAX_CONFIGURABLE_LOG_VARIANCE_RESIDUAL = 32.0
 
@@ -49,6 +53,7 @@ class RGBDSetProposalOutput:
     log_variance_residual: Tensor
     anchor_points: Tensor
     query_features: Tensor
+    depth_component_discovery: Tensor
 
 
 def _set_anchor_grid(proposal_count: int = SET_PROPOSAL_COUNT) -> Tensor:
@@ -276,13 +281,44 @@ class RGBDSetProposer(nn.Module):
         )
 
     @staticmethod
+    def _component_discovery_image(
+        image: Tensor,
+        valid_depth: Tensor,
+    ) -> tuple[Tensor, Tensor]:
+        """Use depth connectivity only when RGB contains unsupported foreground.
+
+        Clean RGB-D keeps the historical RGB component path byte-for-byte.
+        Sensor corruption can make background RGB pixels look like hundreds of
+        tiny foreground components even though calibrated depth says they are
+        empty.  A public, per-example modality-consistency check switches only
+        those rows to the valid-depth mask. Eight-connected discovery keeps
+        diagonal support connected while preserving the narrow valleys that
+        separate touching object silhouettes.
+        """
+
+        row_background = image.detach().median(dim=-1).values.unsqueeze(-1)
+        foreground_strength = torch.linalg.vector_norm(
+            image.detach() - row_background,
+            dim=1,
+            keepdim=True,
+        )
+        unsupported_rgb = (foreground_strength > 0.04) & ~valid_depth
+        disagreement = unsupported_rgb.to(image.dtype).mean(dim=(-3, -2, -1))
+        use_depth = disagreement > SET_RGB_DEPTH_DISAGREEMENT_FRACTION
+        if not bool(use_depth.any()):
+            return image, use_depth
+
+        depth_image = valid_depth.to(image.dtype).expand(-1, image.shape[1], -1, -1)
+        return torch.where(use_depth[:, None, None, None], depth_image, image), use_depth
+
+    @staticmethod
     def _analytic_component_baseline(
         image: Tensor,
         valid_depth: Tensor,
         analytic_foreground: Tensor,
         image_coordinates: Tensor,
         anchors: Tensor,
-    ) -> tuple[Tensor, Tensor]:
+    ) -> tuple[Tensor, Tensor, Tensor]:
         """Return an observable component partition aligned to fixed anchors.
 
         Component discovery is a detached analytic RGB operation.  It supplies
@@ -293,13 +329,62 @@ class RGBDSetProposer(nn.Module):
         """
 
         batch = image.shape[0]
-        aligned = structured_disc_centres(
+        discovery_image, use_depth = RGBDSetProposer._component_discovery_image(
             image,
-            anchors.unsqueeze(0).expand(batch, -1, -1),
-            threshold=0.04,
-            minimum_pixels=4,
-            maximum_assignment_distance=0.80,
+            valid_depth,
         )
+        expanded_anchors = anchors.unsqueeze(0).expand(batch, -1, -1)
+        if bool(use_depth.all()):
+            aligned = structured_disc_centres(
+                discovery_image,
+                expanded_anchors,
+                threshold=0.04,
+                minimum_pixels=4,
+                maximum_assignment_distance=0.80,
+            )
+        else:
+            aligned = structured_disc_centres(
+                image,
+                expanded_anchors,
+                threshold=0.04,
+                minimum_pixels=4,
+                maximum_assignment_distance=0.80,
+            )
+        if bool(use_depth.any()) and not bool(use_depth.all()):
+            depth_aligned = structured_disc_centres(
+                discovery_image,
+                expanded_anchors,
+                threshold=0.04,
+                minimum_pixels=4,
+                maximum_assignment_distance=0.80,
+            )
+            slot_rows = use_depth[:, None]
+            aligned = StructuredCentreOutput(
+                centres=torch.where(
+                    slot_rows.unsqueeze(-1), depth_aligned.centres, aligned.centres
+                ),
+                radius_pixels=torch.where(
+                    slot_rows,
+                    depth_aligned.radius_pixels,
+                    aligned.radius_pixels,
+                ),
+                valid_mask=torch.where(slot_rows, depth_aligned.valid_mask, aligned.valid_mask),
+                ambiguous_mask=torch.where(
+                    slot_rows,
+                    depth_aligned.ambiguous_mask,
+                    aligned.ambiguous_mask,
+                ),
+                depth_valid_mask=torch.where(
+                    slot_rows,
+                    depth_aligned.depth_valid_mask,
+                    aligned.depth_valid_mask,
+                ),
+                component_count=torch.where(
+                    use_depth,
+                    depth_aligned.component_count,
+                    aligned.component_count,
+                ),
+            )
         coordinates = image_coordinates.permute(0, 2, 3, 1)
         squared_distance = (
             (coordinates[:, None] - aligned.centres[:, :, None, None]).square().sum(dim=-1)
@@ -355,7 +440,7 @@ class RGBDSetProposer(nn.Module):
         # the observable soft foreground/partition supplies a straight-through
         # image gradient for the learned residual path.
         base_probability = soft_probability + (hard_probability - soft_probability).detach()
-        return component_logits, base_probability
+        return component_logits, base_probability, use_depth
 
     def forward(
         self,
@@ -373,7 +458,7 @@ class RGBDSetProposer(nn.Module):
             image_coordinates,
         )
         anchors = self.anchor_points.to(dtype=image.dtype)
-        base_logits, base_full_mask_probability = self._analytic_component_baseline(
+        base_logits, base_full_mask_probability, use_depth = self._analytic_component_baseline(
             image,
             valid_depth,
             analytic_foreground,
@@ -414,6 +499,7 @@ class RGBDSetProposer(nn.Module):
                 log_variance_residual=image.new_zeros((batch, self.proposal_count, 3)),
                 anchor_points=anchors,
                 query_features=query_features,
+                depth_component_discovery=use_depth,
             )
 
         normalized_rgb = (image - image.new_tensor(0.5)) * image.new_tensor(2.0)
@@ -468,6 +554,7 @@ class RGBDSetProposer(nn.Module):
             log_variance_residual=log_variance_residual,
             anchor_points=anchors,
             query_features=queries,
+            depth_component_discovery=use_depth,
         )
 
 

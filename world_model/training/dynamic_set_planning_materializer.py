@@ -15,8 +15,9 @@ import hashlib
 import math
 from collections.abc import Iterable, Iterator, Mapping, Sequence
 from dataclasses import asdict, dataclass, replace
+from itertools import combinations
 from numbers import Real
-from typing import Any
+from typing import Any, Literal
 
 import torch
 import torch.nn.functional as F
@@ -32,6 +33,8 @@ from world_model.runtime.prepared import tensor_identity_version_signature
 from world_model.runtime.state import runtime_stream_key
 from world_model.simulator.camera import (
     CameraFrame,
+    CameraTrajectory,
+    CameraTrajectoryConfig,
     invert_rigid_transform,
     look_at_world_from_camera,
     make_intrinsics,
@@ -47,6 +50,7 @@ from world_model.training.dynamic_set_physics import (
     prevalidated_sphere_pair_cache,
 )
 from world_model.training.dynamic_set_planning import (
+    DEFAULT_PLANNING_TASK_CONFIG,
     PLANNING_LOG_VARIANCE_BOUNDS,
     PlanningEvaluationReduction,
     PlanningHistoryEvidence,
@@ -89,6 +93,7 @@ from world_model.training.qualification_core import (
 )
 
 PLANNING_HISTORY_FRAMES = 22
+CAPABILITY_RECOVERY_HISTORY_FRAMES = 32
 PLANNING_DYNAMIC_BIRTH_FRAME = 4
 PLANNING_HISTORY_SENSOR_ID = "planning_rgbd"
 PLANNING_ORACLE_PHYSICS_HZ = 120.0
@@ -142,6 +147,49 @@ PLANNING_ERROR_WEIGHTS: Mapping[str, float] = {
 }
 
 
+@dataclass(frozen=True, slots=True)
+class PlanningEnvironmentControls:
+    """Generator-only controls for broadened public planning histories."""
+
+    rgb_noise_std: float = 0.0
+    exposure_scale: float = 1.0
+    depth_noise_std_m: float = 0.0
+    pixel_dropout_probability: float = 0.0
+    radius_m: float = DYNAMIC_SET_RADIUS_M
+    mass_kg: float = DYNAMIC_SET_MASS
+    drag_per_second: float = DYNAMIC_SET_DRAG
+    restitution: float = DYNAMIC_SET_RESTITUTION
+    friction: float = DYNAMIC_SET_FRICTION
+    camera_motion: Literal["static", "orbital", "translating"] = "static"
+    occlusion_frames: int = 0
+    candidate_delta_velocity_mps: float = 0.50
+
+    def validate(self) -> PlanningEnvironmentControls:
+        for name, value in asdict(self).items():
+            if isinstance(value, float) and not math.isfinite(value):
+                raise ValueError(f"planning environment {name} must be finite")
+        if not 0.0 <= self.rgb_noise_std <= 0.05:
+            raise ValueError("planning RGB noise must lie in [0,0.05]")
+        if not 0.5 <= self.exposure_scale <= 1.5:
+            raise ValueError("planning exposure must lie in [0.5,1.5]")
+        if not 0.0 <= self.depth_noise_std_m <= 0.01:
+            raise ValueError("planning depth noise must lie in [0,0.01]")
+        if not 0.0 <= self.pixel_dropout_probability <= 0.05:
+            raise ValueError("planning pixel dropout must lie in [0,0.05]")
+        for name in ("radius_m", "mass_kg", "drag_per_second", "restitution", "friction"):
+            if float(getattr(self, name)) <= 0.0:
+                raise ValueError(f"planning environment {name} must be positive")
+        if not 0.05 <= self.candidate_delta_velocity_mps <= 1.5:
+            raise ValueError("planning candidate delta velocity must lie in [0.05,1.5]")
+        if not 0.0 < self.restitution < 1.0 or not 0.0 < self.friction < 1.0:
+            raise ValueError("planning restitution/friction must lie in (0,1)")
+        if self.camera_motion not in {"static", "orbital", "translating"}:
+            raise ValueError("unsupported planning camera motion")
+        if not 0 <= self.occlusion_frames <= 8:
+            raise ValueError("planning occlusion must contain zero through eight frames")
+        return self
+
+
 @dataclass(frozen=True)
 class PublicPlanningHistoryFrame:
     """One truth-free calibrated observation in a planning prefix."""
@@ -178,6 +226,7 @@ class PublicPlanningHistory:
     frames: tuple[PublicPlanningHistoryFrame, ...]
     previously_dynamic: bool
     history_sha256: str
+    camera_motion: Literal["static", "orbital", "translating"] = "static"
 
 
 @dataclass(frozen=True)
@@ -538,7 +587,9 @@ def _make_state(
     camera_positions: Tensor,
     *,
     before_birth: bool,
+    environment: PlanningEnvironmentControls | None = None,
 ) -> SphereState:
+    controls = (environment or PlanningEnvironmentControls()).validate()
     active = torch.zeros(DYNAMIC_SET_MAX_OBJECTS, dtype=torch.bool)
     active[: row.object_count] = True
     if before_birth and row.previously_dynamic:
@@ -556,11 +607,11 @@ def _make_state(
         active=active,
         position=_camera_to_world(camera_positions, camera, point=True),
         velocity=torch.zeros(DYNAMIC_SET_MAX_OBJECTS, 3, dtype=torch.float32),
-        radius=torch.full((DYNAMIC_SET_MAX_OBJECTS, 1), DYNAMIC_SET_RADIUS_M),
-        mass=torch.full((DYNAMIC_SET_MAX_OBJECTS, 1), DYNAMIC_SET_MASS),
-        restitution=torch.full((DYNAMIC_SET_MAX_OBJECTS, 1), DYNAMIC_SET_RESTITUTION),
-        drag=torch.full((DYNAMIC_SET_MAX_OBJECTS, 1), DYNAMIC_SET_DRAG),
-        friction=torch.full((DYNAMIC_SET_MAX_OBJECTS, 1), DYNAMIC_SET_FRICTION),
+        radius=torch.full((DYNAMIC_SET_MAX_OBJECTS, 1), controls.radius_m),
+        mass=torch.full((DYNAMIC_SET_MAX_OBJECTS, 1), controls.mass_kg),
+        restitution=torch.full((DYNAMIC_SET_MAX_OBJECTS, 1), controls.restitution),
+        drag=torch.full((DYNAMIC_SET_MAX_OBJECTS, 1), controls.drag_per_second),
+        friction=torch.full((DYNAMIC_SET_MAX_OBJECTS, 1), controls.friction),
         albedo=_ALBEDO_PALETTE.clone(),
         orientation=orientation,
         angular_velocity=torch.zeros(DYNAMIC_SET_MAX_OBJECTS, 3, dtype=torch.float32),
@@ -625,20 +676,35 @@ def _layout_for_row(
     row: PlanningManifestRow,
     camera: CameraFrame,
     candidate_seed: int,
+    *,
+    environment: PlanningEnvironmentControls | None = None,
 ) -> tuple[Tensor, int]:
+    controls = (environment or PlanningEnvironmentControls()).validate()
     camera_positions = _base_camera_positions(candidate_seed)
-    final = _make_state(row, camera, camera_positions, before_birth=False)
+    final = _make_state(
+        row,
+        camera,
+        camera_positions,
+        before_birth=False,
+        environment=environment,
+    )
     rendered = render_spheres(final, camera, DYNAMIC_SET_IMAGE_SIZE, noise_std=0.0)
     descriptors = _appearance_descriptors(rendered, final.active)
     target_slot = _ranked_target_slot(descriptors, final.active, row.target_rank)
     if not row.candidate_induced_contact:
         return camera_positions, target_slot
 
-    # Re-evaluate the rank after moving the pair.  Descriptor ordering is
-    # colour-dominated, but this bounded fixed point prevents position-dependent
-    # shading from ever changing which observable target owns the contact pair.
-    for _ in range(DYNAMIC_SET_MAX_OBJECTS + 1):
-        companion = next(slot for slot in range(row.object_count) if slot != target_slot)
+    # Re-evaluate the rank after moving the pair. Descriptor ordering is
+    # colour-dominated but position-dependent shading can create a two-cycle
+    # under naive fixed-point iteration. Search the bounded active set for a
+    # target whose final observable rank is self-consistent; the historical
+    # first candidate remains first and therefore preserves existing tasks.
+    initial_companion = next(slot for slot in range(row.object_count) if slot != target_slot)
+    initial_pair = (target_slot, initial_companion)
+    pair_candidates = (initial_pair,) + tuple(
+        pair for pair in combinations(range(row.object_count), 2) if set(pair) != set(initial_pair)
+    )
+    for target_slot, companion in pair_candidates:
         reset = _base_camera_positions(candidate_seed)
         non_pair = [
             slot for slot in range(row.object_count) if slot not in (target_slot, companion)
@@ -653,8 +719,13 @@ def _layout_for_row(
         pair_centre_camera = torch.tensor([0.0, 0.95, float(reset[0, 2])], dtype=torch.float32)
         pair_centre_world = _camera_to_world(pair_centre_camera[None], camera, point=True)[0]
         direction_world = _contact_direction(row, camera)
-        target_world = pair_centre_world - 0.34 * direction_world
-        companion_world = pair_centre_world + 0.34 * direction_world
+        # Keep a positive pre-action gap while scaling it down for deliberately
+        # weak action banks so the declared contact stratum remains causally
+        # reachable. The historical 0.50 m/s bank retains its exact 0.26 m gap.
+        pair_gap = min(0.26, 0.52 * controls.candidate_delta_velocity_mps)
+        pair_half_separation = controls.radius_m + 0.5 * pair_gap
+        target_world = pair_centre_world - pair_half_separation * direction_world
+        companion_world = pair_centre_world + pair_half_separation * direction_world
         homogeneous = torch.cat(
             (
                 torch.stack((target_world, companion_world)),
@@ -665,14 +736,23 @@ def _layout_for_row(
         reset_pair = homogeneous @ camera.camera_from_world.transpose(0, 1)
         reset[target_slot] = reset_pair[0, :3]
         reset[companion] = reset_pair[1, :3]
-        final = _make_state(row, camera, reset, before_birth=False)
+        final = _make_state(
+            row,
+            camera,
+            reset,
+            before_birth=False,
+            environment=environment,
+        )
         rendered = render_spheres(final, camera, DYNAMIC_SET_IMAGE_SIZE, noise_std=0.0)
         descriptors = _appearance_descriptors(rendered, final.active)
         resolved = _ranked_target_slot(descriptors, final.active, row.target_rank)
         camera_positions = reset
-        if resolved == target_slot:
-            return camera_positions, target_slot
-        target_slot = resolved
+        if resolved in (target_slot, companion):
+            # The pair geometry is symmetric: either member has the other as
+            # its nearest contact candidate. Accepting the finally ranked
+            # member avoids a shading-induced rank cycle without changing the
+            # candidate-contact semantics.
+            return camera_positions, resolved
     raise ValueError("observable target rank did not stabilize after contact layout")
 
 
@@ -706,7 +786,7 @@ def _preflight_render(
     surface_fit = metric_sphere_centres_from_surface_depth(
         rendered.projected_center.unsqueeze(0),
         rendered.depth_buffer.unsqueeze(0).unsqueeze(0),
-        DYNAMIC_SET_RADIUS_M,
+        state.radius[:, 0].unsqueeze(0),
         camera.world_from_camera.unsqueeze(0),
         camera.intrinsics.unsqueeze(0),
     )
@@ -726,8 +806,9 @@ def _tensor_sha256(value: Tensor) -> str:
 def _history_payload(
     frames: Sequence[PublicPlanningHistoryFrame],
     previously_dynamic: bool,
+    camera_motion: str = "static",
 ) -> Mapping[str, Any]:
-    return {
+    payload: dict[str, Any] = {
         "schema": "dynamic_set_public_planning_history_v1",
         "previously_dynamic": previously_dynamic,
         "frames": [
@@ -742,6 +823,11 @@ def _history_payload(
             for frame in frames
         ],
     }
+    # Keep historical static materialization digests exact. Broadened camera
+    # provenance is added only for a genuinely moving calibrated history.
+    if camera_motion != "static":
+        payload["camera_motion"] = camera_motion
+    return payload
 
 
 def validate_public_planning_history(history: PublicPlanningHistory) -> PublicPlanningHistory:
@@ -749,8 +835,16 @@ def validate_public_planning_history(history: PublicPlanningHistory) -> PublicPl
         raise TypeError("history must be PublicPlanningHistory")
     if type(history.previously_dynamic) is not bool:
         raise TypeError("history previously_dynamic must be boolean")
-    if not isinstance(history.frames, tuple) or len(history.frames) != PLANNING_HISTORY_FRAMES:
-        raise ValueError(f"planning history must contain exactly {PLANNING_HISTORY_FRAMES} frames")
+    if history.camera_motion not in {"static", "orbital", "translating"}:
+        raise ValueError("planning history has unsupported camera motion")
+    if not isinstance(history.frames, tuple) or len(history.frames) not in {
+        PLANNING_HISTORY_FRAMES,
+        CAPABILITY_RECOVERY_HISTORY_FRAMES,
+    }:
+        raise ValueError(
+            "planning history must contain exactly "
+            f"{PLANNING_HISTORY_FRAMES} or {CAPABILITY_RECOVERY_HISTORY_FRAMES} frames"
+        )
     first_camera: Tensor | None = None
     first_intrinsics: Tensor | None = None
     for expected_index, frame in enumerate(history.frames):
@@ -775,11 +869,23 @@ def validate_public_planning_history(history: PublicPlanningHistory) -> PublicPl
         if first_camera is None:
             first_camera = frame.world_from_camera
             first_intrinsics = frame.intrinsics
-        elif not torch.equal(frame.world_from_camera, first_camera) or not torch.equal(
-            frame.intrinsics, first_intrinsics
+        elif history.camera_motion == "static" and (
+            not torch.equal(frame.world_from_camera, first_camera)
+            or not torch.equal(frame.intrinsics, first_intrinsics)
         ):
-            raise ValueError("planning history must use one fixed calibrated camera")
-    expected = canonical_sha256(_history_payload(history.frames, history.previously_dynamic))
+            raise ValueError("static planning history must use one fixed calibrated camera")
+    if history.camera_motion != "static" and all(
+        torch.equal(frame.world_from_camera, history.frames[0].world_from_camera)
+        for frame in history.frames[1:]
+    ):
+        raise ValueError("moving-camera planning history contains no pose change")
+    expected = canonical_sha256(
+        _history_payload(
+            history.frames,
+            history.previously_dynamic,
+            history.camera_motion,
+        )
+    )
     if expected != history.history_sha256:
         raise ValueError("public planning history differs from its digest")
     return history
@@ -819,6 +925,188 @@ def _build_public_history(
         history_sha256=canonical_sha256(_history_payload(frozen_frames, row.previously_dynamic)),
     )
     return validate_public_planning_history(history), final_state, final_render, appearances
+
+
+def _controlled_camera(
+    base: CameraFrame,
+    controls: PlanningEnvironmentControls,
+    *,
+    seed: int,
+    timestamp: float,
+) -> CameraFrame:
+    if controls.camera_motion == "static":
+        return base
+    trajectory = CameraTrajectory(
+        CameraTrajectoryConfig(
+            image_size=DYNAMIC_SET_IMAGE_SIZE,
+            mode={"orbital": "orbit", "translating": "linear"}[controls.camera_motion],
+            vertical_fov_degrees=DYNAMIC_SET_VERTICAL_FOV_DEGREES,
+            base_position=tuple(float(value) for value in base.position),
+            target=tuple(float(value) for value in base.target),
+            orbit_speed=0.35,
+            orbit_amplitude=0.04,
+            translation_amplitude=0.18,
+        ),
+        seed=seed,
+    )
+    return trajectory.at(timestamp)
+
+
+def _controlled_history_observation(
+    rendered: RenderOutput,
+    controls: PlanningEnvironmentControls,
+    *,
+    seed: int,
+    frame_index: int,
+    target_slot: int,
+) -> tuple[Tensor, Tensor, Tensor]:
+    """Apply only generator-side corruption and return the visible target mask."""
+
+    rgb = rendered.rgb.detach().clone()
+    depth = rendered.depth_buffer.detach().clone().unsqueeze(0)
+    target_mask = rendered.visible_mask[target_slot].detach().clone()
+    if controls.occlusion_frames:
+        start = 7
+        end = start + controls.occlusion_frames
+        if start <= frame_index < end and bool(target_mask.any()):
+            coordinates = torch.nonzero(target_mask, as_tuple=False)
+            split_x = coordinates[:, 1].to(torch.float32).median()
+            right = (torch.arange(DYNAMIC_SET_IMAGE_SIZE[1]).view(1, -1) >= split_x).expand_as(
+                target_mask
+            )
+            if (seed + frame_index) % 2:
+                right = ~right
+            removed = target_mask & right
+            background = rgb.median(dim=-1).values.unsqueeze(-1)
+            rgb = torch.where(removed.unsqueeze(0), background, rgb)
+            depth[0] = torch.where(removed, torch.zeros_like(depth[0]), depth[0])
+            target_mask &= ~removed
+    if (
+        controls.rgb_noise_std
+        or controls.depth_noise_std_m
+        or controls.pixel_dropout_probability
+        or controls.exposure_scale != 1.0
+    ):
+        generator = torch.Generator(device="cpu")
+        generator.manual_seed((seed + 104_729 * frame_index) & 0x7FFF_FFFF_FFFF_FFFF)
+        rgb_noise = torch.randn(rgb.shape, generator=generator, dtype=rgb.dtype)
+        depth_noise = torch.randn(depth.shape, generator=generator, dtype=depth.dtype)
+        dropout = (
+            torch.rand(
+                (1, *DYNAMIC_SET_IMAGE_SIZE),
+                generator=generator,
+                dtype=rgb.dtype,
+            )
+            < controls.pixel_dropout_probability
+        )
+        rgb = (rgb * controls.exposure_scale + controls.rgb_noise_std * rgb_noise).clamp(
+            0.0,
+            1.0,
+        )
+        rgb = torch.where(dropout, torch.zeros_like(rgb), rgb)
+        valid = depth > 0.0
+        depth = torch.where(
+            valid,
+            (depth + controls.depth_noise_std_m * depth_noise).clamp_min(1.0e-4),
+            depth,
+        )
+        depth = torch.where(dropout, torch.zeros_like(depth), depth)
+        target_mask &= ~dropout[0]
+    return rgb.contiguous(), depth.contiguous(), target_mask
+
+
+def _build_controlled_public_history(
+    row: PlanningManifestRow,
+    camera: CameraFrame,
+    camera_positions: Tensor,
+    target_slot: int,
+    controls: PlanningEnvironmentControls,
+    *,
+    seed: int,
+) -> tuple[PublicPlanningHistory, SphereState, CameraFrame, Tensor]:
+    final_state = _make_state(
+        row,
+        camera,
+        camera_positions,
+        before_birth=False,
+        environment=controls,
+    )
+    before_state = _make_state(
+        row,
+        camera,
+        camera_positions,
+        before_birth=True,
+        environment=controls,
+    )
+    frames: list[PublicPlanningHistoryFrame] = []
+    final_camera: CameraFrame | None = None
+    final_rgb: Tensor | None = None
+    final_target_mask: Tensor | None = None
+    final_render: RenderOutput | None = None
+    history_frame_count = (
+        CAPABILITY_RECOVERY_HISTORY_FRAMES if controls.occlusion_frames else PLANNING_HISTORY_FRAMES
+    )
+    for frame_index in range(history_frame_count):
+        timestamp = frame_index / DYNAMIC_SET_FRAME_RATE_HZ
+        frame_camera = _controlled_camera(
+            camera,
+            controls,
+            seed=seed,
+            timestamp=timestamp,
+        )
+        state = (
+            before_state
+            if row.previously_dynamic and frame_index < PLANNING_DYNAMIC_BIRTH_FRAME
+            else final_state
+        )
+        rendered = render_spheres(state, frame_camera, DYNAMIC_SET_IMAGE_SIZE, noise_std=0.0)
+        _preflight_render(state, rendered, frame_camera)
+        rgb, depth, target_mask = _controlled_history_observation(
+            rendered,
+            controls,
+            seed=seed,
+            frame_index=frame_index,
+            target_slot=target_slot,
+        )
+        frames.append(
+            PublicPlanningHistoryFrame(
+                frame_index=frame_index,
+                timestamp=timestamp,
+                rgb=rgb,
+                depth=depth,
+                world_from_camera=frame_camera.world_from_camera.detach().clone(),
+                intrinsics=frame_camera.intrinsics.detach().clone(),
+            )
+        )
+        final_camera = frame_camera
+        final_rgb = rgb
+        final_target_mask = target_mask
+        final_render = rendered
+    assert final_camera is not None
+    assert final_rgb is not None and final_target_mask is not None and final_render is not None
+    final_masks = final_render.visible_mask.clone()
+    final_masks[target_slot] = final_target_mask
+    appearances = torch.zeros((DYNAMIC_SET_MAX_OBJECTS, 8), dtype=torch.float32)
+    for slot in torch.nonzero(final_state.active, as_tuple=False).flatten().tolist():
+        mask = final_masks[slot] & (frames[-1].depth[0] > 0.0)
+        if not bool(mask.any()):
+            raise ValueError("controlled planning endpoint has no observable target pixels")
+        appearances[slot] = _observable_appearance(final_rgb, mask)
+    frozen_frames = tuple(frames)
+    history = PublicPlanningHistory(
+        frames=frozen_frames,
+        previously_dynamic=row.previously_dynamic,
+        history_sha256=canonical_sha256(
+            _history_payload(frozen_frames, row.previously_dynamic, controls.camera_motion)
+        ),
+        camera_motion=controls.camera_motion,
+    )
+    return (
+        validate_public_planning_history(history),
+        final_state,
+        final_camera,
+        appearances,
+    )
 
 
 def _reference_belief(
@@ -1060,6 +1348,7 @@ def _materialize_planning_task_core(
     row: PlanningManifestRow,
     *,
     maximum_attempts: int = DEFAULT_PLANNING_MATERIALIZATION_ATTEMPTS,
+    environment: PlanningEnvironmentControls | None = None,
 ) -> PlanningTaskMaterialization:
     """Generate one already-authorized planning row deterministically."""
 
@@ -1069,19 +1358,39 @@ def _materialize_planning_task_core(
         or maximum_attempts <= 0
     ):
         raise ValueError("maximum_attempts must be a positive integer")
+    if environment is not None:
+        environment.validate()
     rejection_reasons: list[str] = []
     for attempt_index in range(maximum_attempts):
         accepted_seed = _candidate_seed(row.seed, attempt_index)
         try:
             camera = _camera(row)
-            positions, expected_target_slot = _layout_for_row(row, camera, accepted_seed)
-            history, final_state, _rendered, appearances = _build_public_history(
-                row, camera, positions
+            positions, expected_target_slot = _layout_for_row(
+                row,
+                camera,
+                accepted_seed,
+                environment=environment,
             )
+            if environment is None:
+                history, final_state, _rendered, appearances = _build_public_history(
+                    row,
+                    camera,
+                    positions,
+                )
+                final_camera = camera
+            else:
+                history, final_state, final_camera, appearances = _build_controlled_public_history(
+                    row,
+                    camera,
+                    positions,
+                    expected_target_slot,
+                    environment,
+                    seed=accepted_seed,
+                )
             reference = _reference_belief(
                 final_state,
                 appearances,
-                camera,
+                final_camera,
                 timestamp=history.frames[-1].timestamp,
             )
             handle = ranked_observable_appearance_handle(reference, row.target_rank)
@@ -1096,7 +1405,24 @@ def _materialize_planning_task_core(
             resolved_slot = int(active_slots[int(similarities.argmax())])
             if resolved_slot != expected_target_slot:
                 raise RuntimeError("rendered observable rank and layout target disagree")
-            template = materialize_public_planning_template(row, reference, handle)
+            task_config = DEFAULT_PLANNING_TASK_CONFIG
+            if environment is not None:
+                level = environment.candidate_delta_velocity_mps
+                task_config = replace(
+                    task_config,
+                    delta_velocity_levels_mps=(
+                        0.4 * level,
+                        0.7 * level,
+                        level,
+                        1.3 * level,
+                    ),
+                ).validate()
+            template = materialize_public_planning_template(
+                row,
+                reference,
+                handle,
+                config=task_config,
+            )
             oracle = _oracle_for_template(template, reference)
             if not oracle.certificate.winner_succeeds:
                 raise ValueError("independent oracle winner does not reach the public goal")
@@ -1159,6 +1485,26 @@ def materialize_planning_task(
     return _materialize_planning_task(row, maximum_attempts=maximum_attempts)
 
 
+def materialize_capability_planning_task(
+    row: PlanningManifestRow,
+    environment: PlanningEnvironmentControls,
+    *,
+    maximum_attempts: int = DEFAULT_PLANNING_MATERIALIZATION_ATTEMPTS,
+) -> PlanningTaskMaterialization:
+    """Generate one broadened public development task without protected access."""
+
+    _validate_row(row)
+    if row.split != "development":
+        raise PermissionError("capability planning materialization is development-only")
+    if not isinstance(environment, PlanningEnvironmentControls):
+        raise TypeError("environment must be PlanningEnvironmentControls")
+    return _materialize_planning_task_core(
+        row,
+        maximum_attempts=maximum_attempts,
+        environment=environment.validate(),
+    )
+
+
 def _materialize_protected_planning_task(
     row: PlanningManifestRow,
     *,
@@ -1219,13 +1565,14 @@ def _validate_public_materialization(
         raise ValueError("planning materialization rejection audit is malformed")
     if history.previously_dynamic != template.row.previously_dynamic:
         raise ValueError("public planning history provenance differs from its template")
-    expected_camera = _camera(template.row)
-    if any(
-        not torch.equal(frame.world_from_camera, expected_camera.world_from_camera)
-        or not torch.equal(frame.intrinsics, expected_camera.intrinsics)
-        for frame in history.frames
-    ):
-        raise ValueError("public planning history differs from its camera stratum")
+    if history.camera_motion == "static":
+        expected_camera = _camera(template.row)
+        if any(
+            not torch.equal(frame.world_from_camera, expected_camera.world_from_camera)
+            or not torch.equal(frame.intrinsics, expected_camera.intrinsics)
+            for frame in history.frames
+        ):
+            raise ValueError("public planning history differs from its camera stratum")
     final_timestamp = torch.tensor([history.frames[-1].timestamp], dtype=torch.float32)
     if not torch.equal(final_timestamp, template.source_timestamp):
         raise ValueError("public history endpoint differs from the template timestamp")
@@ -2290,12 +2637,14 @@ def evaluate_authorized_paired_planning_materializations(
 
 
 __all__ = [
+    "CAPABILITY_RECOVERY_HISTORY_FRAMES",
     "DEFAULT_PLANNING_MATERIALIZATION_ATTEMPTS",
     "DEFAULT_PLANNING_POPULATION_EVALUATION_CONFIG",
     "PLANNING_DYNAMIC_BIRTH_FRAME",
     "PLANNING_ERROR_WEIGHTS",
     "PLANNING_HISTORY_FRAMES",
     "PLANNING_HISTORY_SENSOR_ID",
+    "PlanningEnvironmentControls",
     "PlanningPopulationBinding",
     "PlanningPopulationEvaluationConfig",
     "PlanningPopulationEvaluationResult",
@@ -2314,6 +2663,7 @@ __all__ = [
     "infer_and_bind_public_planning_task",
     "iter_planning_task_materializations",
     "materialize_planning_task",
+    "materialize_capability_planning_task",
     "planning_error",
     "validate_paired_planning_population_evaluation_result",
     "validate_planning_population_evaluation_result",

@@ -1716,7 +1716,23 @@ def _public_action_fields(
     if target_count != 1 or frame_index == 0:
         raise ValueError("one public action must address one previously observed object")
     private_slot = int(torch.nonzero(private_target, as_tuple=False).item())
-    previous_mask = labels["segmentation_mask"][frame_index - 1, private_slot]
+    depth = episode["depth"]
+    if not isinstance(depth, Tensor) or depth.shape != (
+        DYNAMIC_SET_FRAMES,
+        1,
+        *DYNAMIC_SET_IMAGE_SIZE,
+    ):
+        raise ValueError("public action appearance requires the episode RGB-D stream")
+    previous_depth = depth[frame_index - 1, 0]
+    # Match the runtime appearance statistic's observable support.  Sensor
+    # dropout clears both RGB and depth; including those black pixels through
+    # the private full-object mask would manufacture a high-variance command
+    # descriptor that no public proposal can reproduce.  The private mask
+    # still selects the commanded object, while valid calibrated depth chooses
+    # only pixels actually visible to both sides of the public interface.
+    previous_mask = labels["segmentation_mask"][frame_index - 1, private_slot] & (
+        torch.isfinite(previous_depth) & (previous_depth > 0.0)
+    )
     image = episode["rgb"][frame_index - 1]
     handle = _observable_action_appearance(image, previous_mask).clone()
     timestamp = events["known_action_timestamp"][frame_index, private_slot].reshape(1).clone()

@@ -34,7 +34,11 @@ def _summary(run_id: str, status: str = "completed") -> CapabilityRunSummary:
             "selected": "candidate",
         },
         factor_metrics={
-            "sensor_noise": {"status": "measured", "score": 0.13},
+            "sensor_noise": {
+                "status": "measured",
+                "score": 0.13,
+                "proposal_f1": 0.97,
+            },
             "physical_parameters": {"status": "unmeasured"},
         },
         cell_metrics={
@@ -83,6 +87,12 @@ def test_summary_roundtrip_and_active_refresh_are_versioned(tmp_path: Path) -> N
     assert 'id="capability-run-summary"' in active_html
     assert "Position RMSE across horizon" in active_html
     assert "N1/contact=0/dynamic=0" in active_html
+    assert "Factor performance" in active_html
+    assert "Proposal F1" in active_html
+    assert "90% uncertainty coverage by count/contact/lifecycle cell" in active_html
+    assert "K8 latency (s)" in active_html
+    assert "Planning quality by cardinality" in active_html
+    assert 'class="metric-pass"' in active_html
 
     completed_html = render_summary_html(replace(active, lifecycle_status="completed"))
     assert 'http-equiv="refresh"' not in completed_html
@@ -129,6 +139,9 @@ def test_dashboard_handles_current_historical_missing_and_malformed_runs(
     assert "malformed capability summary" in content
     assert "Portable report" in content
     assert "Latest run" in content
+    assert '"managed_budget_bytes": 262144000' in content
+    assert "Managed run tree" in content
+    assert "Budget used" in content
     assert dashboard.stat().st_size < 1_000_000
 
 
@@ -177,3 +190,77 @@ def test_dashboard_keeps_latest_measured_factor_across_runs(tmp_path: Path) -> N
     assert '"planning_source_run": "first"' in content
     assert '"source_run": "first"' in content
     assert "N1/contact=0/dynamic=0" in content
+
+
+def test_dashboard_keeps_planning_slices_separate_by_factor(tmp_path: Path) -> None:
+    runs = tmp_path / "runs"
+    for index, factor in enumerate(("sensor_noise", "camera_motion")):
+        directory = runs / factor
+        directory.mkdir(parents=True)
+        summary = replace(
+            _summary(factor),
+            created_at_utc=f"2026-09-08T0{index}:00:00+00:00",
+            factor_metrics={
+                name: {"status": "unmeasured"} for name in ("sensor_noise", "camera_motion")
+            },
+            planning={**_summary(factor).planning, "factor": factor},
+            cell_metrics={},
+            resources={},
+            unsupported_claims=(
+                "sensor_noise factor-conditioned planning",
+                "camera_motion factor-conditioned planning",
+            ),
+        )
+        write_capability_summary(summary, directory / "capability_summary.json")
+
+    content = build_progress_dashboard(runs).read_text(encoding="utf-8")
+
+    assert '"by_factor"' in content
+    assert '"source_run": "sensor_noise"' in content
+    assert '"source_run": "camera_motion"' in content
+    assert "<td>sensor_noise</td>" in content
+    assert "<td>camera_motion</td>" in content
+    assert "sensor_noise factor-conditioned planning</li>" not in content
+    assert "camera_motion factor-conditioned planning</li>" not in content
+
+
+def test_trends_do_not_mix_physical_and_planning_score_scales() -> None:
+    physical = replace(
+        _summary("physical"),
+        source_format="world_model_capability_factor_report_v1",
+    )
+    planning = replace(
+        _summary("planning"),
+        source_format="world_model_capability_planning_report_v1",
+    )
+
+    content = render_summary_html(planning, history=(physical, planning))
+
+    assert "Physical factor score across runs" in content
+    assert "Downstream planning error across runs" in content
+    assert "Lower-is-better score across runs" not in content
+
+
+def test_compositional_metric_matrix_uses_holdout_gates_only() -> None:
+    summary = replace(
+        _summary("compositional"),
+        factor_metrics={
+            "compositional_holdout": {
+                "status": "passed",
+                "proposal_f1": 0.96,
+                "identity_accuracy": 0.951,
+                "lifecycle_f1": 0.70,
+                "current_position_rmse_m": 0.08,
+                "two_second_position_rmse_m": 0.14,
+                "collision_f1": 0.50,
+                "uncertainty_90_coverage": 0.70,
+            }
+        },
+    )
+
+    content = render_summary_html(summary)
+    row = content.split("<th>compositional_holdout</th>", 1)[1].split("</tr>", 1)[0]
+
+    assert row.count('class="metric-pass"') == 3
+    assert row.count('class="metric-info"') == 4
+    assert 'class="metric-fail"' not in row

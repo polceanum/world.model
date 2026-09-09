@@ -4,6 +4,34 @@
 
 ### 2026-09-09 streamed capability evidence
 
+- Added factor-conditioned downstream planning for every sensor, physics,
+  camera, action, recovery, and compositional family. Each compact run spans
+  all N=1--6/K=8,32 slices, opens private oracle evidence only after the public
+  decision, runs the established invariants when the population is complete,
+  and never contributes a winner/ranking/regret loss to training.
+- Added observable variable-radius sphere fitting with a nominal deadband and
+  two-frame persistent confirmation. Variable-parameter proposal, identity,
+  lifecycle, and collision metrics recover to 1.0; current-position RMSE falls
+  to `6.41e-5 m`. The remaining `0.81785` coverage miss stays explicit.
+- Made noisy proposal discovery fall back to valid-depth connectivity only on
+  public RGB-D disagreement, added a small-component support floor, and blocked
+  physically overlapping depth fragments from becoming duplicate births. The
+  sensor screen now reaches proposal/ID/lifecycle/collision
+  `0.99377/0.99485/0.95652/1.0` and 2-second RMSE `0.005996 m`; coverage
+  `0.970614` remains just outside the declared ceiling.
+- Aligned public action appearance descriptors with runtime valid-depth support.
+  The compositional physical holdout now completes and passes all declared
+  floors. Recovery planning histories receive a bounded 32-frame controlled
+  format so every task can contain a complete post-recovery window; historical
+  22-frame materializations and hashes remain unchanged.
+- Corrected compact failure reports to encode unavailable infinite diagnostic
+  measurements as JSON null and to mark an invariant cover unmeasured after an
+  upstream task failure instead of claiming that every invariant was violated.
+  Dashboard factor cells now use compositional gates only where declared and
+  render other measured values as neutral diagnostics. Physical and planning
+  scores use separate trend axes; planning latency/cost agreement and total
+  managed-run utilization against the 250 MiB cap are directly visible.
+
 - Added `scripts/run_capability_factor.py` and a deterministic 22-cell streamed
   evaluator for sensor noise/dropout, real variable-parameter simulation,
   calibrated camera re-rendering, broad known impulses, partial visibility,

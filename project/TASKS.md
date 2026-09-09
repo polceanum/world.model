@@ -21,18 +21,21 @@
 - [x] Stream physical workbench episodes and remove terminal optimizer state;
   keep ordinary terminal artifacts compact.
 - [x] Execute the incumbent across all five new single-factor families and the
-  compositional holdout. Camera motion, partial visibility, and broad known
-  actions pass; sensor noise and variable parameters fail; composition stops
-  fail-closed on observable target resolution before a partial score.
-- [ ] Complete truth-association/truth-parameter/truth-state ablations on the
-  supported sensor/parameter failures. Same-seed nominal restoration is
-  recorded for every complete factor run; admit a training screen only after
-  the finer owner is established.
-- [ ] Add factor-conditioned K=8/K=32 planning materializations. The dashboard
-  currently shows the latest valid nominal 12-slice planning evidence with its
-  source run and explicitly marks factor-conditioned planning unsupported.
+  compositional holdout. Camera motion, partial visibility, broad known actions,
+  and the compositional physical holdout pass. Sensor noise and variable
+  parameters now miss only their uncertainty-coverage boundary.
+- [ ] Before any targeted residual attempt, run truth-association,
+  truth-parameter, truth-state, and clean-observation planning ablations on the
+  remaining sensor/compositional planning failures. Same-seed nominal physical
+  restoration is already recorded; boundary-only uncertainty misses do not by
+  themselves justify more learned capacity.
+- [x] Add and execute factor-conditioned K=8/K=32 planning materializations for
+  all six families, with generator-only controls, post-decision private oracles,
+  compact reports, and separate dashboard rows. Known actions, physical
+  parameters, camera motion, and recovered partial visibility pass. Sensor
+  noise and the compositional holdout remain explicit downstream rejections.
 - [x] Run the complete pytest/Ruff/format/compile/diff gate after streamed
-  factor execution: `2387 passed, 16 skipped`; commit the verified
+  factor execution: `2402 passed, 16 skipped`; commit the verified
   capability-evidence implementation.
 
 ## Capability-first world model — active 2026-09-07

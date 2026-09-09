@@ -116,7 +116,14 @@ def fit_visible_sphere_surfaces(
     *,
     conditioning_limit: float,
 ) -> tuple[Tensor, Tensor, Tensor, Tensor, Tensor]:
-    """Fit sphere centres to observable surface points with weighted WLS."""
+    """Fit sphere centres and detect supported radius changes from RGB-D.
+
+    The centred algebraic sphere system identifies centre and radius without a
+    scale prior when its visible surface is well conditioned.  A small
+    relative deadband preserves the historical fixed-radius refinement exactly
+    for nominal scenes; only a clearly observable radius disagreement selects
+    the algebraic solution.
+    """
 
     batch, slots, height, width = masks.shape
     dtype = depth.dtype
@@ -203,7 +210,51 @@ def fit_visible_sphere_surfaces(
         torch.eye(3, dtype=dtype, device=device).expand(batch, slots, -1, -1),
     )
     safe_right = torch.where(fit_admissible.unsqueeze(-1), right, torch.zeros_like(right))
-    camera_centre = torch.linalg.solve(safe_normal, safe_right.unsqueeze(-1)).squeeze(-1)
+    algebraic_camera_centre = torch.linalg.solve(
+        safe_normal,
+        safe_right.unsqueeze(-1),
+    ).squeeze(-1)
+    algebraic_residual_radius = torch.linalg.vector_norm(
+        points[:, None] - algebraic_camera_centre[:, :, None, None],
+        dim=-1,
+    )
+    algebraic_radius = (
+        torch.einsum(
+            "bshw,bshw->bs",
+            weights,
+            algebraic_residual_radius,
+        )
+        / safe_support
+    )
+    algebraic_radius_variance = (
+        torch.einsum(
+            "bshw,bshw->bs",
+            weights,
+            (algebraic_residual_radius - algebraic_radius[:, :, None, None]).square(),
+        )
+        / safe_support
+    )
+    algebraic_relative_residual = algebraic_radius_variance.clamp_min(
+        0.0
+    ).sqrt() / algebraic_radius.clamp_min(epsilon)
+    radius_relative_disagreement = (
+        algebraic_radius - expected_radius
+    ).abs() / expected_radius.clamp_min(epsilon)
+    observable_radius_change = (
+        fit_admissible
+        # Radius is the weak direction of a visible spherical cap.  Centre
+        # recovery remains useful under the broader configured conditioning
+        # limit, but scale adaptation requires a substantially isotropic
+        # surface system so shallow noisy caps cannot masquerade as enormous
+        # spheres.
+        & (condition.detach() <= 12.0)
+        & torch.isfinite(algebraic_camera_centre.detach()).all(dim=-1)
+        & torch.isfinite(algebraic_radius.detach())
+        & (algebraic_radius.detach() > epsilon)
+        & (algebraic_relative_residual.detach() <= 0.02)
+        & (radius_relative_disagreement.detach() > 0.02)
+    )
+    camera_centre = algebraic_camera_centre
     safe_radius = torch.where(
         fit_admissible,
         expected_radius,
@@ -255,18 +306,28 @@ def fit_visible_sphere_surfaces(
         step = trust_radius.unsqueeze(-1) * torch.tanh(raw_step / trust_radius.unsqueeze(-1))
         camera_centre = camera_centre + step
         fit_admissible = iteration_admissible
+    camera_centre = torch.where(
+        observable_radius_change.unsqueeze(-1),
+        algebraic_camera_centre,
+        camera_centre,
+    )
     world_centre = camera_to_world(camera_centre, safe_transform)
     residual_radius = torch.linalg.vector_norm(
         points[:, None] - camera_centre[:, :, None, None],
         dim=-1,
     )
-    fitted_radius = (
+    refined_radius = (
         torch.einsum(
             "bshw,bshw->bs",
             weights,
             residual_radius,
         )
         / safe_support
+    )
+    fitted_radius = torch.where(
+        observable_radius_change,
+        algebraic_radius,
+        refined_radius,
     )
     valid = fit_admissible & torch.isfinite(camera_centre.detach()).all(dim=-1)
     value_gate = valid.unsqueeze(-1)

@@ -26,21 +26,25 @@ remain calibrated RGB-D plus public known actions. Constant-memory reducers,
 truth-owner ablation attribution, the 64-example/256-update screen, bounded
 2,048--8,192 update schedule, and complete promotion floors are encoded. All
 five single-factor incumbent screens and the compositional screen have now
-executed; no training was started because the supported failures first need
-finer owner ablations.
+executed. No planning metric is exposed to training, and no main training run
+was started merely to repair behavior already owned by observable geometry or
+evaluation protocol.
 The 170-row development manifest SHA-256 is
 `28002e4952da9165828bd6b8c6a078097dba809fedc2244577af84119a61d7eb`;
 the separate 34-row compositional-holdout digest is
 `7380de55a581ec3e650ffbf4d0a389b1813a32320de1eb83681bed8df9ec5262`.
 
-`runs/progress/index.html` is now a dependency-free static dashboard built
-from versioned capability summaries and read-only historical adapters. On the
-current tree it lands on the failed compositional screen while merging each
-family's newest evidence, the newest complete physical/resource panel, and
-the latest measured nominal planning panel. It never relabels nominal planning
-as factor-conditioned planning. The active run tree including the dashboard
-is `7,882,770` bytes (about 7.52 MiB); `.archive` is `34,315,899` bytes
-(about 32.73 MiB) and is displayed separately.
+`runs/progress/index.html` is a dependency-free static dashboard built from
+versioned capability summaries and read-only historical adapters. It merges
+each family's newest physical and factor-conditioned planning evidence without
+rewriting old reports or relabeling nominal evidence. Physical-cell RMSE and
+coverage heatmaps, a factor metric matrix using the actual single-factor and
+compositional floors, planning slices and latency, separate like-for-like trend
+axes, scalability, resource use, storage, bottlenecks, and unsupported claims
+are visible in one portable file. The managed run tree is `10,902,100` bytes
+(about 10.40 MiB) against the 250 MiB cap; `.archive` is a separately displayed
+`34,315,899` bytes (about 32.73 MiB). The dashboard itself is about 124 KiB and
+contains no external assets.
 
 The real 22-cell single-factor screens are compact (about 0.20 MiB each) and
 retain no generated episodes or checkpoints. Calibrated camera motion and
@@ -59,30 +63,42 @@ The final screen resolves all 11/11 enabled handles; proposal F1 is `0.99978`,
 ID/lifecycle/collision are `1.0`, current-position RMSE is `3.08e-7 m`,
 two-second RMSE is `0.0005458 m`, and coverage is `0.9142`.
 
-Sensor noise/dropout and physical-parameter variation fail and now identify
-the useful next work. Sensor proposal F1/ID/lifecycle/collision are
-`0.9072/0.7929/0.1705/0.2564`, current-position RMSE is `0.02492 m`, and its
-same-seed clean stream returns near-perfect behavior; this is observation/
-perception-owned at the family level. Variable physical parameters preserve
-proposal/ID/lifecycle at `1.0` but collision F1 falls to `0.4286`, current
-position reaches `0.02655 m`, and coverage falls to `0.5062`; its two-second
-RMSE remains within the broad floor at `0.04123 m`. This is parameter/
-dynamics-owned at the family level; truth-parameter and truth-state ablations
-remain required before adding capacity.
+Observable-radius surface fitting plus two-frame persistent confirmation repairs
+the variable-parameter family without a learned coordinate or dynamics head.
+Proposal/ID/lifecycle/collision are now `1.0`, current-position RMSE is
+`6.41e-5 m`, and two-second RMSE is `0.03218 m`. Its sole remaining physical
+failure is honest 90% coverage of `0.81785` versus the `0.82` lower bound.
 
-The 92M-seed compositional holdout combines all five controls in every row.
-It stops fail-closed on row 11 (N=4, translating camera, middle action) because
-the noisy appearance target cannot be resolved. One observed failure bounds
-possible resolution at `21/22 = 0.9545`, below the `0.99` prerequisite, so no
-partial physical score is claimed. The failed run is only about 18 KiB and
-contains a summary, report, and manifest—not frames or a checkpoint.
+Noisy RGB-D discovery now switches to public valid-depth connectivity only when
+RGB contains unsupported foreground, rejects sub-eight-pixel lobes, and prevents
+physically overlapping depth fragments from becoming duplicate births. The
+sensor family reaches proposal/ID/lifecycle/collision
+`0.99377/0.99485/0.95652/1.0`, current-position RMSE `0.002155 m`, and two-second
+RMSE `0.005996 m`. Its sole physical rejection is coverage `0.970614` versus the
+`0.970000` ceiling; this is not rounded into a pass.
 
-The post-change repository gate passes with `2387 passed, 16 skipped` in
-`3960.36 s`; Ruff formatting/lint and Python compilation also pass. The 13
-pytest warnings are the established governed-execution thread-setting warnings,
-not new capability-runner warnings. Static dashboard/artifact commands now
-lazy-load plotting support and no longer initialise Matplotlib or its font
-cache.
+The 92M-seed compositional holdout now completes all 22 rows. Public action
+descriptors use the same valid-depth pixel support as runtime appearance, and
+the physical holdout passes with proposal F1 `0.96899`, ID accuracy `0.95163`,
+two-second RMSE `0.05261 m`, coverage `0.94562`, and 22/22 observable action
+handles. Its diagnostic lifecycle F1 `0.70968` remains visible but is not
+miscolored as a holdout gate that the protocol never declared.
+
+Factor-conditioned planning covers all 12 N=1--6/K=8,32 slices per family.
+Known actions, physical variation, calibrated camera motion, and recovered
+partial visibility each have perfect winner accuracy and goal success, zero
+regret, exact serial/vectorized costs, and complete invariant passes. Sensor
+noise keeps K=8 at `1.0`, K=32 at `0.8333`, goal success at `0.9167`, and zero
+median regret, but one N=4 target lacks a mature checkpoint history. The
+compositional holdout keeps K=8 at `1.0` but K=32 falls to `0.1667`; two target
+histories are unstable and fine impulse magnitude selection under the combined
+shift remains a real downstream rejection. Failed task populations mark the
+invariant cover unmeasured rather than fabricating individual violations.
+
+The exact post-change repository gate passes with `2402 passed, 16 skipped`
+and 13 established governed-execution thread-setting warnings in `3972.91 s`.
+The 139-test focused capability gate, Ruff lint/format, Python compilation, and
+diff-integrity checks also pass.
 
 New runs receive manifest-scoped compact retention: summaries/HTML are kept,
 optimizer state is dropped at terminal completion, debug data is capped at

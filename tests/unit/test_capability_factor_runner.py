@@ -1,6 +1,9 @@
 from __future__ import annotations
 
 import json
+import math
+from itertools import islice
+from pathlib import Path
 
 import pytest
 import torch
@@ -13,8 +16,38 @@ from world_model.evaluation.capability_factor_runner import (
     materialize_capability_physical_episode,
 )
 from world_model.evaluation.general_capability import manifest_sha256
+from world_model.observations import ObservationPacket
+from world_model.observations.rgbd.set_proposer import RGBDSetProposer
+from world_model.runtime import OnlineWorldModel
+from world_model.training.dynamic_set_config import load_config
 from world_model.training.dynamic_set_evaluation import DynamicSetEvaluationError
 from world_model.training.dynamic_set_protocol import PHYSICAL_CELLS
+
+CONFIG_DIR = Path(__file__).parents[2] / "configs"
+
+
+def _ingest_public_prefix(
+    model: OnlineWorldModel,
+    materialization,
+    *,
+    frames: int,
+) -> None:
+    model.reset(batch_size=1)
+    for frame in islice(materialization.public_frames(), frames):
+        model.ingest(
+            ObservationPacket(
+                modality="rgbd",
+                sensor_id="capability-test",
+                timestamp=frame.timestamp,
+                payload={"rgb": frame.rgb.unsqueeze(0), "depth": frame.depth.unsqueeze(0)},
+                calibration={
+                    "world_from_camera": frame.world_from_camera.unsqueeze(0),
+                    "intrinsics": frame.intrinsics.unsqueeze(0),
+                },
+                frame_id=f"capability:{frame.frame_index}",
+                metadata={"image_size": tuple(frame.rgb.shape[-2:])},
+            )
+        )
 
 
 def test_executable_capability_factor_rows_cover_all_physical_cells() -> None:
@@ -62,6 +95,42 @@ def test_sensor_noise_is_deterministic_observable_only_and_truth_isolated() -> N
     assert boundary.truth_leakage_count == 0
 
 
+def test_sensor_noise_switches_component_discovery_to_public_depth() -> None:
+    capability_row, physical_row = factor_physical_rows("sensor_noise")[0]
+    noisy = materialize_capability_physical_episode(
+        capability_row,
+        physical_row,
+        apply_factor=True,
+    )
+    clean = materialize_capability_physical_episode(
+        capability_row,
+        physical_row,
+        apply_factor=False,
+    )
+    noisy_rgb = noisy.episode["rgb"][:1]
+    noisy_valid_depth = noisy.episode["depth"][:1] > 0.0
+    clean_rgb = clean.episode["rgb"][:1]
+    clean_valid_depth = clean.episode["depth"][:1] > 0.0
+
+    clean_discovery, clean_uses_depth = RGBDSetProposer._component_discovery_image(
+        clean_rgb,
+        clean_valid_depth,
+    )
+    noisy_discovery, noisy_uses_depth = RGBDSetProposer._component_discovery_image(
+        noisy_rgb,
+        noisy_valid_depth,
+    )
+
+    # Nominal inference remains on the exact historical RGB path.  The noisy
+    # row is reconstructed only from its public valid-depth support.
+    assert clean_discovery is clean_rgb
+    assert not bool(clean_uses_depth.any())
+    assert bool(noisy_uses_depth.all())
+    assert not torch.equal(noisy_discovery, noisy_rgb)
+    assert torch.equal(noisy_discovery[:, :1], noisy_discovery[:, 1:2])
+    assert torch.equal(noisy_discovery[:, 1:2], noisy_discovery[:, 2:3])
+
+
 def test_physical_parameter_factor_changes_simulation_and_remains_truth_isolated() -> None:
     capability_row, physical_row = factor_physical_rows("physical_parameters")[0]
     clean = materialize_capability_physical_episode(
@@ -92,6 +161,39 @@ def test_physical_parameter_factor_changes_simulation_and_remains_truth_isolated
     assert not torch.equal(varied.episode["rgb"], clean.episode["rgb"])
     _frames, boundary = varied.public_frames_with_boundary()
     assert boundary.truth_leakage_count == 0
+
+
+def test_observable_radius_change_updates_persistent_geometry_with_nominal_deadband() -> None:
+    capability_row, physical_row = factor_physical_rows("physical_parameters")[0]
+    clean = materialize_capability_physical_episode(
+        capability_row,
+        physical_row,
+        apply_factor=False,
+    )
+    varied = materialize_capability_physical_episode(
+        capability_row,
+        physical_row,
+        apply_factor=True,
+    )
+    config = load_config(CONFIG_DIR / "rgbd_dynamic_set_planning_cpu.yaml")
+    clean_model = OnlineWorldModel.from_config(config, device="cpu")
+    varied_model = OnlineWorldModel.from_config(config, device="cpu")
+
+    _ingest_public_prefix(clean_model, clean, frames=4)
+    _ingest_public_prefix(varied_model, varied, frames=4)
+
+    assert clean_model.belief is not None and varied_model.belief is not None
+    clean_radius = clean_model.belief.objects.radius[clean_model.belief.objects.active]
+    varied_radius = varied_model.belief.objects.radius[varied_model.belief.objects.active]
+    torch.testing.assert_close(
+        clean_radius, torch.full_like(clean_radius, 0.21), rtol=0.0, atol=0.0
+    )
+    torch.testing.assert_close(
+        varied_radius,
+        torch.full_like(varied_radius, capability_row.controls.radius_m),
+        rtol=0.0,
+        atol=2.0e-4,
+    )
 
 
 def test_partial_visibility_has_bounded_window_and_exact_recovery() -> None:
@@ -248,6 +350,47 @@ def test_compositional_holdout_combines_controls_on_disjoint_seeds() -> None:
     assert boundary.truth_leakage_count == 0
 
 
+def test_public_geometry_guard_prevents_dropout_fragments_becoming_duplicate_ids() -> None:
+    capability_row, physical_row = next(
+        item for item in factor_physical_rows("compositional_holdout") if item[0].seed == 92_000_007
+    )
+    composed = materialize_capability_physical_episode(
+        capability_row,
+        physical_row,
+        apply_factor=True,
+    )
+    config = load_config(CONFIG_DIR / "rgbd_dynamic_set_planning_cpu.yaml")
+    model = OnlineWorldModel.from_config(config, device="cpu")
+
+    _ingest_public_prefix(model, composed, frames=44)
+
+    assert model.belief is not None
+    assert int(model.belief.objects.active.sum()) == 3
+    action_frame = tuple(composed.public_frames())[44]
+    action = action_frame.world_impulse_action(model.belief)
+    assert action is not None
+
+
+def test_public_action_handle_uses_the_same_valid_depth_support_as_runtime() -> None:
+    capability_row, physical_row = next(
+        item for item in factor_physical_rows("compositional_holdout") if item[0].seed == 92_000_012
+    )
+    composed = materialize_capability_physical_episode(
+        capability_row,
+        physical_row,
+        apply_factor=True,
+    )
+    config = load_config(CONFIG_DIR / "rgbd_dynamic_set_planning_cpu.yaml")
+    model = OnlineWorldModel.from_config(config, device="cpu")
+
+    _ingest_public_prefix(model, composed, frames=10)
+
+    assert model.belief is not None
+    action_frame = tuple(composed.public_frames())[10]
+    action = action_frame.world_impulse_action(model.belief)
+    assert action is not None
+
+
 def test_factor_cli_dry_run_is_read_only(capsys) -> None:
     parsed = arguments(["--factor", "sensor_noise", "--dry-run"])
     assert parsed.factor == "sensor_noise"
@@ -255,6 +398,13 @@ def test_factor_cli_dry_run_is_read_only(capsys) -> None:
     output = capsys.readouterr().out
     assert '"physical_episodes": 22' in output
     assert '"generated_episodes_retained": false' in output
+
+
+def test_portable_evidence_maps_unavailable_infinite_measurements_to_null() -> None:
+    assert runner._jsonable({"latency": math.inf, "cost": torch.tensor(-math.inf)}) == {
+        "latency": None,
+        "cost": None,
+    }
 
 
 def test_runtime_refusal_writes_compact_failed_summary(

@@ -6,6 +6,38 @@ to make every heading unambiguous; the suffixes do not imply precedence, no
 substantive decision or chronology changed, and the one corresponding
 cross-reference was disambiguated.
 
+## ADR-182 — Repair observable structure before adding capacity
+
+- **Date:** 2026-09-09
+- **Status:** accepted; broad evidence complete, calibration/planning limits retained
+- **Context:** The first factor screens localized large sensor and
+  variable-parameter failures, while the structured incumbent already solved
+  camera motion, recovery, broad actions, and nominal planning. Adding a wider
+  residual at that point would mix observable geometry defects, task-history
+  support, uncertainty calibration, and genuinely unknown physical parameters.
+- **Decision:** Keep learned capacity unchanged. Estimate a changed sphere
+  radius only from a conditioned calibrated surface fit and require two
+  consecutive associated estimates before changing persistent geometry. On
+  observable RGB/depth disagreement, discover components from valid-depth
+  topology, reject tiny lobes, and prevent measurements whose centres lie deep
+  inside another public radius from starting duplicate IDs. Make public action
+  descriptors and runtime appearance use the same valid-depth pixels. Preserve
+  the historical RGB path, fixed-radius behavior, checkpoint tensors, and
+  22-frame planning histories exactly.
+- **Decision:** Add one factor-conditioned planning runner covering every
+  N=1--6/K=8,32 slice. Controlled recovery alone may use a 32-frame history so
+  the endpoint contains a full mature window. If any task fails before rollout,
+  reject the population and describe the invariant suite as unmeasured; do not
+  serialize sentinel infinities or fabricate individual invariant failures.
+- **Consequences:** Variable physics and sensor corruption now meet all state
+  accuracy floors and miss only opposite edges of the uncertainty band
+  (`0.81785` and `0.970614`). The compositional physical holdout passes. Known
+  actions, varied physics, camera motion, and recovered visibility pass required
+  planning; sensor K=32 is `0.8333`, and compositional K=32 is `0.1667` while
+  K=8 remains `1.0` for both. Those downstream failures remain visible evidence
+  for the next smallest-owner iteration; no learned module is widened and no
+  promotion is claimed.
+
 ## ADR-181 — Let controlled failures choose the next model change
 
 - **Date:** 2026-09-09

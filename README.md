@@ -66,10 +66,21 @@ conda run -n orpheus python scripts/run_capability_factor.py --factor partial_vi
 conda run -n orpheus python scripts/run_capability_factor.py --factor compositional_holdout
 ```
 
-Camera motion, partial visibility, and broad known actions currently pass the
-22-cell screen. Sensor corruption and variable physical parameters expose
-supported failures. The compositional stream stops fail-closed on an ambiguous
-observable action target, so it has no fabricated partial physical score.
+Run the matching required downstream planning screen with the same factor
+names. Each command streams 12 tasks spanning N=1--6 and K=8/32, opens its
+private oracle only after the public decision, and retains only compact
+evidence:
+
+```bash
+conda run -n orpheus python scripts/run_capability_planning.py --factor sensor_noise
+conda run -n orpheus python scripts/run_capability_planning.py --factor compositional_holdout
+```
+
+Camera motion, partial visibility, broad known actions, and the compositional
+physical holdout pass their current physical screens. Sensor corruption and
+variable physical parameters now meet the accuracy floors but retain small,
+explicit uncertainty-calibration misses; downstream planning is reported
+separately and never enters the optimized loss.
 
 Inspect or safely manage local artifacts with:
 
@@ -101,18 +112,19 @@ oracle. RGB-only operation must not consume oracle state.
 
 ## Current status
 
-Broad heterogeneous campaigns are paused. The current specification first
-requires a cheap, identifiable RGB-to-state-to-rollout unit to converge before
-association, lifecycle, contact, camera motion, or learned dynamics are added
-back. That unit now passes with `0.007644 m` final RGB state RMSE and
-`0.007991 m` short-rollout RMSE through an ordinary differentiable
-inverse-rendering, calibrated-backprojection, and analytic-kinematics graph.
+The capability-first workbench is now the active path. Its compact structured
+incumbent is evaluated across changing sets, contact/lifecycle strata, bounded
+sensor corruption, observable physical variation, calibrated camera motion,
+known actions, short visibility loss/recovery, and a compositional holdout.
+Physical evaluation streams generated RGB-D and immediately discards it;
+factor-conditioned planning covers N=1--6 and K=8/32 without entering the
+training objective. The incumbent is not promoted while its explicit
+calibration and compositional-planning failures remain.
 
-The full `OnlineWorldModel` train/evaluate/demo path remains runnable, but no
-older multi-day campaign is a current launch recommendation or promotion
-incumbent. Historical experiments and their limitations remain in
-[`project/STATUS.md`](project/STATUS.md); the minimal qualification workflow is
-below.
+The full `OnlineWorldModel` train/evaluate/demo path remains runnable, but old
+one-shot ladders and multi-day campaigns are audit history rather than the
+current launch recommendation. Detailed current evidence and the retained
+historical record are in [`project/STATUS.md`](project/STATUS.md).
 
 The first temporal extension is also closed as a terminal development failure.
 Its trainable reliability taper discarded most of the 16-frame history and

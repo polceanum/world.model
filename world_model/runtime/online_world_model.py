@@ -30,6 +30,7 @@ from world_model.filtering import (
     BeliefUpdaterConfig,
 )
 from world_model.fusion import (
+    AssociationResult,
     Associator,
     ObservationMode,
     ObservationScheduler,
@@ -60,7 +61,11 @@ from world_model.runtime.prepared import (
     TensorVersionSignature,
     tensor_identity_version_signature,
 )
-from world_model.runtime.state import RuntimeState, runtime_stream_key
+from world_model.runtime.state import (
+    RadiusConfirmationState,
+    RuntimeState,
+    runtime_stream_key,
+)
 
 if TYPE_CHECKING:
     from world_model.dynamics import WorldImpulseAction
@@ -700,6 +705,213 @@ class OnlineWorldModel(nn.Module):
             }
         )
 
+    def _confirm_observed_radii(
+        self,
+        posterior: WorldBelief,
+        measurements: MeasurementSet,
+        association: AssociationResult,
+        *,
+        stream_key: str,
+    ) -> WorldBelief:
+        """Accept only consecutive, associated observable radius estimates."""
+
+        candidates = measurements.auxiliary.get("observed_world_radius")
+        changed = measurements.auxiliary.get("observed_world_radius_change")
+        if candidates is None and changed is None:
+            return posterior
+        expected_candidates = (*measurements.measurement_mask.shape, 1)
+        if not isinstance(candidates, Tensor) or candidates.shape != expected_candidates:
+            raise ValueError("observed_world_radius must have shape [B,M,1]")
+        if (
+            not isinstance(changed, Tensor)
+            or changed.shape != measurements.measurement_mask.shape
+            or changed.dtype is not torch.bool
+        ):
+            raise ValueError("observed_world_radius_change must be boolean [B,M]")
+        object_shape = posterior.objects.active.shape
+        prior = self.state.radius_confirmations.get(stream_key)
+        if (
+            prior is None
+            or prior.object_ids.shape != object_shape
+            or prior.candidate.shape != (*object_shape, 1)
+            or prior.count.shape != object_shape
+        ):
+            prior = RadiusConfirmationState(
+                object_ids=torch.full_like(posterior.objects.object_id, -1),
+                candidate=posterior.objects.radius.new_zeros((*object_shape, 1)),
+                count=torch.zeros_like(posterior.objects.object_id),
+            )
+        same_identity = posterior.objects.active & (prior.object_ids == posterior.objects.object_id)
+        pending_candidate = torch.where(
+            same_identity.unsqueeze(-1),
+            prior.candidate,
+            torch.zeros_like(prior.candidate),
+        )
+        pending_count = torch.where(
+            same_identity,
+            prior.count,
+            torch.zeros_like(prior.count),
+        )
+        next_candidate = torch.zeros_like(pending_candidate)
+        next_count = torch.zeros_like(pending_count)
+        updated_objects = posterior.objects.clone()
+        for batch_index in range(posterior.batch_size):
+            matched = association.pair_mask[batch_index]
+            for belief_index, measurement_index in zip(
+                association.belief_indices[batch_index, matched].tolist(),
+                association.measurement_indices[batch_index, matched].tolist(),
+                strict=True,
+            ):
+                if not bool(changed[batch_index, measurement_index]):
+                    continue
+                candidate = candidates[batch_index, measurement_index]
+                previous = pending_candidate[batch_index, belief_index]
+                previous_count = int(pending_count[batch_index, belief_index])
+                tolerance = torch.maximum(
+                    candidate.abs() * 0.02,
+                    candidate.new_tensor(0.002),
+                )
+                consistent = previous_count > 0 and bool(
+                    ((candidate - previous).abs() <= tolerance).all()
+                )
+                if consistent:
+                    confirmed = 0.5 * (candidate + previous)
+                    updated_objects.geometry[batch_index, belief_index, :1] = confirmed.clamp_min(
+                        1.0e-6
+                    )
+                else:
+                    next_candidate[batch_index, belief_index] = candidate
+                    next_count[batch_index, belief_index] = 1
+        self.state.radius_confirmations[stream_key] = RadiusConfirmationState(
+            object_ids=torch.where(
+                posterior.objects.active,
+                posterior.objects.object_id,
+                torch.full_like(posterior.objects.object_id, -1),
+            ).detach(),
+            candidate=next_candidate.detach(),
+            count=next_count.detach(),
+        )
+        return replace(posterior, objects=updated_objects)
+
+    @staticmethod
+    def _filter_fragmented_birth_measurements(
+        posterior: WorldBelief,
+        measurements: MeasurementSet,
+        unmatched_measurements: Tensor,
+    ) -> Tensor:
+        """Reject physically overlapping birth evidence on noisy depth discovery.
+
+        Bounded pixel dropout can disconnect one visible depth silhouette into
+        multiple components.  Association may match one fragment to the
+        persistent object while treating another as a birth.  Distinct rigid
+        spheres cannot have centres substantially inside the sum of their
+        observable radii, so that public geometric invariant is a safer birth
+        guard than proposal index, appearance, or simulator identity.
+
+        The guard is deliberately inactive for the historical RGB component
+        path.  On the depth-fallback path it removes candidates overlapping an
+        active track, then retains only the strongest member of each cluster of
+        mutually overlapping unmatched measurements.
+        """
+
+        depth_discovery = measurements.auxiliary.get("set_depth_component_discovery")
+        if depth_discovery is None:
+            return unmatched_measurements
+        expected = (measurements.measurement_mask.shape[0],)
+        if (
+            not isinstance(depth_discovery, Tensor)
+            or depth_discovery.shape != expected
+            or depth_discovery.dtype is not torch.bool
+        ):
+            raise ValueError("set_depth_component_discovery must be boolean [B]")
+        if not bool(depth_discovery.any()):
+            return unmatched_measurements
+        if unmatched_measurements.shape != measurements.measurement_mask.shape:
+            raise ValueError("unmatched_measurements must have shape [B,M]")
+        if unmatched_measurements.dtype is not torch.bool:
+            raise TypeError("unmatched_measurements must be torch.bool")
+        positions = measurements.auxiliary.get("world_position")
+        radii = measurements.auxiliary.get("observed_world_radius")
+        support = measurements.auxiliary.get("foreground_mass")
+        batch, proposals = measurements.measurement_mask.shape
+        if not isinstance(positions, Tensor) or positions.shape != (batch, proposals, 3):
+            raise ValueError("depth-discovery birth filtering requires world_position [B,M,3]")
+        if not isinstance(radii, Tensor) or radii.shape != (batch, proposals, 1):
+            raise ValueError(
+                "depth-discovery birth filtering requires observed_world_radius [B,M,1]"
+            )
+        if not isinstance(support, Tensor) or support.shape != (batch, proposals):
+            raise ValueError("depth-discovery birth filtering requires foreground_mass [B,M]")
+
+        filtered = unmatched_measurements.clone()
+        overlap_fraction = positions.new_tensor(0.75)
+        for batch_index in range(batch):
+            if not bool(depth_discovery[batch_index]):
+                continue
+            finite_candidate = (
+                torch.isfinite(positions[batch_index]).all(dim=-1)
+                & torch.isfinite(radii[batch_index, :, 0])
+                & (radii[batch_index, :, 0] > 0.0)
+            )
+            candidate_indices = torch.nonzero(
+                filtered[batch_index]
+                & measurements.measurement_mask[batch_index]
+                & finite_candidate,
+                as_tuple=False,
+            ).flatten()
+            active_indices = torch.nonzero(
+                posterior.objects.active[batch_index]
+                & torch.isfinite(posterior.objects.position[batch_index]).all(dim=-1)
+                & torch.isfinite(posterior.objects.radius[batch_index, :, 0])
+                & (posterior.objects.radius[batch_index, :, 0] > 0.0),
+                as_tuple=False,
+            ).flatten()
+            if candidate_indices.numel() and active_indices.numel():
+                candidate_position = positions[batch_index, candidate_indices]
+                active_position = posterior.objects.position[batch_index, active_indices]
+                separation = torch.cdist(candidate_position, active_position)
+                nonoverlap = overlap_fraction * (
+                    radii[batch_index, candidate_indices, 0, None]
+                    + posterior.objects.radius[batch_index, None, active_indices, 0]
+                )
+                overlapping = (separation < nonoverlap).any(dim=-1)
+                filtered[batch_index, candidate_indices[overlapping]] = False
+
+            candidate_indices = torch.nonzero(
+                filtered[batch_index]
+                & measurements.measurement_mask[batch_index]
+                & finite_candidate,
+                as_tuple=False,
+            ).flatten()
+            if candidate_indices.numel() < 2:
+                continue
+            order = torch.argsort(
+                support[batch_index, candidate_indices],
+                descending=True,
+                stable=True,
+            )
+            kept: list[int] = []
+            for candidate_index in candidate_indices[order].tolist():
+                if kept:
+                    kept_tensor = torch.tensor(
+                        kept,
+                        dtype=torch.int64,
+                        device=positions.device,
+                    )
+                    separation = torch.linalg.vector_norm(
+                        positions[batch_index, candidate_index]
+                        - positions[batch_index, kept_tensor],
+                        dim=-1,
+                    )
+                    nonoverlap = overlap_fraction * (
+                        radii[batch_index, candidate_index, 0] + radii[batch_index, kept_tensor, 0]
+                    )
+                    if bool((separation < nonoverlap).any()):
+                        filtered[batch_index, candidate_index] = False
+                        continue
+                kept.append(candidate_index)
+        return filtered
+
     @staticmethod
     def _requested_timestamp(
         current: WorldBelief,
@@ -1272,6 +1484,12 @@ class OnlineWorldModel(nn.Module):
             dt=prediction_dt,
             cause=surprise,
         )
+        posterior = self._confirm_observed_radii(
+            posterior,
+            measurements,
+            association,
+            stream_key=stream_key,
+        )
         velocity_evidence, temporal_history = module.update_temporal_history(
             posterior=posterior,
             measured=measurements,
@@ -1308,9 +1526,14 @@ class OnlineWorldModel(nn.Module):
         confirmed_births = 0
         if mode in {ObservationMode.GLOBAL_DISCOVERY, ObservationMode.RECOVERY}:
             tentative_key = (packet.modality, packet.sensor_id)
-            confirmed_measurements, tentative_state = self.lifecycle.confirm_tentative_births(
+            birth_measurements = self._filter_fragmented_birth_measurements(
+                posterior,
                 measurements,
                 association.unmatched_measurements,
+            )
+            confirmed_measurements, tentative_state = self.lifecycle.confirm_tentative_births(
+                measurements,
+                birth_measurements,
                 self.state.tentative_births.get(tentative_key),
                 confidence_threshold=self.birth_confidence,
             )

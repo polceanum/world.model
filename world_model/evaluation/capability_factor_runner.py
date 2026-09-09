@@ -115,12 +115,18 @@ def _jsonable(value: Any) -> Any:
         return [_jsonable(item) for item in value]
     if isinstance(value, Tensor):
         detached = value.detach().cpu()
-        return detached.item() if detached.ndim == 0 else detached.tolist()
+        return _jsonable(detached.item() if detached.ndim == 0 else detached.tolist())
     if isinstance(value, np.generic):
-        return value.item()
+        return _jsonable(value.item())
     if isinstance(value, Path):
         return str(value)
-    if value is None or isinstance(value, (str, int, float, bool)):
+    if isinstance(value, float):
+        # Failed invariant bundles intentionally use infinity for unavailable
+        # latency/cost measurements. Portable summaries record those as null;
+        # their explicit boolean failures remain authoritative and JSON stays
+        # standards-compliant.
+        return value if math.isfinite(value) else None
+    if value is None or isinstance(value, (str, int, bool)):
         return value
     raise TypeError(f"cannot serialize capability value of type {type(value).__name__}")
 
