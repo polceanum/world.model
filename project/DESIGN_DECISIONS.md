@@ -6,6 +6,43 @@ to make every heading unambiguous; the suffixes do not imply precedence, no
 substantive decision or chronology changed, and the one corresponding
 cross-reference was disambiguated.
 
+## ADR-181 — Let controlled failures choose the next model change
+
+- **Date:** 2026-09-09
+- **Status:** accepted; finer owner ablations pending before training
+- **Context:** ADR-180 required all five capability families and their
+  composition to be measured before adding capacity. The structured incumbent
+  could already solve nominal planning, but it was unknown whether camera
+  motion, recovery, sensor corruption, physical variation, or broader actions
+  actually owned the next error. Saving full episodes would also obscure the
+  behavioral result behind unnecessary run data.
+- **Decision:** Execute one deterministic 22-cell streamed screen per family,
+  paired with the same seeds under nominal controls, and retain only online
+  reductions, portable HTML, and manifests. Physical parameters must alter the
+  simulator before integration/contact; camera motion must re-render unchanged
+  private state through calibrated poses; broad actions must be observable,
+  appearance-addressed, and applied once. A public runtime refusal ends the
+  screen and writes explicit failed evidence rather than fabricating remaining
+  metrics. Merge older valid physical/resource/planning panels into the
+  dashboard with source labels, while leaving factor-conditioned planning
+  unsupported until it really runs.
+- **Decision:** Treat camera motion, partial visibility, and broad known actions
+  as passing families. Treat sensor noise as an observation/perception-family
+  failure and variable physics as a parameter/dynamics-family failure. Do not
+  start the 64-example training screen until truth-association, truth-parameter,
+  and truth-state ablations refine those owners. The compositional N=4 target
+  refusal is a real failure: one refusal caps resolution at `21/22`, below the
+  `0.99` prerequisite. Generalize the old two-object action-handle separation
+  from `0.05` to `0.02` only after observing exact-target cosine `0.999999` and
+  next-best `0.9693`; retain absolute cosine `0.95` and tie rejection.
+- **Consequences:** Three single factors pass without new learned capacity.
+  Sensor proposal/ID/lifecycle/collision are
+  `0.9072/0.7929/0.1705/0.2564`; variable-parameter collision/coverage are
+  `0.4286/0.5062`. The combined holdout terminates on target resolution before
+  a partial physical score. All run artifacts total about 7.52 MiB versus the
+  250 MiB cap, and `.archive` remains separate. These are public development
+  screens, not promotion or protected qualification evidence.
+
 ## ADR-180 — Broaden behavior through evidence and make progress compactly visible
 
 - **Date:** 2026-09-08

@@ -140,11 +140,82 @@ def _factor_table(summary: CapabilityRunSummary) -> str:
         score = evidence.get("score") if isinstance(evidence, Mapping) else None
         rows.append(
             f'<tr><td>{_escape(factor)}</td><td><span class="tag {_escape(status)}">'
-            f"{_escape(status)}</span></td><td>{_format_number(score)}</td></tr>"
+            f"{_escape(status)}</span></td><td>{_format_number(score)}</td>"
+            f"<td>{_escape(evidence.get('source_run', '—') if isinstance(evidence, Mapping) else '—')}</td></tr>"
         )
     return (
-        "<table><thead><tr><th>Capability family</th><th>Evidence</th><th>Score</th></tr></thead>"
+        "<table><thead><tr><th>Capability family</th><th>Evidence</th><th>Score</th>"
+        "<th>Latest run</th></tr></thead>"
         f"<tbody>{''.join(rows)}</tbody></table>"
+    )
+
+
+def _merge_latest_factor_evidence(
+    summaries: Sequence[CapabilityRunSummary],
+    latest: CapabilityRunSummary,
+) -> CapabilityRunSummary:
+    """Keep each family's newest measured result visible across compact runs."""
+
+    merged = dict(latest.factor_metrics)
+    for summary in summaries:
+        for factor, evidence in summary.factor_metrics.items():
+            if not isinstance(evidence, Mapping) or evidence.get("status") not in {
+                "measured",
+                "passed",
+                "failed",
+            }:
+                continue
+            merged[factor] = {**dict(evidence), "source_run": summary.run_id}
+    measured = {
+        factor
+        for factor, evidence in merged.items()
+        if isinstance(evidence, Mapping)
+        and evidence.get("status") in {"measured", "passed", "failed"}
+    }
+    capability_claims = {factor: f"{factor} capability" for factor in measured}
+    capability_claims["compositional_holdout"] = "compositional holdout capability"
+    unsupported = tuple(
+        claim
+        for claim in latest.unsupported_claims
+        if not any(
+            factor in measured and claim == rendered
+            for factor, rendered in capability_claims.items()
+        )
+    )
+    planning = latest.planning
+    planning_source: str | None = None
+    if not isinstance(planning.get("slices"), list) or not planning.get("slices"):
+        for summary in reversed(summaries):
+            slices = summary.planning.get("slices")
+            if isinstance(slices, list) and slices:
+                planning = {**summary.planning, "source_run": summary.run_id}
+                planning_source = summary.run_id
+                break
+    evidence_source = latest
+    if not latest.cell_metrics or not latest.resources:
+        for summary in reversed(summaries):
+            if summary.cell_metrics and summary.resources:
+                evidence_source = summary
+                break
+    return CapabilityRunSummary.from_dict(
+        {
+            **latest.to_dict(),
+            "factor_metrics": merged,
+            "cell_metrics": latest.cell_metrics or evidence_source.cell_metrics,
+            "horizon_curves": latest.horizon_curves or evidence_source.horizon_curves,
+            "uncertainty": latest.uncertainty or evidence_source.uncertainty,
+            "planning": planning,
+            "resources": latest.resources
+            or {
+                **evidence_source.resources,
+                "source_run": evidence_source.run_id,
+            },
+            "unsupported_claims": unsupported,
+            "provenance": {
+                **latest.provenance,
+                **({} if planning_source is None else {"planning_source_run": planning_source}),
+            },
+        }
     )
 
 
@@ -379,7 +450,7 @@ def build_progress_dashboard(
     root = Path(runs_root).expanduser().resolve()
     summaries, notices = discover_run_summaries(root)
     if summaries:
-        latest = summaries[-1]
+        latest = _merge_latest_factor_evidence(summaries, summaries[-1])
     else:
         latest = historical_summary(
             {"status": "no runs"},

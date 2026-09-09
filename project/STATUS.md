@@ -24,9 +24,10 @@ cameras, broader known impulses, partial visibility/recovery, and one
 compositional holdout. Its factor controls are generator-only; runtime inputs
 remain calibrated RGB-D plus public known actions. Constant-memory reducers,
 truth-owner ablation attribution, the 64-example/256-update screen, bounded
-2,048--8,192 update schedule, and complete promotion floors are encoded. No
-broad factor run has yet been executed, so the dashboard correctly labels
-those families unmeasured rather than extrapolating the nominal result.
+2,048--8,192 update schedule, and complete promotion floors are encoded. All
+five single-factor incumbent screens and the compositional screen have now
+executed; no training was started because the supported failures first need
+finer owner ablations.
 The 170-row development manifest SHA-256 is
 `28002e4952da9165828bd6b8c6a078097dba809fedc2244577af84119a61d7eb`;
 the separate 34-row compositional-holdout digest is
@@ -34,11 +35,54 @@ the separate 34-row compositional-holdout digest is
 
 `runs/progress/index.html` is now a dependency-free static dashboard built
 from versioned capability summaries and read-only historical adapters. On the
-current tree it lands on the completed capability-reporting smoke, includes
-the incumbent comparison and historical trend, and shows nominal
-physical/planning evidence plus explicit unsupported claims. The active run
-tree including the dashboard is about 6.8 MB; `.archive` is about
-34.3 MB and is displayed separately.
+current tree it lands on the failed compositional screen while merging each
+family's newest evidence, the newest complete physical/resource panel, and
+the latest measured nominal planning panel. It never relabels nominal planning
+as factor-conditioned planning. The active run tree including the dashboard
+is `7,882,770` bytes (about 7.52 MiB); `.archive` is `34,315,899` bytes
+(about 32.73 MiB) and is displayed separately.
+
+The real 22-cell single-factor screens are compact (about 0.20 MiB each) and
+retain no generated episodes or checkpoints. Calibrated camera motion and
+short partial visibility pass all broadened physical gates. Camera motion has
+proposal/ID/lifecycle/collision `1.0`, current-position RMSE
+`5.60e-7 m`, two-second RMSE `0.0002866 m`, and 90% coverage `0.9042`.
+Partial visibility has proposal F1 `0.9964`, ID/lifecycle/collision `1.0`,
+current-position RMSE `3.04e-7 m`, two-second RMSE `0.0002867 m`, and
+coverage `0.9235`.
+
+Broader known actions also pass after generalizing the observable target
+guard from the old two-object `0.05` cosine margin to `0.02`, while preserving
+the `0.95` absolute-similarity gate and tie rejection. The original N=6
+failure had exact-target cosine `0.999999` and next-best cosine `0.9693`.
+The final screen resolves all 11/11 enabled handles; proposal F1 is `0.99978`,
+ID/lifecycle/collision are `1.0`, current-position RMSE is `3.08e-7 m`,
+two-second RMSE is `0.0005458 m`, and coverage is `0.9142`.
+
+Sensor noise/dropout and physical-parameter variation fail and now identify
+the useful next work. Sensor proposal F1/ID/lifecycle/collision are
+`0.9072/0.7929/0.1705/0.2564`, current-position RMSE is `0.02492 m`, and its
+same-seed clean stream returns near-perfect behavior; this is observation/
+perception-owned at the family level. Variable physical parameters preserve
+proposal/ID/lifecycle at `1.0` but collision F1 falls to `0.4286`, current
+position reaches `0.02655 m`, and coverage falls to `0.5062`; its two-second
+RMSE remains within the broad floor at `0.04123 m`. This is parameter/
+dynamics-owned at the family level; truth-parameter and truth-state ablations
+remain required before adding capacity.
+
+The 92M-seed compositional holdout combines all five controls in every row.
+It stops fail-closed on row 11 (N=4, translating camera, middle action) because
+the noisy appearance target cannot be resolved. One observed failure bounds
+possible resolution at `21/22 = 0.9545`, below the `0.99` prerequisite, so no
+partial physical score is claimed. The failed run is only about 18 KiB and
+contains a summary, report, and manifest—not frames or a checkpoint.
+
+The post-change repository gate passes with `2387 passed, 16 skipped` in
+`3960.36 s`; Ruff formatting/lint and Python compilation also pass. The 13
+pytest warnings are the established governed-execution thread-setting warnings,
+not new capability-runner warnings. Static dashboard/artifact commands now
+lazy-load plotting support and no longer initialise Matplotlib or its font
+cache.
 
 New runs receive manifest-scoped compact retention: summaries/HTML are kept,
 optimizer state is dropped at terminal completion, debug data is capped at

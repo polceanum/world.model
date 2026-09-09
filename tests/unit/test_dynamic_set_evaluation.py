@@ -80,6 +80,15 @@ def test_collision_probability_transform_preserves_exact_symmetry() -> None:
     )
 
 
+def test_unresolved_lifecycle_predictions_have_a_total_order() -> None:
+    assert evaluation._ordered_lifecycle_predictions(((7, None), (5, None), (7, 3), (7, 1))) == (
+        (5, None),
+        (7, 1),
+        (7, 3),
+        (7, None),
+    )
+
+
 def _protected_ledger(
     tmp_path: Path, protocol_sha256: str
 ) -> tuple[OrderedSplitLedger, SplitPermit]:

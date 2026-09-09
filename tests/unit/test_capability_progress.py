@@ -128,4 +128,52 @@ def test_dashboard_handles_current_historical_missing_and_malformed_runs(
     assert "historical" in content
     assert "malformed capability summary" in content
     assert "Portable report" in content
+    assert "Latest run" in content
     assert dashboard.stat().st_size < 1_000_000
+
+
+def test_dashboard_keeps_latest_measured_factor_across_runs(tmp_path: Path) -> None:
+    runs = tmp_path / "runs"
+    first_directory = runs / "first"
+    second_directory = runs / "second"
+    first_directory.mkdir(parents=True)
+    second_directory.mkdir()
+    first = replace(
+        _summary("first"),
+        factor_metrics={
+            "sensor_noise": {"status": "failed", "score": 0.4},
+            "partial_visibility": {"status": "unmeasured"},
+        },
+    )
+    second = replace(
+        _summary("second"),
+        created_at_utc="2026-09-08T01:00:00+00:00",
+        factor_metrics={
+            "sensor_noise": {"status": "unmeasured"},
+            "partial_visibility": {"status": "passed", "score": 0.2},
+        },
+        unsupported_claims=(
+            "sensor_noise capability",
+            "partial_visibility capability",
+            "factor-conditioned planning",
+        ),
+        cell_metrics={},
+        horizon_curves={},
+        uncertainty={},
+        planning={"status": "unmeasured"},
+        resources={},
+    )
+    write_capability_summary(first, first_directory / "capability_summary.json")
+    write_capability_summary(second, second_directory / "capability_summary.json")
+
+    content = build_progress_dashboard(runs).read_text(encoding="utf-8")
+
+    assert '"source_run": "first"' in content
+    assert '"source_run": "second"' in content
+    assert "sensor_noise" in content and "partial_visibility" in content
+    assert "<li>sensor_noise capability</li>" not in content
+    assert "<li>partial_visibility capability</li>" not in content
+    assert "<li>factor-conditioned planning</li>" in content
+    assert '"planning_source_run": "first"' in content
+    assert '"source_run": "first"' in content
+    assert "N1/contact=0/dynamic=0" in content

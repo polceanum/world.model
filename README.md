@@ -52,7 +52,24 @@ The dashboard shows incumbent/candidate score, run trends, physical-cell and
 factor coverage, horizon and uncertainty behavior, K=8/K=32 planning,
 N=8/12/16 state-only scaling, latency/memory/weights/disk usage, bottlenecks,
 and explicit unsupported claims. Current historical reports are adapted
-read-only; broadened factors display as `unmeasured` until actually executed.
+read-only. The dashboard merges each family's newest evidence and labels the
+source run, while keeping nominal and factor-conditioned planning distinct.
+
+Run or reproduce one streamed physical factor without retaining its episodes:
+
+```bash
+conda run -n orpheus python scripts/run_capability_factor.py --factor sensor_noise
+conda run -n orpheus python scripts/run_capability_factor.py --factor physical_parameters
+conda run -n orpheus python scripts/run_capability_factor.py --factor camera_motion
+conda run -n orpheus python scripts/run_capability_factor.py --factor known_actions
+conda run -n orpheus python scripts/run_capability_factor.py --factor partial_visibility
+conda run -n orpheus python scripts/run_capability_factor.py --factor compositional_holdout
+```
+
+Camera motion, partial visibility, and broad known actions currently pass the
+22-cell screen. Sensor corruption and variable physical parameters expose
+supported failures. The compositional stream stops fail-closed on an ambiguous
+observable action target, so it has no fabricated partial physical score.
 
 Inspect or safely manage local artifacts with:
 

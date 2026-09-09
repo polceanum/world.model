@@ -2,6 +2,33 @@
 
 ## Unreleased — 2026-07-28
 
+### 2026-09-09 streamed capability evidence
+
+- Added `scripts/run_capability_factor.py` and a deterministic 22-cell streamed
+  evaluator for sensor noise/dropout, real variable-parameter simulation,
+  calibrated camera re-rendering, broad known impulses, partial visibility,
+  and the combined 92M-seed holdout. Runs retain only compact reduced evidence.
+- Generalized nominal materialization with opt-in generator-only physical
+  parameters and broad actions while preserving the original default call
+  path/signatures. Added calibrated camera trajectories over unchanged private
+  physical truth and retained a truth-free RGB-D/action runtime boundary.
+- Fixed lifecycle prediction ordering when same-frame mapped and unmapped
+  removals coexist. Generalized the dynamic-set action handle margin from the
+  old two-object `0.05` separation to `0.02`; the absolute `0.95` similarity
+  gate and ambiguous-tie rejection remain.
+- Executed all five factor screens. Camera motion, partial visibility, and
+  broad known actions pass. Sensor noise fails perception/tracking/contact
+  floors; variable parameters fail current position, collision, and coverage.
+  The combined holdout stops fail-closed on an unresolved N=4 appearance
+  target, bounding possible handle resolution at `0.9545`.
+- Added atomic runtime-refusal summaries so failed screens produce a portable
+  red report instead of an empty run. The dashboard now merges per-family
+  evidence, physical/resources, and sourced nominal planning without erasing
+  unsupported factor-conditioned planning. Managed runs remain about 7.52 MiB.
+- Made the visualisation package load Matplotlib lazily, keeping static
+  dashboard and artifact-management commands free of plotting/font-cache
+  startup. The complete gate passes with `2387 passed, 16 skipped`.
+
 ### 2026-09-08 general capability and compact visual progress
 
 - Established the reconciled capability workbench baseline as commit

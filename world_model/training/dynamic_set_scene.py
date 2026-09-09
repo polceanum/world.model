@@ -108,6 +108,8 @@ def preflight_dynamic_set_episode(
     *,
     known_action_observed: Tensor,
     counterfactual_no_action_pair_collision: Tensor | None = None,
+    expected_parameters: Mapping[str, float] | None = None,
+    broad_known_action: bool = False,
 ) -> DynamicSetSceneCertificate:
     """Reject any episode outside the complete-observation physical family.
 
@@ -160,13 +162,18 @@ def preflight_dynamic_set_episode(
     if peak_count != row_cell_count:
         raise ValueError("episode peak cardinality differs from its physical cell")
 
-    for name, expected in (
-        ("radius", DYNAMIC_SET_RADIUS_M),
-        ("mass", DYNAMIC_SET_MASS),
-        ("drag", DYNAMIC_SET_DRAG),
-        ("restitution", DYNAMIC_SET_RESTITUTION),
-        ("friction", DYNAMIC_SET_FRICTION),
-    ):
+    parameters = {
+        "radius": DYNAMIC_SET_RADIUS_M,
+        "mass": DYNAMIC_SET_MASS,
+        "drag": DYNAMIC_SET_DRAG,
+        "restitution": DYNAMIC_SET_RESTITUTION,
+        "friction": DYNAMIC_SET_FRICTION,
+    }
+    if expected_parameters is not None:
+        if set(expected_parameters) != set(parameters):
+            raise ValueError("expected physical parameters must contain the canonical five fields")
+        parameters = {name: float(value) for name, value in expected_parameters.items()}
+    for name, expected in parameters.items():
         _assert_fixed_parameter(objects, active, name=name, expected=expected)
 
     calibrated = _tensor(camera, "calibrated")
@@ -251,7 +258,13 @@ def preflight_dynamic_set_episode(
     observed_collision = pair_collision & upper
     natural_collision_count = int(observed_collision.sum()) if not row.known_action else 0
     action_collision_count = 0
-    if row.known_action and row.contact:
+    if broad_known_action and row.known_action:
+        # Capability actions deliberately span directions and magnitudes beyond
+        # the old causal-contact templates. Presence/absence, visibility, and
+        # truth/public action equality remain enforced above; only the legacy
+        # action-induced-vs-natural counterfactual classification is skipped.
+        natural_collision_count = int(observed_collision.sum())
+    elif row.known_action and row.contact:
         no_action_collision = counterfactual_no_action_pair_collision
         if (
             not isinstance(no_action_collision, Tensor)

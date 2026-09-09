@@ -94,7 +94,7 @@ MAXIMUM_PAIRED_EVALUATION_BATCH_SIZE = 32
 # governed populations naturally flush at B22 while synthetic homogeneous
 # populations may use the full measured-safe ceiling.
 DEFAULT_PAIRED_EVALUATION_BATCH_SIZE = MAXIMUM_PAIRED_EVALUATION_BATCH_SIZE
-_PUBLIC_ACTION_HANDLE_COSINE_MARGIN = 0.05
+_PUBLIC_ACTION_HANDLE_COSINE_MARGIN = 0.02
 _PUBLIC_ACTION_SINGLE_COSINE = 0.95
 _MISSING_EVENT_TIMING_PENALTY_FRAMES = float(DYNAMIC_SET_FRAMES)
 _MISSING_BIRTH_LATENCY_PENALTY_FRAMES = 2.0
@@ -1704,6 +1704,23 @@ def _nearest_event_timing(
     return previous[-1], len(truth)
 
 
+def _ordered_lifecycle_predictions(
+    predictions: Sequence[tuple[int, int | None]],
+) -> tuple[tuple[int, int | None], ...]:
+    """Order lifecycle detections even when association is unresolved."""
+
+    return tuple(
+        sorted(
+            predictions,
+            key=lambda item: (
+                item[0],
+                item[1] is None,
+                -1 if item[1] is None else item[1],
+            ),
+        )
+    )
+
+
 def _score_lifecycle(
     accumulator: DynamicSetCellAccumulator,
     trace: DynamicSetEpisodeTrace,
@@ -1757,7 +1774,7 @@ def _score_lifecycle(
     unmatched_births = set(truth_births)
     birth_tp = 0
     birth_fp = 0
-    for predicted_frame, mapped in sorted(predicted_births):
+    for predicted_frame, mapped in _ordered_lifecycle_predictions(predicted_births):
         if mapped not in unmatched_births:
             birth_fp += 1
             continue
@@ -1791,7 +1808,7 @@ def _score_lifecycle(
     unmatched_removals = set(truth_removals)
     removal_tp = 0
     removal_fp = 0
-    for predicted_frame, mapped in sorted(predicted_removals):
+    for predicted_frame, mapped in _ordered_lifecycle_predictions(predicted_removals):
         if mapped not in unmatched_removals:
             removal_fp += 1
             continue

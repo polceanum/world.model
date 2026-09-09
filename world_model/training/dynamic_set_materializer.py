@@ -92,7 +92,11 @@ _ALBEDO_PALETTE = torch.tensor(
     dtype=torch.float32,
 )
 _REPLACEMENT_ALBEDO = torch.tensor([0.14, 0.92, 0.62], dtype=torch.float32)
-_PUBLIC_ACTION_HANDLE_COSINE_MARGIN = 0.05
+# The observable set descriptor is exact for the addressed object, while some
+# neighbouring synthetic colours are naturally closer than the old two-object
+# palette. A 0.02 separation still rejects ties and near-ties but supports all
+# six visibly distinct palette entries.
+_PUBLIC_ACTION_HANDLE_COSINE_MARGIN = 0.02
 _PUBLIC_ACTION_SINGLE_COSINE = 0.95
 _PUBLIC_BOUNDARY_SCHEMA = "dynamic_set_public_boundary_v1"
 _UNBOUND_ROW_SHA256 = "0" * 64
@@ -118,6 +122,56 @@ _PUBLIC_TENSOR_SCHEMA = {
     "known_action_appearance_handle": ((1, 8), torch.float32),
     "known_impulse_world": ((1, 3), torch.float32),
 }
+
+
+@dataclass(frozen=True, slots=True)
+class DynamicSetPhysicalParameters:
+    """Generator-only homogeneous physical parameters for one scene."""
+
+    radius: float = DYNAMIC_SET_RADIUS_M
+    mass: float = DYNAMIC_SET_MASS
+    drag: float = DYNAMIC_SET_DRAG
+    restitution: float = DYNAMIC_SET_RESTITUTION
+    friction: float = DYNAMIC_SET_FRICTION
+
+    def validate(self) -> DynamicSetPhysicalParameters:
+        values = asdict(self)
+        if any(not math.isfinite(float(value)) for value in values.values()):
+            raise ValueError("dynamic-set physical parameters must be finite")
+        if self.radius <= 0.0 or self.mass <= 0.0 or self.drag < 0.0:
+            raise ValueError("radius/mass must be positive and drag nonnegative")
+        if not 0.0 <= self.restitution <= 1.0 or not 0.0 <= self.friction <= 1.0:
+            raise ValueError("restitution and friction must lie in [0,1]")
+        return self
+
+    def preflight_mapping(self) -> dict[str, float]:
+        return {name: float(value) for name, value in asdict(self.validate()).items()}
+
+
+DEFAULT_DYNAMIC_SET_PHYSICAL_PARAMETERS = DynamicSetPhysicalParameters()
+
+
+@dataclass(frozen=True, slots=True)
+class DynamicSetKnownAction:
+    """Generator-only broad impulse used by public capability evaluation."""
+
+    frame_index: int
+    target_rank: int
+    impulse_world: tuple[float, float, float]
+
+    def validate(self, row: PhysicalManifestRow) -> DynamicSetKnownAction:
+        if not row.known_action or row.action_time_stratum is None:
+            raise ValueError("a broad known action requires a known-action manifest row")
+        if self.frame_index != _ACTION_FRAMES[row.action_time_stratum]:
+            raise ValueError("broad action frame differs from the manifest time stratum")
+        if self.target_rank != row.action_target_rank:
+            raise ValueError("broad action target differs from the manifest target rank")
+        impulse = torch.tensor(self.impulse_world, dtype=torch.float32)
+        if impulse.shape != (3,) or not bool(torch.isfinite(impulse).all()):
+            raise ValueError("broad action impulse must be a finite world vector")
+        if float(torch.linalg.vector_norm(impulse)) <= 0.0:
+            raise ValueError("broad known action must have nonzero impulse")
+        return self
 
 
 @dataclass(frozen=True, slots=True)
@@ -772,6 +826,7 @@ def _make_state(
     row: PhysicalManifestRow,
     candidate_seed: int,
     camera: CameraFrame,
+    parameters: DynamicSetPhysicalParameters,
 ) -> tuple[SphereState, _LifecyclePlan, tuple[int, int] | None]:
     generator = torch.Generator(device="cpu")
     generator.manual_seed(candidate_seed)
@@ -810,11 +865,11 @@ def _make_state(
     position = torch.where(active.unsqueeze(-1), position, torch.zeros_like(position))
     velocity = torch.where(active.unsqueeze(-1), velocity, torch.zeros_like(velocity))
     albedo = torch.where(active.unsqueeze(-1), albedo, torch.zeros_like(albedo))
-    radius = torch.full((DYNAMIC_SET_MAX_OBJECTS, 1), DYNAMIC_SET_RADIUS_M)
-    mass = torch.full((DYNAMIC_SET_MAX_OBJECTS, 1), DYNAMIC_SET_MASS)
-    restitution = torch.full((DYNAMIC_SET_MAX_OBJECTS, 1), DYNAMIC_SET_RESTITUTION)
-    drag = torch.full((DYNAMIC_SET_MAX_OBJECTS, 1), DYNAMIC_SET_DRAG)
-    friction = torch.full((DYNAMIC_SET_MAX_OBJECTS, 1), DYNAMIC_SET_FRICTION)
+    radius = torch.full((DYNAMIC_SET_MAX_OBJECTS, 1), parameters.radius)
+    mass = torch.full((DYNAMIC_SET_MAX_OBJECTS, 1), parameters.mass)
+    restitution = torch.full((DYNAMIC_SET_MAX_OBJECTS, 1), parameters.restitution)
+    drag = torch.full((DYNAMIC_SET_MAX_OBJECTS, 1), parameters.drag)
+    friction = torch.full((DYNAMIC_SET_MAX_OBJECTS, 1), parameters.friction)
     orientation = torch.zeros((DYNAMIC_SET_MAX_OBJECTS, 4), dtype=torch.float32)
     orientation[:, 3] = 1.0
     state = SphereState(
@@ -841,6 +896,7 @@ def _apply_lifecycle(
     state: SphereState,
     lifecycle: _LifecyclePlan,
     frame_index: int,
+    parameters: DynamicSetPhysicalParameters,
 ) -> tuple[SphereState, Tensor, Tensor]:
     created = torch.zeros(DYNAMIC_SET_MAX_OBJECTS, dtype=torch.bool)
     removed = torch.zeros_like(created)
@@ -891,11 +947,11 @@ def _apply_lifecycle(
         object_id[slot] = lifecycle.birth_object_id
         position[slot] = lifecycle.birth_position
         velocity[slot] = lifecycle.birth_velocity
-        radius[slot] = DYNAMIC_SET_RADIUS_M
-        mass[slot] = DYNAMIC_SET_MASS
-        restitution[slot] = DYNAMIC_SET_RESTITUTION
-        drag[slot] = DYNAMIC_SET_DRAG
-        friction[slot] = DYNAMIC_SET_FRICTION
+        radius[slot] = parameters.radius
+        mass[slot] = parameters.mass
+        restitution[slot] = parameters.restitution
+        drag[slot] = parameters.drag
+        friction[slot] = parameters.friction
         albedo[slot] = lifecycle.birth_albedo
         orientation[slot].zero_()
         orientation[slot, 3] = 1.0
@@ -1014,6 +1070,7 @@ def _known_action_impulse(
     row: PhysicalManifestRow,
     pair: tuple[int, int] | None,
     camera: CameraFrame,
+    action: DynamicSetKnownAction | None = None,
 ) -> Tensor:
     """Construct the public command from frozen scene factors, never truth state."""
 
@@ -1022,6 +1079,10 @@ def _known_action_impulse(
         return impulse
     assert row.action_target_rank is not None
     target = row.action_target_rank
+    if action is not None:
+        action.validate(row)
+        impulse[target] = torch.tensor(action.impulse_world, dtype=torch.float32)
+        return impulse
     if row.contact_origin == "action_induced":
         assert pair is not None
         if pair[0] != target:
@@ -1067,9 +1128,16 @@ def _known_action_object_id(
     return target
 
 
-def _build_candidate_episode(row: PhysicalManifestRow, candidate_seed: int) -> _Candidate:
+def _build_candidate_episode(
+    row: PhysicalManifestRow,
+    candidate_seed: int,
+    parameters: DynamicSetPhysicalParameters = DEFAULT_DYNAMIC_SET_PHYSICAL_PARAMETERS,
+    action: DynamicSetKnownAction | None = None,
+) -> _Candidate:
+    if action is not None:
+        action.validate(row)
     camera = _camera(row)
-    state, lifecycle, pair = _make_state(row, candidate_seed, camera)
+    state, lifecycle, pair = _make_state(row, candidate_seed, camera, parameters)
     physics = PhysicsConfig(
         gravity=(0.0, 0.0, 0.0),
         bounds=_WORLD_BOUNDS,
@@ -1081,7 +1149,7 @@ def _build_candidate_episode(row: PhysicalManifestRow, candidate_seed: int) -> _
     # Advance an exact paired control from the same initial state and lifecycle
     # while withholding only the declared impulse.  Its collision ledger is
     # private preflight evidence: it is never exposed by ``public_frames``.
-    requires_causal_control = row.known_action and row.contact
+    requires_causal_control = row.known_action and row.contact and action is None
     no_action_state = state.clone() if requires_causal_control else None
     no_action_pair_cache = (
         prevalidated_sphere_pair_cache(no_action_state) if no_action_state is not None else None
@@ -1103,7 +1171,9 @@ def _build_candidate_episode(row: PhysicalManifestRow, candidate_seed: int) -> _
         empty_physics_events(DYNAMIC_SET_MAX_OBJECTS) if requires_causal_control else None
     )
     action_frame = (
-        None if row.action_time_stratum is None else _ACTION_FRAMES[row.action_time_stratum]
+        action.frame_index
+        if action is not None
+        else (None if row.action_time_stratum is None else _ACTION_FRAMES[row.action_time_stratum])
     )
     # These are the public action declarations, constructed from the manifest
     # before inspecting any simulator event output.  Keeping this ledger
@@ -1131,7 +1201,11 @@ def _build_candidate_episode(row: PhysicalManifestRow, candidate_seed: int) -> _
             action_frame,
         )
         declared_action_timestamp[action_frame, target] = timestamps[action_frame]
-        declared_impulse_world[action_frame] = _known_action_impulse(row, pair, camera)
+        declared_impulse_world[action_frame] = (
+            _known_action_impulse(row, pair, camera)
+            if action is None
+            else _known_action_impulse(row, pair, camera, action)
+        )
         if bool(
             declared_impulse_world[action_frame, ~declared_action_observed[action_frame]]
             .ne(0)
@@ -1140,12 +1214,13 @@ def _build_candidate_episode(row: PhysicalManifestRow, candidate_seed: int) -> _
             raise ValueError("simulator impulse targets an undeclared public object")
 
     for frame_index, timestamp_tensor in enumerate(timestamps):
-        state, created, removed = _apply_lifecycle(state, lifecycle, frame_index)
+        state, created, removed = _apply_lifecycle(state, lifecycle, frame_index, parameters)
         if no_action_state is not None:
             no_action_state, no_action_created, no_action_removed = _apply_lifecycle(
                 no_action_state,
                 lifecycle,
                 frame_index,
+                parameters,
             )
             if not torch.equal(created, no_action_created) or not torch.equal(
                 removed, no_action_removed
@@ -1309,6 +1384,22 @@ def _build_candidate_episode(row: PhysicalManifestRow, candidate_seed: int) -> _
             "boundary_names": BOUNDARY_NAMES,
             "action_frame": -1 if action_frame is None else action_frame,
             "contact_causality_preflight": "paired_no_action_v1",
+            **(
+                {}
+                if parameters == DEFAULT_DYNAMIC_SET_PHYSICAL_PARAMETERS
+                else {"physical_parameters": parameters.preflight_mapping()}
+            ),
+            **(
+                {}
+                if action is None
+                else {
+                    "broad_known_action": {
+                        "frame_index": action.frame_index,
+                        "target_rank": action.target_rank,
+                        "impulse_world": list(action.impulse_world),
+                    }
+                }
+            ),
         },
     }
     validate_episode(episode)
@@ -1391,6 +1482,8 @@ def _materialize_dynamic_set_episode_core(
     row: PhysicalManifestRow,
     *,
     maximum_attempts: int = DEFAULT_MATERIALIZATION_ATTEMPTS,
+    parameters: DynamicSetPhysicalParameters = DEFAULT_DYNAMIC_SET_PHYSICAL_PARAMETERS,
+    action: DynamicSetKnownAction | None = None,
 ) -> DynamicSetMaterialization:
     """Materialize one already-authorized row after common validation."""
 
@@ -1400,19 +1493,39 @@ def _materialize_dynamic_set_episode_core(
         or maximum_attempts <= 0
     ):
         raise ValueError("maximum_attempts must be a positive integer")
+    parameters.validate()
+    if action is not None:
+        action.validate(row)
     rejection_reasons: list[str] = []
     for attempt_index in range(maximum_attempts):
         candidate_seed = _candidate_seed(row.seed, attempt_index)
         try:
-            candidate = _build_candidate_episode(row, candidate_seed)
-            certificate = preflight_dynamic_set_episode(
-                candidate.episode,
-                row,
-                known_action_observed=candidate.known_action_observed,
-                counterfactual_no_action_pair_collision=(
-                    candidate.counterfactual_no_action_pair_collision
-                ),
-            )
+            if parameters == DEFAULT_DYNAMIC_SET_PHYSICAL_PARAMETERS and action is None:
+                candidate = _build_candidate_episode(row, candidate_seed)
+                certificate = preflight_dynamic_set_episode(
+                    candidate.episode,
+                    row,
+                    known_action_observed=candidate.known_action_observed,
+                    counterfactual_no_action_pair_collision=(
+                        candidate.counterfactual_no_action_pair_collision
+                    ),
+                )
+            else:
+                candidate = _build_candidate_episode(row, candidate_seed, parameters, action)
+                certificate = preflight_dynamic_set_episode(
+                    candidate.episode,
+                    row,
+                    known_action_observed=candidate.known_action_observed,
+                    counterfactual_no_action_pair_collision=(
+                        candidate.counterfactual_no_action_pair_collision
+                    ),
+                    expected_parameters=(
+                        None
+                        if parameters == DEFAULT_DYNAMIC_SET_PHYSICAL_PARAMETERS
+                        else parameters.preflight_mapping()
+                    ),
+                    broad_known_action=action is not None,
+                )
             _preflight_lifecycle_visibility(candidate.episode)
         except (RuntimeError, ValueError) as error:
             rejection_reasons.append(f"{type(error).__name__}: {error}")
@@ -1463,6 +1576,72 @@ def materialize_dynamic_set_episode(
     if row.split not in _PUBLIC_MATERIALIZATION_SPLITS:
         raise PermissionError("protected physical rows require the governed evaluator")
     return _materialize_dynamic_set_episode(row, maximum_attempts=maximum_attempts)
+
+
+def materialize_dynamic_set_episode_with_parameters(
+    row: PhysicalManifestRow,
+    parameters: DynamicSetPhysicalParameters,
+    *,
+    maximum_attempts: int = DEFAULT_MATERIALIZATION_ATTEMPTS,
+) -> DynamicSetMaterialization:
+    """Materialize a public row under explicit generator-only physics.
+
+    The default public function remains the byte-for-byte nominal path. This
+    entry point exists for broad capability evaluation and records non-default
+    parameters in private episode provenance only.
+    """
+
+    _validate_row(row)
+    parameters.validate()
+    if row.split not in _PUBLIC_MATERIALIZATION_SPLITS:
+        raise PermissionError("protected physical rows require the governed evaluator")
+    return _materialize_dynamic_set_episode_core(
+        row,
+        maximum_attempts=maximum_attempts,
+        parameters=parameters,
+    )
+
+
+def materialize_dynamic_set_episode_with_action(
+    row: PhysicalManifestRow,
+    action: DynamicSetKnownAction,
+    *,
+    maximum_attempts: int = DEFAULT_MATERIALIZATION_ATTEMPTS,
+) -> DynamicSetMaterialization:
+    """Materialize a public row with one broader observable impulse."""
+
+    _validate_row(row)
+    action.validate(row)
+    if row.split not in _PUBLIC_MATERIALIZATION_SPLITS:
+        raise PermissionError("protected physical rows require the governed evaluator")
+    return _materialize_dynamic_set_episode_core(
+        row,
+        maximum_attempts=maximum_attempts,
+        action=action,
+    )
+
+
+def materialize_dynamic_set_episode_with_controls(
+    row: PhysicalManifestRow,
+    *,
+    parameters: DynamicSetPhysicalParameters = DEFAULT_DYNAMIC_SET_PHYSICAL_PARAMETERS,
+    action: DynamicSetKnownAction | None = None,
+    maximum_attempts: int = DEFAULT_MATERIALIZATION_ATTEMPTS,
+) -> DynamicSetMaterialization:
+    """Materialize jointly controlled physics/action capability evidence."""
+
+    _validate_row(row)
+    parameters.validate()
+    if action is not None:
+        action.validate(row)
+    if row.split not in _PUBLIC_MATERIALIZATION_SPLITS:
+        raise PermissionError("protected physical rows require the governed evaluator")
+    return _materialize_dynamic_set_episode_core(
+        row,
+        maximum_attempts=maximum_attempts,
+        parameters=parameters,
+        action=action,
+    )
 
 
 def _materialize_protected_dynamic_set_episode(
@@ -1877,13 +2056,19 @@ def iter_dynamic_set_public_frames(
 
 
 __all__ = [
+    "DEFAULT_DYNAMIC_SET_PHYSICAL_PARAMETERS",
     "DEFAULT_MATERIALIZATION_ATTEMPTS",
     "DynamicSetMaterialization",
     "DynamicSetMaterializationError",
+    "DynamicSetKnownAction",
+    "DynamicSetPhysicalParameters",
     "DynamicSetPublicBoundaryEvidence",
     "DynamicSetPublicFrame",
     "certify_dynamic_set_public_boundary",
     "inspect_dynamic_set_public_boundary",
     "iter_dynamic_set_public_frames",
     "materialize_dynamic_set_episode",
+    "materialize_dynamic_set_episode_with_action",
+    "materialize_dynamic_set_episode_with_controls",
+    "materialize_dynamic_set_episode_with_parameters",
 ]
