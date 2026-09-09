@@ -24,6 +24,13 @@
   persistent/reference identity alignment, unobstructed readouts, physical-time
   playback, and scrubbers. Add three causally closed frame-15-to-2-second
   open-loop forecasts using the six real evaluator horizons and path trails.
+- [x] Finish dashboard semantics: name and unit every chart/animation axis,
+  expose numeric animation bounds and evidence sources, colour uncertainty by
+  distance from its 90% target, summarize worst-cardinality planning, and
+  collapse the complete planning/run ledgers without discarding their data.
+- [ ] Execute the staged general-capability scale-up in
+  `project/NEXT_SCALE_PLAN.md`: failure-owner ablations, parity-safe evaluation
+  throughput, 4/8-second rollout qualification, then N=8 RGB-D perception.
 - [x] Add manifest-scoped run inventory/prune/clear management with a 250 MiB
   rolling cap, protected incumbent/pins/archive, and fail-closed path safety.
 - [x] Stream physical workbench episodes and remove terminal optimizer state;

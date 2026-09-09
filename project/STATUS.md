@@ -52,10 +52,11 @@ changes. Reduced-motion preferences disable autoplay.
 The final animation evidence run is
 `runs/20260909-capability-compositional-physical-v8`. It passes every declared
 compositional physical gate. The six vector payloads total `15,418` bytes, the
-complete run occupies `380,271` bytes, and the dashboard is `170,267` bytes.
+complete run occupies `391,033` bytes after portable-report polish, and the
+dashboard is `186,253` bytes.
 All contain only rounded positions, identity correspondence, timestamps, and
 sparse events—no retained RGB-D, image, GIF, or video. The managed run tree is
-`12,386,284` bytes (about 11.81 MiB) against the 250 MiB cap; `.archive` remains
+`12,413,032` bytes (about 11.84 MiB) against the 250 MiB cap; `.archive` remains
 separately displayed at `34,315,899` bytes (about 32.73 MiB). Artifact-policy
 dry-run proposes no deletion.
 
@@ -65,6 +66,16 @@ six cards. It reports zero page errors, stable pauses, and zero image/video
 elements. The forecast examples cover N=6 best (`0.014866 m` 2-second RMSE),
 N=4 representative contact (`0.031503 m`), and N=5 worst contact (`0.087379
 m`).
+
+The 10 September presentation audit names and units every quantitative chart and
+animation axis, adds numeric metre bounds and event times, exposes the retained
+animation source run, and documents the relative—not pass/fail—heatmap scale.
+Coverage colour now measures distance from the declared 90% target. Planning
+shows the worst cardinality per factor/K while retaining every detailed slice
+inside a collapsed ledger; the complete run ledger is likewise preserved but
+collapsed. The staged next phase is frozen as
+`project/NEXT_SCALE_PLAN.md`: diagnose the current failures, accelerate exact
+evaluation, add 4/8-second behavior, then open N=8 RGB-D qualification.
 
 The real 22-cell single-factor screens are compact (about 0.20 MiB each) and
 retain no generated episodes or checkpoints. Calibrated camera motion and
@@ -118,7 +129,7 @@ invariant cover unmeasured rather than fabricating individual violations.
 The most recent complete repository gate before this presentation repair passes
 with `2404 passed, 16 skipped` and 13 established governed-execution thread-
 setting warnings in `4030.05 s`.
-The latest 90-test focused animation/evaluation/planning/artifact/dynamic-set
+The latest 93-test focused animation/evaluation/planning/artifact/dynamic-set
 gate, Ruff lint/format, Python compilation, and diff-integrity checks also pass.
 
 New runs receive manifest-scoped compact retention: summaries/HTML are kept,

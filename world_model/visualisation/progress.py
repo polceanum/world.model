@@ -40,6 +40,19 @@ def _format_number(value: object, *, digits: int = 4) -> str:
     return f"{number:.{digits}f}"
 
 
+def _format_axis_tick(value: float) -> str:
+    if value == 0.0:
+        return "0"
+    if abs(value) < 0.001 or abs(value) >= 1_000:
+        return f"{value:.2e}"
+    return f"{value:.3f}".rstrip("0").rstrip(".")
+
+
+def _short_tick_label(value: object, *, maximum: int = 18) -> str:
+    label = str(value)
+    return label if len(label) <= maximum else f"…{label[-(maximum - 1) :]}"
+
+
 def _score_value(summary: CapabilityRunSummary, name: str) -> float | None:
     value = summary.scores.get(name)
     if isinstance(value, Mapping):
@@ -49,9 +62,15 @@ def _score_value(summary: CapabilityRunSummary, name: str) -> float | None:
     return None
 
 
-def _svg_line_chart(points: Sequence[tuple[str, float]], *, title: str) -> str:
-    width, height = 720, 220
-    left, right, top, bottom = 58, 18, 28, 42
+def _svg_line_chart(
+    points: Sequence[tuple[str, float]],
+    *,
+    title: str,
+    x_label: str,
+    y_label: str,
+) -> str:
+    width, height = 720, 250
+    left, right, top, bottom = 78, 20, 30, 62
     if not points:
         return f'<div class="empty">{_escape(title)}: unmeasured</div>'
     values = [value for _, value in points]
@@ -62,7 +81,11 @@ def _svg_line_chart(points: Sequence[tuple[str, float]], *, title: str) -> str:
     span_x = max(1, len(points) - 1)
     coords: list[tuple[float, float]] = []
     for index, (_, value) in enumerate(points):
-        x = left + index * (width - left - right) / span_x
+        x = (
+            (left + width - right) / 2
+            if len(points) == 1
+            else left + index * (width - left - right) / span_x
+        )
         y = top + (high - value) * (height - top - bottom) / (high - low)
         coords.append((x, y))
     polyline = " ".join(f"{x:.2f},{y:.2f}" for x, y in coords)
@@ -71,13 +94,44 @@ def _svg_line_chart(points: Sequence[tuple[str, float]], *, title: str) -> str:
         f"{value:.8g}</title></circle>"
         for (label, value), (x, y) in zip(points, coords, strict=True)
     )
+    tick_count = min(6, len(points))
+    tick_indices = (
+        [0]
+        if tick_count == 1
+        else sorted(
+            {round(index * (len(points) - 1) / (tick_count - 1)) for index in range(tick_count)}
+        )
+    )
+    x_ticks = "".join(
+        f'<line x1="{coords[index][0]:.2f}" y1="{height - bottom}" '
+        f'x2="{coords[index][0]:.2f}" y2="{height - bottom + 5}"/>'
+        f'<text x="{coords[index][0]:.2f}" y="{height - bottom + 18}" '
+        f'class="axis-tick" text-anchor="middle">{_escape(_short_tick_label(points[index][0]))}</text>'
+        for index in tick_indices
+    )
+    y_values = (high, (high + low) / 2.0, low)
+    y_positions = (top, (top + height - bottom) / 2.0, height - bottom)
+    y_ticks = "".join(
+        f'<line class="chart-grid-line" x1="{left}" y1="{y:.2f}" '
+        f'x2="{width - right}" y2="{y:.2f}"/>'
+        f'<text x="{left - 8}" y="{y + 4:.2f}" class="axis-tick" '
+        f'text-anchor="end">{_escape(_format_axis_tick(value))}</text>'
+        for value, y in zip(y_values, y_positions, strict=True)
+    )
     return (
         f'<svg class="chart" viewBox="0 0 {width} {height}" role="img" '
-        f'aria-label="{_escape(title)}">'
+        f'aria-label="{_escape(title)}; horizontal axis {_escape(x_label)}; '
+        f'vertical axis {_escape(y_label)}">'
         f'<text x="{left}" y="18" class="chart-title">{_escape(title)}</text>'
+        f"{y_ticks}"
         f'<line x1="{left}" y1="{top}" x2="{left}" y2="{height - bottom}"/>'
         f'<line x1="{left}" y1="{height - bottom}" x2="{width - right}" y2="{height - bottom}"/>'
-        f'<text x="4" y="{top + 5}">{high:.3g}</text><text x="4" y="{height - bottom}">{low:.3g}</text>'
+        f"{x_ticks}"
+        f'<text x="{(left + width - right) / 2:.2f}" y="{height - 8}" '
+        f'class="axis-label" text-anchor="middle">{_escape(x_label)}</text>'
+        f'<text x="15" y="{(top + height - bottom) / 2:.2f}" class="axis-label" '
+        f'text-anchor="middle" transform="rotate(-90 15 {(top + height - bottom) / 2:.2f})">'
+        f"{_escape(y_label)}</text>"
         f'<polyline points="{polyline}"/>{circles}</svg>'
     )
 
@@ -105,7 +159,14 @@ def _trend_charts(history: Sequence[CapabilityRunSummary]) -> str:
             and (value := _score_value(item, "candidate")) is not None
         ]
         if points:
-            charts.append(_svg_line_chart(points, title=title))
+            charts.append(
+                _svg_line_chart(
+                    points,
+                    title=title,
+                    x_label="Run",
+                    y_label="Score (lower is better)",
+                )
+            )
             grouped_formats.add(source_format)
     other_points = [
         (item.run_id, value)
@@ -116,7 +177,12 @@ def _trend_charts(history: Sequence[CapabilityRunSummary]) -> str:
     if other_points:
         charts.insert(
             0,
-            _svg_line_chart(other_points, title="Overall capability score across runs"),
+            _svg_line_chart(
+                other_points,
+                title="Overall capability score across runs",
+                x_label="Run",
+                y_label="Score (lower is better)",
+            ),
         )
     return "".join(charts) or '<div class="empty">Capability trend: unmeasured</div>'
 
@@ -138,6 +204,7 @@ def _heatmap(
     metric: str,
     title: str,
     lower_is_better: bool,
+    ideal_value: float | None = None,
 ) -> str:
     cells = summary.cell_metrics
     if not cells:
@@ -146,8 +213,11 @@ def _heatmap(
     values = [
         value for _, metrics in entries if (value := _cell_value(metrics, metric)) is not None
     ]
-    minimum = min(values, default=0.0)
-    maximum = max(values, default=1.0)
+    comparison_values = [
+        abs(value - ideal_value) if ideal_value is not None else value for value in values
+    ]
+    minimum = min(comparison_values, default=0.0)
+    maximum = max(comparison_values, default=1.0)
     blocks: list[str] = []
     for index, (label, metrics) in enumerate(entries):
         value = _cell_value(metrics, metric)
@@ -158,28 +228,54 @@ def _heatmap(
             color = "#303947"
             display = "—"
         else:
+            comparison = abs(value - ideal_value) if ideal_value is not None else value
             spread = maximum - minimum
             if spread <= 1.0e-12:
                 ratio = 0.5
             else:
-                ratio = min(1.0, max(0.0, (value - minimum) / spread))
+                ratio = min(1.0, max(0.0, (comparison - minimum) / spread))
                 if not lower_is_better:
                     ratio = 1.0 - ratio
             red = int(54 + 175 * ratio)
             green = int(175 - 100 * ratio)
             color = f"rgb({red},{green},92)"
             display = _format_number(value)
+        compact_label = (
+            label.replace("/contact=0/dynamic=0", " · C0 · static")
+            .replace("/contact=1/dynamic=0", " · C1 · static")
+            .replace("/contact=0/dynamic=1", " · C0 · dynamic")
+            .replace("/contact=1/dynamic=1", " · C1 · dynamic")
+        )
         blocks.append(
             f'<g><rect x="{x}" y="{y}" width="102" height="42" rx="6" fill="{color}"/>'
-            f'<text x="{x + 5}" y="{y + 16}" class="cell-label">{_escape(label)}</text>'
+            f"<title>{_escape(label)}: {display}</title>"
+            f'<text x="{x + 5}" y="{y + 16}" class="cell-label">{_escape(compact_label)}</text>'
             f'<text x="{x + 5}" y="{y + 33}" class="cell-value">{display}</text></g>'
         )
     rows = math.ceil(len(entries) / 6)
+    legend_y = 54 * rows + 38
+    best_label = (
+        f"closest to {_format_axis_tick(ideal_value)} target"
+        if ideal_value is not None
+        else ("lower observed" if lower_is_better else "higher observed")
+    )
+    worst_label = (
+        "furthest from target"
+        if ideal_value is not None
+        else ("higher observed" if lower_is_better else "lower observed")
+    )
     return (
-        f'<svg class="heatmap" viewBox="0 0 700 {54 * rows + 44}" role="img" '
-        f'aria-label="{_escape(title)}">'
+        f'<svg class="heatmap" viewBox="0 0 700 {54 * rows + 72}" role="img" '
+        f'aria-label="{_escape(title)}; C means contact; relative colour scale">'
         f'<text x="18" y="20" class="chart-title">{_escape(title)}</text>'
-        f"{''.join(blocks)}</svg>"
+        f"{''.join(blocks)}"
+        f'<rect x="18" y="{legend_y}" width="14" height="10" rx="2" fill="rgb(54,175,92)"/>'
+        f'<text x="38" y="{legend_y + 9}" class="axis-tick">{_escape(best_label)}</text>'
+        f'<rect x="250" y="{legend_y}" width="14" height="10" rx="2" fill="rgb(229,75,92)"/>'
+        f'<text x="270" y="{legend_y + 9}" class="axis-tick">{_escape(worst_label)}</text>'
+        f'<text x="500" y="{legend_y + 9}" class="axis-tick">C0 no contact · C1 contact</text>'
+        f'<text x="18" y="{legend_y + 27}" class="heatmap-note">Relative within this run; colour is not a pass/fail gate.</text>'
+        "</svg>"
     )
 
 
@@ -340,6 +436,12 @@ def _merge_latest_factor_evidence(
         ("forecast_animations", "forecast_animation_source_run"),
     ):
         if isinstance(qualitative.get(field), list) and qualitative.get(field):
+            existing_source = latest.provenance.get(source_field)
+            animation_sources[source_field] = (
+                existing_source
+                if isinstance(existing_source, str) and existing_source
+                else latest.run_id
+            )
             continue
         for summary in reversed(summaries):
             if isinstance(summary.qualitative.get(field), list) and summary.qualitative.get(field):
@@ -390,7 +492,8 @@ def _planning_table(summary: CapabilityRunSummary) -> str:
     if not groups:
         return '<div class="empty">Planning slices: unmeasured</div>'
     latency_rows: list[str] = []
-    rows = []
+    aggregate_rows: list[str] = []
+    rows: list[str] = []
     for factor, evidence, slices in groups:
         invariants = evidence.get("invariants", {})
         if not isinstance(invariants, Mapping):
@@ -404,9 +507,21 @@ def _planning_table(summary: CapabilityRunSummary) -> str:
             f"<td>{_format_number(evidence.get('maximum_cost_difference'))}</td>"
             "</tr>"
         )
+        by_candidate_count: dict[int, list[tuple[float | None, float | None, float | None]]] = {}
         for item in slices:
             if not isinstance(item, Mapping):
                 continue
+            try:
+                candidate_count = int(item.get("candidate_count"))
+            except (TypeError, ValueError):
+                candidate_count = -1
+            by_candidate_count.setdefault(candidate_count, []).append(
+                (
+                    _cell_value(item, "oracle_winner_accuracy"),
+                    _cell_value(item, "normalized_regret_median"),
+                    _cell_value(item, "successful_oracle_goal_success"),
+                )
+            )
             rows.append(
                 "<tr>"
                 f"<td>{_escape(factor)}</td>"
@@ -417,18 +532,37 @@ def _planning_table(summary: CapabilityRunSummary) -> str:
                 f"<td>{_format_number(_cell_value(item, 'successful_oracle_goal_success'))}</td>"
                 "</tr>"
             )
+        for candidate_count, values in sorted(by_candidate_count.items()):
+            winners = [value[0] for value in values if value[0] is not None]
+            regrets = [value[1] for value in values if value[1] is not None]
+            successes = [value[2] for value in values if value[2] is not None]
+            aggregate_rows.append(
+                "<tr>"
+                f"<td>{_escape(factor)}</td>"
+                f"<td>{'K' + str(candidate_count) if candidate_count >= 0 else '—'}</td>"
+                f"<td>{_format_number(min(winners) if winners else None)}</td>"
+                f"<td>{_format_number(max(regrets) if regrets else None)}</td>"
+                f"<td>{_format_number(min(successes) if successes else None)}</td>"
+                "</tr>"
+            )
     latency_table = (
         "<h3>Planning efficiency and numerical agreement</h3>"
         "<table><thead><tr><th>Factor</th><th>Status</th><th>K8 latency (s)</th>"
         "<th>K32 latency (s)</th><th>Maximum cost difference</th></tr></thead>"
         f"<tbody>{''.join(latency_rows)}</tbody></table>"
     )
-    slice_table = (
-        "<h3>Planning quality by cardinality</h3>"
-        "<table><thead><tr><th>Factor</th><th>Count</th><th>Candidates</th><th>Winner accuracy</th>"
-        f"<th>Median regret</th><th>Goal success</th></tr></thead><tbody>{''.join(rows)}</tbody></table>"
+    aggregate_table = (
+        "<h3>Worst-cardinality planning quality</h3>"
+        '<p class="table-note">Minimum winner accuracy and goal success; maximum median regret across measured object counts.</p>'
+        "<table><thead><tr><th>Factor</th><th>Candidates</th><th>Winner accuracy</th>"
+        f"<th>Median regret</th><th>Goal success</th></tr></thead><tbody>{''.join(aggregate_rows)}</tbody></table>"
     )
-    return latency_table + slice_table
+    slice_table = (
+        f'<details class="planning-slices"><summary>Planning quality by cardinality ({len(rows)} detailed slices)</summary>'
+        "<table><thead><tr><th>Factor</th><th>Count</th><th>Candidates</th><th>Winner accuracy</th>"
+        f"<th>Median regret</th><th>Goal success</th></tr></thead><tbody>{''.join(rows)}</tbody></table></details>"
+    )
+    return latency_table + aggregate_table + slice_table
 
 
 def _list(values: Iterable[object]) -> str:
@@ -477,6 +611,10 @@ _ANIMATION_PALETTE = (
     "#ff9f68",
     "#63c5ef",
 )
+_ANIMATION_PLOT_LEFT = 48.0
+_ANIMATION_PLOT_TOP = 18.0
+_ANIMATION_PLOT_WIDTH = 268.0
+_ANIMATION_PLOT_HEIGHT = 184.0
 
 
 def _animation_section(
@@ -519,6 +657,16 @@ def _animation_section(
             continue
         if x_high <= x_low or y_high <= y_low or not isinstance(frames[0], Mapping):
             continue
+        mode = str(animation.get("mode", "tracking"))
+        first_frame = frames[0]
+        try:
+            first_frame_index = int(first_frame.get("frame", 0))
+            first_time = float(first_frame.get("time_s", 0.0))
+            anchor_frame = int(animation.get("anchor_frame", 0))
+        except (TypeError, ValueError):
+            continue
+        if not math.isfinite(first_time):
+            continue
         object_ids: set[int] = set()
         for frame in frames:
             if not isinstance(frame, Mapping):
@@ -553,14 +701,20 @@ def _animation_section(
                     return None
                 if not math.isfinite(x_value) or not math.isfinite(y_value):
                     return None
-                x = 28.0 + 280.0 * (x_value - x_min) / (x_max - x_min)
-                y = 202.0 - 184.0 * (y_value - y_min) / (y_max - y_min)
+                x = _ANIMATION_PLOT_LEFT + _ANIMATION_PLOT_WIDTH * (x_value - x_min) / (
+                    x_max - x_min
+                )
+                y = (
+                    _ANIMATION_PLOT_TOP
+                    + _ANIMATION_PLOT_HEIGHT
+                    - _ANIMATION_PLOT_HEIGHT * (y_value - y_min) / (y_max - y_min)
+                )
                 return x, y
             return None
 
-        first = frames[0]
+        first = first_frame
         trails: list[str] = []
-        if animation.get("mode") == "forecast":
+        if mode == "forecast":
             for palette_index, object_id in enumerate(sorted(object_ids)):
                 color = _ANIMATION_PALETTE[palette_index % len(_ANIMATION_PALETTE)]
                 for role in ("truth", "model"):
@@ -590,19 +744,39 @@ def _animation_section(
                     f'r="{radius}" style="--object-color:{color};display:{display}"/>'
                 )
         event_kinds = animation.get("events", [])
-        event_labels = sorted(
-            {
-                str(item.get("kind"))
-                for item in event_kinds
-                if isinstance(item, Mapping) and item.get("kind")
-            }
-        )
-        if animation.get("mode") == "forecast":
+        event_labels: list[str] = []
+        for item in event_kinds:
+            if not isinstance(item, Mapping) or not item.get("kind"):
+                continue
+            try:
+                event_frame = int(item.get("frame"))
+            except (TypeError, ValueError):
+                event_labels.append(str(item["kind"]))
+                continue
+            if mode == "forecast":
+                event_time = f"+{(event_frame - anchor_frame) / 20.0:.2f} s"
+            else:
+                event_time = f"{event_frame / 20.0:.2f} s"
+            event_labels.append(f"{item['kind']} @ {event_time}")
+        if mode == "forecast":
             error_label = "2 s RMSE"
             error_value = animation.get("two_second_position_rmse_m")
         else:
             error_label = "current RMSE"
             error_value = animation.get("current_position_rmse_m")
+        initial_clock = (
+            f"forecast +{first_time:.2f} s · frame {first_frame_index}"
+            if mode == "forecast"
+            else f"frame {first_frame_index} · {first_time:.2f} s"
+        )
+        contact_label = "contact" if bool(animation.get("contact")) else "no contact"
+        membership_label = (
+            "dynamic membership"
+            if bool(animation.get("dynamic_membership"))
+            else "static membership"
+        )
+        horizontal_name = f"World {str(axis_labels[0]).upper()} (m)"
+        vertical_name = f"World {str(axis_labels[1]).upper()} (m)"
         cards.append(
             '<article class="animation-card" '
             f'data-animation-collection="{_escape(collection)}" '
@@ -610,34 +784,52 @@ def _animation_section(
             f"<h3>{_escape(animation.get('label', 'example')).title()}</h3>"
             f'<p class="animation-meta">{_escape(animation.get("episode", "unknown episode"))}'
             f" · N={_escape(animation.get('object_count', '?'))}"
+            f" · {_escape(contact_label)} · {_escape(membership_label)}"
             f" · {_escape(error_label)} {_format_number(error_value)} m</p>"
-            '<svg class="world-animation" viewBox="0 0 336 220" role="img" '
-            f'aria-label="{_escape(animation.get("label", "example"))} model versus reference world trajectory">'
-            '<rect x="28" y="18" width="280" height="184" rx="7" class="animation-stage"/>'
-            '<path d="M28 64H308M28 110H308M28 156H308M98 18V202M168 18V202M238 18V202" '
+            '<svg class="world-animation" viewBox="0 0 336 244" role="img" '
+            f'aria-label="{_escape(animation.get("label", "example"))} model versus reference world trajectory; horizontal axis {_escape(horizontal_name)}; vertical axis {_escape(vertical_name)}">'
+            '<rect x="48" y="18" width="268" height="184" rx="7" class="animation-stage"/>'
+            '<path d="M48 64H316M48 110H316M48 156H316M115 18V202M182 18V202M249 18V202" '
             'class="animation-grid-lines"/>'
             f"{''.join(trails)}"
             f"{''.join(circles)}"
+            f'<text x="48" y="215" class="animation-tick" text-anchor="start">{_escape(_format_axis_tick(x_low))}</text>'
+            f'<text x="316" y="215" class="animation-tick" text-anchor="end">{_escape(_format_axis_tick(x_high))}</text>'
+            f'<text x="44" y="25" class="animation-tick" text-anchor="end">{_escape(_format_axis_tick(y_high))}</text>'
+            f'<text x="44" y="202" class="animation-tick" text-anchor="end">{_escape(_format_axis_tick(y_low))}</text>'
+            f'<text x="182" y="238" class="animation-axis" text-anchor="middle">{_escape(horizontal_name)}</text>'
+            f'<text x="12" y="110" class="animation-axis" text-anchor="middle" transform="rotate(-90 12 110)">{_escape(vertical_name)}</text>'
             "</svg>"
             '<div class="animation-readout"><span class="animation-clock" '
-            'data-animation-clock>frame 0</span><span class="animation-event" '
+            f'data-animation-clock>{_escape(initial_clock)}</span><span class="animation-event" '
             "data-animation-event></span></div>"
-            '<div class="animation-legend"><span class="model-key">● model</span>'
-            f'<span class="truth-key">○ reference</span><span>world '
-            f"{_escape(str(axis_labels[0]).upper())}–{_escape(str(axis_labels[1]).upper())}</span></div>"
-            f'<p class="animation-events">Events: {_escape(", ".join(event_labels) or "none")}</p>'
+            '<div class="animation-legend"><span class="model-key">● model estimate</span>'
+            '<span class="truth-key">○ private reference</span></div>'
+            f'<p class="animation-events">Events: {_escape(" · ".join(event_labels) or "none")}</p>'
             '<div class="animation-controls">'
-            '<button type="button" data-animation-toggle>Pause</button>'
-            '<button type="button" data-animation-replay>Replay</button>'
+            f'<button type="button" data-animation-toggle aria-label="Pause {_escape(animation.get("label", "example"))} animation">Pause</button>'
+            f'<button type="button" data-animation-replay aria-label="Replay {_escape(animation.get("label", "example"))} animation">Replay</button>'
             '<input type="range" min="0" max="100" step="0.1" value="0" '
-            'data-animation-scrubber aria-label="Animation progress"/>'
+            f'data-animation-scrubber aria-label="Scrub {_escape(animation.get("label", "example"))} animation timeline"/>'
             "</div></article>"
         )
     if not cards:
         return ""
+    source_field = (
+        "forecast_animation_source_run"
+        if collection == "forecast_animations"
+        else "animation_source_run"
+    )
+    configured_source = summary.provenance.get(source_field)
+    source_run = (
+        configured_source
+        if isinstance(configured_source, str) and configured_source
+        else summary.run_id
+    )
+    source_text = f' <span class="evidence-source">Evidence source: {_escape(source_run)}.</span>'
     return (
         f"<section><h2>{_escape(title)}</h2>"
-        f'<p class="animation-intro">{_escape(introduction)}</p>'
+        f'<p class="animation-intro">{_escape(introduction)}{source_text}</p>'
         f'<div class="animation-grid">{"".join(cards)}</div></section>'
     )
 
@@ -687,16 +879,16 @@ def _summary_section(summary: CapabilityRunSummary) -> str:
     <section class="hero">
       <div><span class="eyebrow">{_escape(summary.lifecycle_status)}</span><h1>{_escape(summary.run_id)}</h1>
       <p>{_escape(summary.outcome)} · {_escape(summary.created_at_utc)} · {_escape(summary.source_format)}</p></div>
-      <div class="score"><small>candidate / incumbent</small><strong>{_format_number(candidate_score)} / {_format_number(incumbent_score)}</strong><span>{_escape(summary.scores.get("selected", "unselected"))}</span></div>
+      <div class="score"><small>candidate / incumbent · lower is better</small><strong>{_format_number(candidate_score)} / {_format_number(incumbent_score)}</strong><span>{_escape(summary.scores.get("selected", "unselected"))}</span></div>
     </section>
     <section class="grid three">
-      <article><h2>Accuracy</h2><p class="metric">{_format_number(candidate_score)}</p><p>Lower-is-better capability score</p></article>
+      <article><h2>Capability error</h2><p class="metric">{_format_number(candidate_score)}</p><p>Macro-averaged candidate score; lower is better</p></article>
       <article><h2>Uncertainty</h2><p class="metric">{coverage_text}</p><p>Observed nominal-90% coverage range</p></article>
       <article><h2>Planning parity</h2><p class="metric">{_escape(summary.planning.get("serial_vectorized_winner_parity", "—"))}</p><p>Maximum cost difference {_format_number(summary.planning.get("maximum_cost_difference"))}</p></article>
     </section>
-    <section class="grid two"><article><h2>Capability coverage</h2>{_factor_table(summary)}</article><article><h2>Horizon error</h2>{_svg_line_chart(horizon_points, title="Position RMSE across horizon")}</article></section>
+    <section class="grid two"><article><h2>Capability coverage</h2>{_factor_table(summary)}</article><article><h2>Horizon error</h2>{_svg_line_chart(horizon_points, title="Position RMSE across horizon", x_label="Prediction horizon (s)", y_label="Position RMSE (m)")}</article></section>
     <section><h2>Factor performance</h2>{_factor_metric_matrix(summary)}</section>
-    <section><h2>Physical behavior</h2>{_heatmap(summary, metric="current_position_rmse_m", title="Current-position RMSE by count/contact/lifecycle cell", lower_is_better=True)}{_heatmap(summary, metric="uncertainty_90_coverage", title="90% uncertainty coverage by count/contact/lifecycle cell", lower_is_better=False)}</section>
+    <section><h2>Physical behavior</h2>{_heatmap(summary, metric="current_position_rmse_m", title="Current-position RMSE (m) by object count, contact, and membership", lower_is_better=True)}{_heatmap(summary, metric="uncertainty_90_coverage", title="90% uncertainty coverage by object count, contact, and membership", lower_is_better=True, ideal_value=0.90)}</section>
     <section><h2>Downstream planning</h2>{_planning_table(summary)}</section>
     <section class="grid two"><article><h2>Efficiency and storage</h2><dl>
       <dt>Perception latency</dt><dd>{_format_number(resources.get("perception_latency_seconds"))} s</dd>
@@ -721,7 +913,8 @@ def _summary_section(summary: CapabilityRunSummary) -> str:
 
 
 _STYLE = """
-:root{color-scheme:dark;--bg:#0b1017;--panel:#141c27;--muted:#91a0b5;--ink:#f5f7fb;--accent:#69d6c5;--line:#344154}*{box-sizing:border-box}body{margin:0;background:radial-gradient(circle at top right,#172a37,var(--bg) 42%);color:var(--ink);font:14px/1.45 ui-sans-serif,system-ui,sans-serif}main{max-width:1180px;margin:auto;padding:28px}.hero{display:flex;justify-content:space-between;align-items:end;border-top:3px solid var(--accent);padding-top:18px}.hero h1{font-size:clamp(26px,4vw,48px);margin:.1em 0}.hero p,.metric+ p{color:var(--muted)}.eyebrow,.tag{font-size:11px;letter-spacing:.08em;text-transform:uppercase}.score{background:var(--panel);padding:18px 22px;border-radius:12px;display:grid;min-width:240px}.score strong,.metric{font-size:25px;color:var(--accent)}.grid{display:grid;gap:14px;margin:14px 0}.two{grid-template-columns:repeat(2,minmax(0,1fr))}.three{grid-template-columns:repeat(3,minmax(0,1fr))}article,section:not(.hero){background:color-mix(in srgb,var(--panel) 94%,transparent);border:1px solid var(--line);border-radius:12px;padding:16px;margin:14px 0;overflow:auto}section.grid{background:none;border:0;padding:0}section.grid article{margin:0}h2{margin:0 0 12px;font-size:16px}h3{font-size:13px;color:var(--muted)}table{border-collapse:collapse;width:100%}th,td{text-align:left;border-bottom:1px solid var(--line);padding:7px}.tag{padding:3px 6px;border-radius:9px;background:#303947}.tag.measured,.tag.passed{background:#165449}.tag.failed{background:#6b2737}.metric-matrix td{font-variant-numeric:tabular-nums}.metric-pass{background:#123d35}.metric-fail{background:#51232e;color:#ffdce4}.metric-info{background:#1c2d3b}.unmeasured{color:var(--muted)}.empty{color:var(--muted);padding:24px;text-align:center;border:1px dashed var(--line);border-radius:8px}svg{width:100%;min-width:520px}svg line{stroke:var(--line)}svg polyline{fill:none;stroke:var(--accent);stroke-width:3}svg circle{fill:var(--accent)}svg text{fill:var(--muted);font-size:11px}.chart-title{fill:var(--ink);font-size:13px}.cell-label{fill:white;font-size:8px}.cell-value{fill:white;font-size:11px;font-weight:700}dl{display:grid;grid-template-columns:1fr 1fr;gap:7px}dt{color:var(--muted)}dd{margin:0;text-align:right}.animation-intro,.animation-meta,.animation-events{color:var(--muted)}.animation-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}.animation-card{margin:0!important;padding:12px!important}.animation-card h3{margin:0;color:var(--ink);text-transform:capitalize}.animation-meta{min-height:38px;font-size:12px}.world-animation{display:block;min-width:0;background:#0a1119;border:1px solid var(--line);border-radius:8px}.animation-stage{fill:#0c1621;stroke:#344154}.animation-grid-lines{fill:none;stroke:#253444;stroke-width:1}.animation-trail{fill:none;stroke:var(--object-color);stroke-width:1.3;opacity:.5}.animation-trail-truth{stroke-dasharray:3 3;opacity:.25}.animation-model{fill:var(--object-color);stroke:#081018;stroke-width:1.5}.animation-truth{fill:none;stroke:var(--object-color);stroke-width:2;stroke-dasharray:2 2}.animation-readout{display:flex;justify-content:space-between;gap:8px;min-height:20px;margin-top:5px;font-size:11px}.animation-clock{color:#c9d3df;font-variant-numeric:tabular-nums}.animation-event{color:#f3bc61;font-weight:700}.animation-legend{display:flex;gap:12px;margin-top:3px;color:var(--muted);font-size:12px}.model-key{color:var(--accent)}.truth-key{color:#f3bc61}.animation-events{min-height:38px;font-size:12px}.animation-controls{display:flex;align-items:center;gap:8px}.animation-controls button{border:1px solid var(--line);border-radius:7px;background:#1c2d3b;color:var(--ink);padding:5px 11px;cursor:pointer}.animation-controls button:hover{border-color:var(--accent)}.animation-controls input{min-width:72px;flex:1;accent-color:var(--accent)}.run-list a{color:var(--accent)}.notice{border-left:3px solid #f3bc61;padding-left:10px;color:var(--muted)}footer{color:var(--muted);padding:20px 0}@media(max-width:900px){.animation-grid{grid-template-columns:1fr}}@media(max-width:760px){.two,.three{grid-template-columns:1fr}.hero{display:block}.score{margin-top:12px}}@media(prefers-reduced-motion:reduce){.animation-controls button{outline:1px solid var(--muted)}}
+:root{color-scheme:dark;--bg:#0b1017;--panel:#141c27;--muted:#91a0b5;--ink:#f5f7fb;--accent:#69d6c5;--line:#344154}*{box-sizing:border-box}body{margin:0;background:radial-gradient(circle at top right,#172a37,var(--bg) 42%);color:var(--ink);font:14px/1.45 ui-sans-serif,system-ui,sans-serif}main{max-width:1180px;margin:auto;padding:28px}.hero{display:flex;justify-content:space-between;align-items:end;border-top:3px solid var(--accent);padding-top:18px}.hero h1{font-size:clamp(26px,4vw,48px);margin:.1em 0}.hero p,.metric+ p{color:var(--muted)}.eyebrow,.tag{font-size:11px;letter-spacing:.08em;text-transform:uppercase}.score{background:var(--panel);padding:18px 22px;border-radius:12px;display:grid;min-width:240px}.score strong,.metric{font-size:25px;color:var(--accent)}.grid{display:grid;gap:14px;margin:14px 0}.two{grid-template-columns:repeat(2,minmax(0,1fr))}.three{grid-template-columns:repeat(3,minmax(0,1fr))}article,section:not(.hero){background:color-mix(in srgb,var(--panel) 94%,transparent);border:1px solid var(--line);border-radius:12px;padding:16px;margin:14px 0;overflow:auto}section.grid{background:none;border:0;padding:0}section.grid article{margin:0}h2{margin:0 0 12px;font-size:16px}h3{font-size:13px;color:var(--muted)}table{border-collapse:collapse;width:100%}th,td{text-align:left;border-bottom:1px solid var(--line);padding:7px}.tag{padding:3px 6px;border-radius:9px;background:#303947}.tag.measured,.tag.passed{background:#165449}.tag.failed{background:#6b2737}.metric-matrix td{font-variant-numeric:tabular-nums}.metric-pass{background:#123d35}.metric-fail{background:#51232e;color:#ffdce4}.metric-info{background:#1c2d3b}.unmeasured{color:var(--muted)}.empty{color:var(--muted);padding:24px;text-align:center;border:1px dashed var(--line);border-radius:8px}svg{width:100%;min-width:520px}svg line{stroke:var(--line)}svg polyline{fill:none;stroke:var(--accent);stroke-width:3}svg circle{fill:var(--accent)}svg text{fill:var(--muted);font-size:11px}.chart-title{fill:var(--ink);font-size:13px}.axis-label{fill:var(--ink);font-size:11px;font-weight:600}.axis-tick,.heatmap-note{fill:var(--muted);font-size:9px}.chart-grid-line{stroke:#253444;stroke-width:1}.cell-label{fill:white;font-size:8px}.cell-value{fill:white;font-size:11px;font-weight:700}dl{display:grid;grid-template-columns:1fr 1fr;gap:7px}dt{color:var(--muted)}dd{margin:0;text-align:right}.animation-intro,.animation-meta,.animation-events{color:var(--muted)}.evidence-source{display:block;margin-top:4px;color:#c9d3df}.animation-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}.animation-card{margin:0!important;padding:12px!important}.animation-card h3{margin:0;color:var(--ink);text-transform:capitalize}.animation-meta{min-height:54px;font-size:12px}.world-animation{display:block;min-width:0;background:#0a1119;border:1px solid var(--line);border-radius:8px}.animation-stage{fill:#0c1621;stroke:#344154}.animation-grid-lines{fill:none;stroke:#253444;stroke-width:1}.animation-axis{fill:#c9d3df;font-size:10px;font-weight:600}.animation-tick{fill:var(--muted);font-size:8px}.animation-trail{fill:none;stroke:var(--object-color);stroke-width:1.3;opacity:.5}.animation-trail-truth{stroke-dasharray:3 3;opacity:.25}.animation-model{fill:var(--object-color);stroke:#081018;stroke-width:1.5}.animation-truth{fill:none;stroke:var(--object-color);stroke-width:2;stroke-dasharray:2 2}.animation-readout{display:flex;justify-content:space-between;gap:8px;min-height:20px;margin-top:5px;font-size:11px}.animation-clock{color:#c9d3df;font-variant-numeric:tabular-nums}.animation-event{color:#f3bc61;font-weight:700}.animation-legend{display:flex;gap:12px;margin-top:3px;color:var(--muted);font-size:12px}.model-key{color:var(--accent)}.truth-key{color:#f3bc61}.animation-events{min-height:38px;font-size:12px}.animation-controls{display:flex;align-items:center;gap:8px}.animation-controls button{border:1px solid var(--line);border-radius:7px;background:#1c2d3b;color:var(--ink);padding:5px 11px;cursor:pointer}.animation-controls button:hover{border-color:var(--accent)}.animation-controls input{min-width:72px;flex:1;accent-color:var(--accent)}.run-list a{color:var(--accent)}.run-ledger summary{cursor:pointer;color:#c9d3df}.notice{border-left:3px solid #f3bc61;padding-left:10px;color:var(--muted)}footer{color:var(--muted);padding:20px 0}@media(max-width:900px){.animation-grid{grid-template-columns:1fr}}@media(max-width:760px){.two,.three{grid-template-columns:1fr}.hero{display:block}.score{margin-top:12px}}@media(prefers-reduced-motion:reduce){.animation-controls button{outline:1px solid var(--muted)}}
+.table-note{color:var(--muted);font-size:12px}.planning-slices,.run-ledger{margin-top:14px}.planning-slices summary,.run-ledger summary{cursor:pointer;color:#c9d3df;font-weight:600}
 """
 
 
@@ -735,6 +928,7 @@ _ANIMATION_SCRIPT = r"""
   const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
   const states = new Map();
   let pendingFrame = null;
+  const plot = {left: 48, top: 18, width: 268, height: 184};
   const animationFor = root => {
     const items = qualitative[root.dataset.animationCollection];
     return Array.isArray(items) ? items[Number(root.dataset.worldAnimation)] : null;
@@ -746,8 +940,8 @@ _ANIMATION_SCRIPT = r"""
     const horizontal = bounds.horizontal || bounds[axes[0]] || bounds.x;
     const vertical = bounds.vertical || bounds[axes[1]] || bounds.y || bounds.z;
     return {
-      x: 28 + 280 * (point[1] - horizontal[0]) / (horizontal[1] - horizontal[0]),
-      y: 202 - 184 * (point[2] - vertical[0]) / (vertical[1] - vertical[0])
+      x: plot.left + plot.width * (point[1] - horizontal[0]) / (horizontal[1] - horizontal[0]),
+      y: plot.top + plot.height - plot.height * (point[2] - vertical[0]) / (vertical[1] - vertical[0])
     };
   };
   const render = (root, animation, progress) => {
@@ -808,10 +1002,12 @@ _ANIMATION_SCRIPT = r"""
     const scrubber = root.querySelector("[data-animation-scrubber]");
     if (toggle) {
       toggle.textContent = state.paused ? "Play" : "Pause";
+      toggle.setAttribute("aria-label", `${state.paused ? "Play" : "Pause"} ${animation.label || "example"} animation`);
       toggle.addEventListener("click", () => {
         state.paused = !state.paused;
         state.previous = performance.now();
         toggle.textContent = state.paused ? "Play" : "Pause";
+        toggle.setAttribute("aria-label", `${state.paused ? "Play" : "Pause"} ${animation.label || "example"} animation`);
         schedule();
       });
     }
@@ -819,7 +1015,10 @@ _ANIMATION_SCRIPT = r"""
       state.progress = 0;
       state.paused = false;
       state.previous = performance.now();
-      if (toggle) toggle.textContent = "Pause";
+      if (toggle) {
+        toggle.textContent = "Pause";
+        toggle.setAttribute("aria-label", `Pause ${animation.label || "example"} animation`);
+      }
       render(root, animation, 0);
       schedule();
     });
@@ -827,7 +1026,10 @@ _ANIMATION_SCRIPT = r"""
       state.progress = Number(scrubber.value) / 100;
       state.paused = true;
       state.previous = performance.now();
-      if (toggle) toggle.textContent = "Play";
+      if (toggle) {
+        toggle.textContent = "Play";
+        toggle.setAttribute("aria-label", `Play ${animation.label || "example"} animation`);
+      }
       render(root, animation, state.progress);
     });
     render(root, animation, 0);
@@ -878,6 +1080,12 @@ def render_summary_html(
         f"{_format_number(_score_value(item, 'candidate'))}</li>"
         for item in reversed(history)
     )
+    history_ledger = (
+        f'<details class="run-ledger"><summary>Run ledger ({len(history)} compact reports)</summary>'
+        f"<ol>{history_rows}</ol></details>"
+        if history_rows
+        else '<div class="empty">Run ledger: no reports</div>'
+    )
     notice_rows = "".join(f'<p class="notice">{_escape(item)}</p>' for item in notices)
     notice_html = (
         f"<details><summary>{len(notices)} protected/missing artifact notices</summary>"
@@ -886,7 +1094,7 @@ def render_summary_html(
         else ""
     )
     animation_script = _ANIMATION_SCRIPT if _animation_cards(summary) else ""
-    return f"""<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">{refresh}<title>{_escape(title)}</title><style>{_STYLE}</style></head><body><main>{_summary_section(summary)}{notice_html}<section class="run-list"><h2>Capability trend</h2>{_trend_charts(history)}<ol>{history_rows}</ol></section><footer>Portable report · schema {CAPABILITY_SUMMARY_SCHEMA} · no external assets</footer></main><script type="application/json" id="capability-run-summary">{embedded}</script>{animation_script}</body></html>"""
+    return f"""<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">{refresh}<title>{_escape(title)}</title><style>{_STYLE}</style></head><body><main>{_summary_section(summary)}{notice_html}<section class="run-list"><h2>Capability trend</h2>{_trend_charts(history)}{history_ledger}</section><footer>Portable report · schema {CAPABILITY_SUMMARY_SCHEMA} · no external assets</footer></main><script type="application/json" id="capability-run-summary">{embedded}</script>{animation_script}</body></html>"""
 
 
 def _directory_size(path: Path) -> int:

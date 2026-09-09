@@ -2,6 +2,19 @@
 
 ## Unreleased — 2026-07-28
 
+### 2026-09-10 dashboard polish and scale-up plan
+
+- Completed the dashboard semantics pass: charts now show named axes, units,
+  sampled ticks, and gridlines; animation plots show numeric metre bounds and
+  in-plot world axes; heatmap legends state that colours are relative rather
+  than gates, and uncertainty quality is distance from the 90% target. Added
+  visible animation evidence provenance and timed event labels. Long planning
+  and run ledgers are collapsed behind conservative worst-cardinality summaries.
+- Added `project/NEXT_SCALE_PLAN.md`. The next phase diagnoses the existing
+  sensor/compositional failures before adding capacity, makes evaluation
+  cheaper with strict parity, adds genuine 4/8-second rollouts, and only then
+  opens N=8 perceptual qualification. N=12/16 stay state-only pressure tests.
+
 ### 2026-09-09 streamed capability evidence
 
 - Repaired the compact animation presentation after browser reproduction and

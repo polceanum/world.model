@@ -86,12 +86,17 @@ def test_summary_roundtrip_and_active_refresh_are_versioned(tmp_path: Path) -> N
     assert 'http-equiv="refresh"' in active_html
     assert 'id="capability-run-summary"' in active_html
     assert "Position RMSE across horizon" in active_html
+    assert "Prediction horizon (s)" in active_html
+    assert "Position RMSE (m)" in active_html
     assert "N1/contact=0/dynamic=0" in active_html
     assert "Factor performance" in active_html
     assert "Proposal F1" in active_html
-    assert "90% uncertainty coverage by count/contact/lifecycle cell" in active_html
+    assert "90% uncertainty coverage by object count, contact, and membership" in active_html
+    assert "closest to 0.9 target" in active_html
+    assert "Relative within this run; colour is not a pass/fail gate." in active_html
     assert "K8 latency (s)" in active_html
     assert "Planning quality by cardinality" in active_html
+    assert "Worst-cardinality planning quality" in active_html
     assert 'class="metric-pass"' in active_html
 
     completed_html = render_summary_html(replace(active, lifecycle_status="completed"))
@@ -138,6 +143,7 @@ def test_dashboard_handles_current_historical_missing_and_malformed_runs(
     assert "historical" in content
     assert "malformed capability summary" in content
     assert "Portable report" in content
+    assert "Run ledger (4 compact reports)" in content
     assert "Latest run" in content
     assert '"managed_budget_bytes": 262144000' in content
     assert "Managed run tree" in content
@@ -241,6 +247,75 @@ def test_trends_do_not_mix_physical_and_planning_score_scales() -> None:
     assert "Lower-is-better score across runs" not in content
 
 
+def test_coverage_heatmap_colours_distance_from_target_not_larger_values() -> None:
+    summary = replace(
+        _summary("coverage"),
+        cell_metrics={
+            "target": {"uncertainty_90_coverage": {"value": 0.90, "support": 12}},
+            "high": {"uncertainty_90_coverage": {"value": 0.97, "support": 12}},
+        },
+    )
+
+    content = render_summary_html(summary)
+
+    assert 'fill="rgb(54,175,92)"/><title>target: 0.9000</title>' in content
+    assert 'fill="rgb(229,75,92)"/><title>high: 0.9700</title>' in content
+
+
+def test_planning_summary_uses_worst_cardinality_and_keeps_full_ledger() -> None:
+    planning = {
+        **_summary("planning").planning,
+        "slices": [
+            {
+                "object_count": 1,
+                "candidate_count": 8,
+                "oracle_winner_accuracy": {"value": 1.0, "support": 10},
+                "normalized_regret_median": {"value": 0.01, "support": 10},
+                "successful_oracle_goal_success": {"value": 0.98, "support": 10},
+            },
+            {
+                "object_count": 6,
+                "candidate_count": 8,
+                "oracle_winner_accuracy": {"value": 0.75, "support": 10},
+                "normalized_regret_median": {"value": 0.12, "support": 10},
+                "successful_oracle_goal_success": {"value": 0.80, "support": 10},
+            },
+        ],
+    }
+
+    content = render_summary_html(replace(_summary("planning"), planning=planning))
+    aggregate = content.split("Worst-cardinality planning quality", 1)[1].split(
+        'class="planning-slices"', 1
+    )[0]
+
+    assert "0.7500" in aggregate
+    assert "0.1200" in aggregate
+    assert "0.8000" in aggregate
+    assert "Planning quality by cardinality (2 detailed slices)" in content
+    assert "<td>N1</td>" in content and "<td>N6</td>" in content
+
+
+def test_malformed_animation_is_ignored_without_breaking_the_report() -> None:
+    summary = replace(
+        _summary("malformed-animation"),
+        qualitative={
+            **_summary("malformed-animation").qualitative,
+            "animations": [
+                {
+                    "frames": [{"frame": "not-an-integer", "time_s": 0.0}],
+                    "bounds": {"horizontal": [-1.0, 1.0], "vertical": [-1.0, 1.0]},
+                    "axis_labels": ["x", "y"],
+                }
+            ],
+        },
+    )
+
+    content = render_summary_html(summary)
+
+    assert 'class="animation-card"' not in content
+    assert "Portable report" in content
+
+
 def test_dashboard_keeps_three_lightweight_vector_animations_from_latest_evidence(
     tmp_path: Path,
 ) -> None:
@@ -311,6 +386,7 @@ def test_dashboard_keeps_three_lightweight_vector_animations_from_latest_evidenc
             "best_episode": "latest-planning-qualitative-marker",
         },
     )
+    assert "Evidence source: physical." in render_summary_html(physical)
     write_capability_summary(physical, physical_directory / "capability_summary.json")
     write_capability_summary(planning, planning_directory / "capability_summary.json")
 
@@ -319,8 +395,11 @@ def test_dashboard_keeps_three_lightweight_vector_animations_from_latest_evidenc
     assert "Observed tracking examples" in content
     assert "Two-second open-loop forecasts" in content
     assert content.count('class="animation-card"') == 6
-    assert "● model" in content and "○ reference" in content
-    assert "world X–Y" in content
+    assert "● model estimate" in content and "○ private reference" in content
+    assert "World X (m)" in content and "World Y (m)" in content
+    assert "no contact" in content and "static membership" in content
+    assert "known action @ 1.40 s" in content
+    assert "Evidence source: physical." in content
     assert "Pause" in content and "Replay" in content
     assert 'type="range"' in content
     assert 'class="animation-trail animation-trail-model"' in content

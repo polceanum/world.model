@@ -112,6 +112,12 @@ conda run -n orpheus python scripts/run_world_model_workbench.py --profile smoke
 conda run -n orpheus python scripts/run_world_model_workbench.py --profile development
 ```
 
+The next scale-up sequence is documented in
+[`project/NEXT_SCALE_PLAN.md`](project/NEXT_SCALE_PLAN.md). It diagnoses the
+remaining compositional-planning owner first, reduces evaluation cost, then
+adds genuine 4/8-second rollouts and an N=8 perceptual qualification boundary.
+N=12/16 remain explicitly state-only until the lower-count visual model passes.
+
 The first vertical slice uses a deterministic synthetic RGB sphere world with
 collisions, occlusion, camera motion, and variable drag/restitution. Simulator
 state is reserved for labels, evaluation, tests, and a clearly marked debug

@@ -6,6 +6,31 @@ to make every heading unambiguous; the suffixes do not imply precedence, no
 substantive decision or chronology changed, and the one corresponding
 cross-reference was disambiguated.
 
+## ADR-185 — Make visual semantics explicit and scale the envelope in stages
+
+- **Date:** 2026-09-10
+- **Status:** accepted; scale-up planned, training not started
+- **Context:** The compact animations work, but the first report omitted
+  in-plot axis names and numerical bounds, line-chart ticks and units, a
+  heatmap colour explanation, and visible evidence provenance. The full
+  planning and run ledgers also obscured the high-signal summary. Meanwhile,
+  the remaining behavioral failures are narrow calibration boundaries and
+  compositional K=32 planning—not evidence that the whole model needs widening.
+- **Decision:** Name and unit every quantitative axis, expose animation bounds
+  and source runs, score coverage heatmaps by distance from the declared 90%
+  target, label relative colours as non-gating, and show conservative
+  worst-cardinality planning above a collapsed complete ledger. Preserve all
+  raw summary evidence in the portable HTML.
+- **Decision:** Scale in the order documented by `NEXT_SCALE_PLAN.md`: locate
+  the existing failure owner, reduce evaluation wall time with exact parity,
+  establish 4/8-second open-loop behavior, then qualify RGB-D at N=8. Add
+  learned capacity only to an owner supported by repeated ablations. Keep
+  N=12/16 perceptual claims closed and planning outside the training loss.
+- **Consequences:** Dashboard polish changes no model, metric, gate, or source
+  evidence. The dashboard remains a self-contained `186,253` bytes. The
+  scale-up has explicit exits between stages and cannot turn a small
+  planning/calibration defect into an unbounded training campaign.
+
 ## ADR-184 — Make motion visible and add causally closed forecast examples
 
 - **Date:** 2026-09-09
