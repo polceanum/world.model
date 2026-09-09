@@ -20,6 +20,10 @@
   bounded inline SVG evidence: 15 vector keyframes, 64 KiB per-example ceiling,
   pause/replay and reduced-motion support, with no retained frame media. The
   complete repository gate passes with `2404 passed, 16 skipped`.
+- [x] Repair animation legibility with motion-selected axes, display-only
+  persistent/reference identity alignment, unobstructed readouts, physical-time
+  playback, and scrubbers. Add three causally closed frame-15-to-2-second
+  open-loop forecasts using the six real evaluator horizons and path trails.
 - [x] Add manifest-scoped run inventory/prune/clear management with a 250 MiB
   rolling cap, protected incumbent/pins/archive, and fail-closed path safety.
 - [x] Stream physical workbench episodes and remove terminal optimizer state;

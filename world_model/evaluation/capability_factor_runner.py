@@ -22,6 +22,7 @@ from typing import Any, Literal
 
 import numpy as np
 import torch
+from scipy.optimize import linear_sum_assignment
 from torch import Tensor
 
 from world_model.evaluation.capability_summary import (
@@ -90,6 +91,7 @@ CAPABILITY_FACTOR_REPORT_SCHEMA = "world_model_capability_factor_report_v1"
 CAPABILITY_ANIMATION_SAMPLE_STRIDE = 4
 CAPABILITY_ANIMATION_MAX_EXAMPLES = 3
 CAPABILITY_ANIMATION_MAX_BYTES = 64 * 1024
+_ANIMATION_AXIS_NAMES = ("x", "y", "z")
 SUPPORTED_CAPABILITY_FACTORS = (
     "sensor_noise",
     "physical_parameters",
@@ -804,24 +806,115 @@ def _frame_points(
     object_id: Tensor,
     active: Tensor,
     position: Tensor,
+    *,
+    identity_map: Mapping[int, int] | None = None,
+    axes: tuple[int, int] = (0, 1),
 ) -> list[list[float | int]]:
     points: list[list[float | int]] = []
     for slot in torch.nonzero(active, as_tuple=False).flatten().tolist():
-        identifier = int(object_id[slot])
+        source_identifier = int(object_id[slot])
         coordinates = position[slot]
-        if identifier < 0 or not bool(torch.isfinite(coordinates).all()):
+        if source_identifier < 0 or not bool(torch.isfinite(coordinates).all()):
             continue
-        # The compact animation is a world X-Z top-down view. Four decimal
-        # places are materially finer than the declared centimetre accuracy
-        # floors while keeping all three examples comfortably below 64 KiB.
+        identifier = (
+            source_identifier
+            if identity_map is None
+            # Private reference IDs are non-negative. Keeping unmatched public
+            # tracks negative guarantees a distinct display colour even when
+            # lifecycle events have advanced truth IDs beyond slot capacity.
+            else identity_map.get(source_identifier, -(source_identifier + 1))
+        )
+        # The caller supplies the episode's motion-selected world plane. Four
+        # decimal places are materially finer than the declared centimetre
+        # accuracy floors while keeping the examples comfortably below 64 KiB.
         points.append(
             [
                 identifier,
-                round(float(coordinates[0]), 4),
-                round(float(coordinates[2]), 4),
+                round(float(coordinates[axes[0]]), 4),
+                round(float(coordinates[axes[1]]), 4),
             ]
         )
     return points
+
+
+def _animation_projection_axes(
+    series: Sequence[tuple[Tensor, Tensor]],
+) -> tuple[int, int]:
+    """Choose the 2-D world plane carrying the most motion, then spread."""
+
+    if not series:
+        raise ValueError("animation projection requires at least one state")
+    tracks: dict[int, list[Tensor]] = {}
+    all_positions: list[Tensor] = []
+    for active, position in series:
+        slots = torch.nonzero(active, as_tuple=False).flatten()
+        selected = position.index_select(0, slots).detach().cpu()
+        if selected.numel() == 0:
+            continue
+        all_positions.append(selected)
+        # Truth slots remain stable within these short synthetic episodes.
+        # Motion ranking chooses display axes only; it never establishes model
+        # identity or changes scored state.
+        for slot, coordinates in zip(slots.tolist(), selected, strict=True):
+            tracks.setdefault(int(slot), []).append(coordinates)
+    if not all_positions:
+        raise ValueError("animation projection contains no active positions")
+    movement = torch.zeros(3, dtype=torch.float64)
+    for values in tracks.values():
+        if len(values) > 1:
+            stacked = torch.stack(values).to(torch.float64)
+            movement += torch.diff(stacked, dim=0).abs().sum(dim=0)
+    stacked_positions = torch.cat(all_positions).to(torch.float64)
+    spread = stacked_positions.amax(dim=0) - stacked_positions.amin(dim=0)
+    score = movement + spread * 1.0e-3
+    ranked = sorted(range(3), key=lambda axis: (-float(score[axis]), axis))
+    return tuple(sorted(ranked[:2]))
+
+
+def _visual_identity_map(
+    trace: DynamicSetEpisodeTrace,
+    truth_id: Tensor,
+    truth_active: Tensor,
+    truth_position: Tensor,
+    *,
+    through_frame: int,
+) -> dict[int, int]:
+    """Bind public persistent IDs to reference IDs for display only."""
+
+    if not 0 <= through_frame < len(trace.frames):
+        raise ValueError("visual identity alignment frame is outside the trace")
+    mapping: dict[int, int] = {}
+    claimed_truth: set[int] = set()
+    for model_frame in trace.frames[: through_frame + 1]:
+        frame_index = model_frame.frame_index
+        model_slots = [
+            int(slot)
+            for slot in torch.nonzero(model_frame.active, as_tuple=False).flatten().tolist()
+            if int(model_frame.object_id[slot]) not in mapping
+        ]
+        truth_slots = [
+            int(slot)
+            for slot in torch.nonzero(truth_active[frame_index], as_tuple=False).flatten().tolist()
+            if int(truth_id[frame_index, slot]) not in claimed_truth
+        ]
+        if not model_slots or not truth_slots:
+            continue
+        model_positions = model_frame.position[model_slots].detach().cpu()
+        reference_positions = truth_position[frame_index, truth_slots].detach().cpu()
+        rows, columns = linear_sum_assignment(
+            torch.cdist(model_positions, reference_positions).numpy()
+        )
+        for row, column in zip(rows.tolist(), columns.tolist(), strict=True):
+            if (
+                float(torch.linalg.vector_norm(model_positions[row] - reference_positions[column]))
+                > 0.21
+            ):
+                continue
+            model_identifier = int(model_frame.object_id[model_slots[row]])
+            truth_identifier = int(truth_id[frame_index, truth_slots[column]])
+            mapping[model_identifier] = truth_identifier
+            claimed_truth.add(truth_identifier)
+    return mapping
 
 
 def _animation_events(materialization: DynamicSetMaterialization) -> list[dict[str, Any]]:
@@ -872,6 +965,16 @@ def _compact_animation_payload(
         or truth_position.shape != (DYNAMIC_SET_FRAMES, DYNAMIC_SET_MAX_OBJECTS, 3)
     ):
         raise ValueError("animation truth tensors have unexpected shapes")
+    identity_map = _visual_identity_map(
+        trace,
+        truth_id,
+        truth_active,
+        truth_position,
+        through_frame=DYNAMIC_SET_FRAMES - 1,
+    )
+    axes = _animation_projection_axes(
+        [(truth_active[index], truth_position[index]) for index in range(DYNAMIC_SET_FRAMES)]
+    )
     frame_indices = list(range(0, DYNAMIC_SET_FRAMES, CAPABILITY_ANIMATION_SAMPLE_STRIDE))
     if frame_indices[-1] != DYNAMIC_SET_FRAMES - 1:
         frame_indices.append(DYNAMIC_SET_FRAMES - 1)
@@ -883,11 +986,14 @@ def _compact_animation_payload(
             truth_id[frame_index],
             truth_active[frame_index],
             truth_position[frame_index],
+            axes=axes,
         )
         model_points = _frame_points(
             model_frame.object_id,
             model_frame.active,
             model_frame.position,
+            identity_map=identity_map,
+            axes=axes,
         )
         all_points.extend(truth_points)
         all_points.extend(model_points)
@@ -902,7 +1008,7 @@ def _compact_animation_payload(
     if not all_points:
         raise ValueError("animation evidence contains no active object positions")
     x_values = [float(point[1]) for point in all_points]
-    z_values = [float(point[2]) for point in all_points]
+    y_values = [float(point[2]) for point in all_points]
 
     def bounds(values: Sequence[float]) -> list[float]:
         low, high = min(values), max(values)
@@ -917,10 +1023,13 @@ def _compact_animation_payload(
         "contact": materialization.row.contact,
         "dynamic_membership": materialization.row.dynamic_membership,
         "current_position_rmse_m": round(float(current_position_rmse_m), 6),
-        "projection": "world_xz",
-        "bounds": {"x": bounds(x_values), "z": bounds(z_values)},
+        "mode": "tracking",
+        "projection": f"world_{_ANIMATION_AXIS_NAMES[axes[0]]}{_ANIMATION_AXIS_NAMES[axes[1]]}",
+        "axis_labels": [_ANIMATION_AXIS_NAMES[axis] for axis in axes],
+        "bounds": {"horizontal": bounds(x_values), "vertical": bounds(y_values)},
         "frames": frames,
         "events": _animation_events(materialization),
+        "identity_alignment": "post-inference persistent-to-reference correspondence",
         "reference": "private simulator truth used only after public inference",
     }
     encoded = json.dumps(payload, separators=(",", ":"), allow_nan=False).encode("utf-8")
@@ -929,28 +1038,233 @@ def _compact_animation_payload(
     return payload
 
 
-def _qualitative_animations(
+def _ranked_horizon_records(
+    result: DynamicSetEvaluationResult,
+    rows_by_key: Mapping[tuple[int, int, int], tuple[CapabilityManifestRow, PhysicalManifestRow]],
+) -> list[tuple[Any, float]]:
+    """Rank supported, causally closed two-second forecasts by endpoint error."""
+
+    values: list[tuple[Any, float]] = []
+    for record in result.per_example_score_evidence:
+        key = (record.ordinal, record.seed, record.cell_index)
+        row_pair = rows_by_key.get(key)
+        if row_pair is None:
+            raise ValueError("qualitative row is absent from the factor manifest")
+        physical = row_pair[1]
+        # Forecast examples must not be scored through unseen future public
+        # actions or membership changes. Actions at frames 10/15 are already
+        # in the belief at the frozen frame-15 forecast anchor.
+        if physical.dynamic_membership or (
+            physical.known_action and physical.action_time_stratum not in {0, 1}
+        ):
+            continue
+        endpoint = next(
+            (
+                (squared, support)
+                for horizon, squared, support in record.additive.horizon_position
+                if horizon == 2.0
+            ),
+            None,
+        )
+        if endpoint is None or endpoint[1] <= 0:
+            continue
+        values.append((record, math.sqrt(endpoint[0] / endpoint[1])))
+    return sorted(values, key=lambda item: item[1])
+
+
+def _selected_qualitative_records(
+    ranked: Sequence[tuple[Any, float]],
+) -> list[tuple[str, tuple[Any, float]]]:
+    """Choose up to three distinct best/median/worst records."""
+
+    if not ranked:
+        return []
+    selected: list[tuple[str, tuple[Any, float]]] = []
+    seen: set[tuple[int, int, int]] = set()
+    for label, index in (
+        ("best", 0),
+        ("representative", len(ranked) // 2),
+        ("worst", len(ranked) - 1),
+    ):
+        item = ranked[index]
+        record = item[0]
+        key = (record.ordinal, record.seed, record.cell_index)
+        if key in seen:
+            continue
+        seen.add(key)
+        selected.append((label, item))
+    return selected[:CAPABILITY_ANIMATION_MAX_EXAMPLES]
+
+
+def _compact_forecast_animation_payload(
+    materialization: DynamicSetMaterialization,
+    trace: DynamicSetEpisodeTrace,
+    *,
+    label: str,
+    two_second_position_rmse_m: float,
+) -> dict[str, Any]:
+    """Reduce the frozen six-horizon open-loop rollout to vector keyframes."""
+
+    objects = materialization.episode["objects"]
+    if not isinstance(objects, Mapping):
+        raise TypeError("forecast evidence requires the private object ledger")
+    truth_id = objects.get("id")
+    truth_active = objects.get("active")
+    truth_position = objects.get("position")
+    if (
+        not isinstance(truth_id, Tensor)
+        or truth_id.shape != (DYNAMIC_SET_FRAMES, DYNAMIC_SET_MAX_OBJECTS)
+        or not isinstance(truth_active, Tensor)
+        or truth_active.shape != truth_id.shape
+        or not isinstance(truth_position, Tensor)
+        or truth_position.shape != (DYNAMIC_SET_FRAMES, DYNAMIC_SET_MAX_OBJECTS, 3)
+    ):
+        raise ValueError("forecast truth tensors have unexpected shapes")
+    horizon = trace.horizon
+    anchor_index = horizon.anchor_frame
+    if anchor_index != 15 or len(trace.frames) != DYNAMIC_SET_FRAMES:
+        raise ValueError("forecast animation requires the frozen complete evaluation trace")
+    if (
+        horizon.positions.shape
+        != (
+            len(horizon.timestamps),
+            DYNAMIC_SET_MAX_OBJECTS,
+            3,
+        )
+        or horizon.active_mask.shape != horizon.positions.shape[:2]
+    ):
+        raise ValueError("forecast horizon tensors have unexpected shapes")
+    anchor = trace.frames[anchor_index]
+    anchor_timestamp = float(anchor.timestamp)
+    identity_map = _visual_identity_map(
+        trace,
+        truth_id,
+        truth_active,
+        truth_position,
+        through_frame=anchor_index,
+    )
+    target_steps: list[tuple[int, float, int]] = []
+    for horizon_index, timestamp in enumerate(horizon.timestamps.tolist()):
+        offset_seconds = float(timestamp) - anchor_timestamp
+        target_frame = anchor_index + int(round(offset_seconds * 20.0))
+        if not anchor_index < target_frame < DYNAMIC_SET_FRAMES:
+            raise ValueError("forecast timestamp lies outside the retained episode")
+        target_steps.append((target_frame, offset_seconds, horizon_index))
+    axes = _animation_projection_axes(
+        [
+            (truth_active[frame_index], truth_position[frame_index])
+            for frame_index in [anchor_index, *(item[0] for item in target_steps)]
+        ]
+    )
+    frames: list[dict[str, Any]] = []
+    all_points: list[list[float | int]] = []
+
+    def append_frame(
+        *,
+        frame_index: int,
+        offset_seconds: float,
+        model_id: Tensor,
+        model_active: Tensor,
+        model_position: Tensor,
+    ) -> None:
+        truth_points = _frame_points(
+            truth_id[frame_index],
+            truth_active[frame_index],
+            truth_position[frame_index],
+            axes=axes,
+        )
+        model_points = _frame_points(
+            model_id,
+            model_active,
+            model_position,
+            identity_map=identity_map,
+            axes=axes,
+        )
+        all_points.extend(truth_points)
+        all_points.extend(model_points)
+        frames.append(
+            {
+                "frame": frame_index,
+                "time_s": round(offset_seconds, 3),
+                "truth": truth_points,
+                "model": model_points,
+            }
+        )
+
+    append_frame(
+        frame_index=anchor_index,
+        offset_seconds=0.0,
+        model_id=anchor.object_id,
+        model_active=anchor.active,
+        model_position=anchor.position,
+    )
+    for target_frame, offset_seconds, horizon_index in target_steps:
+        append_frame(
+            frame_index=target_frame,
+            offset_seconds=offset_seconds,
+            model_id=horizon.source_object_id,
+            model_active=horizon.active_mask[horizon_index],
+            model_position=horizon.positions[horizon_index],
+        )
+    if not all_points or abs(float(frames[-1]["time_s"]) - 2.0) > 1.0e-6:
+        raise ValueError("forecast animation must contain a supported two-second endpoint")
+
+    def bounds(axis: int) -> list[float]:
+        values = [float(point[axis]) for point in all_points]
+        low, high = min(values), max(values)
+        padding = max(0.10 * (high - low), 0.10)
+        return [round(low - padding, 4), round(high + padding, 4)]
+
+    events = [
+        {**event, "kind": f"reference {event['kind']}"}
+        for event in _animation_events(materialization)
+        if anchor_index < int(event["frame"]) and event["kind"] == "collision"
+    ]
+    payload = {
+        "schema": "world_model_compact_forecast_animation_v1",
+        "label": label,
+        "episode": (f"development:{materialization.row.ordinal}/seed={materialization.row.seed}"),
+        "object_count": materialization.row.object_count,
+        "contact": materialization.row.contact,
+        "dynamic_membership": materialization.row.dynamic_membership,
+        "two_second_position_rmse_m": round(float(two_second_position_rmse_m), 6),
+        "mode": "forecast",
+        "anchor_frame": anchor_index,
+        "rollout_horizons_s": [round(float(frame["time_s"]), 3) for frame in frames[1:]],
+        "projection": f"world_{_ANIMATION_AXIS_NAMES[axes[0]]}{_ANIMATION_AXIS_NAMES[axes[1]]}",
+        "axis_labels": [_ANIMATION_AXIS_NAMES[axis] for axis in axes],
+        "bounds": {"horizontal": bounds(1), "vertical": bounds(2)},
+        "frames": frames,
+        "events": events,
+        "identity_alignment": "anchor-only persistent-to-reference correspondence",
+        "reference": "private future truth opened only after the public open-loop rollout",
+    }
+    encoded = json.dumps(payload, separators=(",", ":"), allow_nan=False).encode("utf-8")
+    if len(encoded) > CAPABILITY_ANIMATION_MAX_BYTES:
+        raise ValueError("compact forecast animation exceeds its 64 KiB serialized ceiling")
+    return payload
+
+
+def _qualitative_animation_evidence(
     model: OnlineWorldModel,
     factor_rows: Sequence[tuple[CapabilityManifestRow, PhysicalManifestRow]],
     result: DynamicSetEvaluationResult,
-) -> list[dict[str, Any]]:
-    """Re-run only best/median/worst rows and retain position keyframes."""
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    """Stream the union of selected tracking and open-loop forecast rows."""
 
-    ranked = _ranked_qualitative_records(result)
-    if not ranked:
-        return []
-    selected = (
-        ("best", ranked[0]),
-        ("representative", ranked[len(ranked) // 2]),
-        ("worst", ranked[-1]),
-    )
     rows_by_key = {
         (physical.ordinal, physical.seed, physical.cell_index): (capability, physical)
         for capability, physical in factor_rows
     }
-    animations: list[dict[str, Any]] = []
-    for label, (record, error) in selected[:CAPABILITY_ANIMATION_MAX_EXAMPLES]:
-        key = (record.ordinal, record.seed, record.cell_index)
+    tracking_selected = _selected_qualitative_records(_ranked_qualitative_records(result))
+    forecast_selected = _selected_qualitative_records(_ranked_horizon_records(result, rows_by_key))
+    requests: dict[tuple[int, int, int], list[tuple[str, str, float]]] = {}
+    for kind, selected in (("tracking", tracking_selected), ("forecast", forecast_selected)):
+        for label, (record, error) in selected:
+            key = (record.ordinal, record.seed, record.cell_index)
+            requests.setdefault(key, []).append((kind, label, error))
+    retained: dict[tuple[str, str], dict[str, Any]] = {}
+    for key, specifications in requests.items():
         try:
             capability_row, physical_row = rows_by_key[key]
         except KeyError as missing:
@@ -961,17 +1275,28 @@ def _qualitative_animations(
             apply_factor=True,
         )
         trace = run_public_dynamic_set_episode(model, materialization.public_frames())
-        animations.append(
-            _compact_animation_payload(
-                materialization,
-                trace,
-                label=label,
-                current_position_rmse_m=error,
+        for kind, label, error in specifications:
+            retained[(kind, label)] = (
+                _compact_animation_payload(
+                    materialization,
+                    trace,
+                    label=label,
+                    current_position_rmse_m=error,
+                )
+                if kind == "tracking"
+                else _compact_forecast_animation_payload(
+                    materialization,
+                    trace,
+                    label=label,
+                    two_second_position_rmse_m=error,
+                )
             )
-        )
         # The materialized RGB-D episode and complete trace leave scope here;
-        # only the small detached keyframe payload reaches durable evidence.
-    return animations
+        # only the two bounded detached vector payloads reach durable evidence.
+    return (
+        [retained[("tracking", label)] for label, _ in tracking_selected],
+        [retained[("forecast", label)] for label, _ in forecast_selected],
+    )
 
 
 def _make_summary(
@@ -986,6 +1311,7 @@ def _make_summary(
     provenance: Mapping[str, Any],
     scalability: Mapping[str, Any],
     qualitative_animations: Sequence[Mapping[str, Any]],
+    forecast_animations: Sequence[Mapping[str, Any]],
     artifact_bytes: int,
     archive_bytes: int,
     created_at_utc: str,
@@ -1080,6 +1406,7 @@ def _make_summary(
         qualitative={
             **_qualitative_rows(factor_result),
             "animations": [dict(animation) for animation in qualitative_animations],
+            "forecast_animations": [dict(animation) for animation in forecast_animations],
             "preview_image": "not retained",
             "diagnostic_contact_sheets": [],
         },
@@ -1343,8 +1670,10 @@ def run_incumbent_factor_evaluation(
         measured_runs=3,
     )
     animation_started = time.perf_counter()
-    update("capturing three compact model-versus-reference trajectory examples")
-    qualitative_animations = _qualitative_animations(model, rows, factor_result)
+    update("capturing compact tracking and two-second open-loop forecast examples")
+    qualitative_animations, forecast_animations = _qualitative_animation_evidence(
+        model, rows, factor_result
+    )
     animation_seconds = time.perf_counter() - animation_started
     report: dict[str, Any] = {
         "schema": CAPABILITY_FACTOR_REPORT_SCHEMA,
@@ -1360,6 +1689,7 @@ def run_incumbent_factor_evaluation(
         "resources": _jsonable(factor_result.resources),
         "scalability": scalability,
         "qualitative_animations": qualitative_animations,
+        "qualitative_forecast_animations": forecast_animations,
         "timing_seconds": {
             "factor_evaluation": factor_seconds,
             "clean_ablation": clean_seconds,
@@ -1390,6 +1720,7 @@ def run_incumbent_factor_evaluation(
         provenance=provenance,
         scalability=scalability,
         qualitative_animations=qualitative_animations,
+        forecast_animations=forecast_animations,
         artifact_bytes=artifact_bytes,
         archive_bytes=archive_bytes,
         created_at_utc=created,

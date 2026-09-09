@@ -6,6 +6,36 @@ to make every heading unambiguous; the suffixes do not imply precedence, no
 substantive decision or chronology changed, and the one corresponding
 cross-reference was disambiguated.
 
+## ADR-184 — Make motion visible and add causally closed forecast examples
+
+- **Date:** 2026-09-09
+- **Status:** accepted and implemented
+- **Context:** Headless Chromium proved the first compact cards advanced and
+  their controls worked, but visual inspection found several presentation
+  defects that could reasonably make them look broken: motion could be subtle
+  or occur late, the clock covered the plot, and raw public persistent IDs did
+  not necessarily share identity numbers with private simulator objects. The
+  dashboard also showed corrected state only, not open-loop predictive drift.
+- **Decision:** Choose the displayed pair of world axes deterministically from
+  per-episode motion with spatial spread as tie-breaker, and label it. Establish
+  a bounded nearest-position public/reference identity correspondence solely
+  after public tracking; freeze it at frame 15 for forecasts so future truth
+  cannot influence display identity. Keep unmatched public IDs distinct. Move
+  time/event text outside the plot, use physical-time interpolation, and add a
+  range scrubber alongside play/replay.
+- **Decision:** Retain at most three additional best/median/worst two-second
+  forecasts. Start from the mature frame-15 public belief and use the existing
+  actual rollout states at 0.05/0.10/0.25/0.50/1.0/2.0 seconds. Admit only
+  static-membership episodes with no unseen future public action, show complete
+  model/reference trails, and report full-3D 2-second RMSE even though the view
+  is two-dimensional. Keep the existing 64 KiB ceiling per example.
+- **Consequences:** The passing compositional v8 run contains three tracking and
+  three forecast payloads totaling 15,418 serialized bytes. Its complete run
+  directory is 380,271 bytes and the dashboard is 170,267 bytes. Browser smoke
+  verifies all six cards advance, pause, replay, and scrub to their exact final
+  frame with no page errors or media elements. Display alignment never changes
+  runtime inputs, state, metrics, planning, or training.
+
 ## ADR-183 — Retain vector trajectories, not rendered animation media
 
 - **Date:** 2026-09-09

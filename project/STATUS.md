@@ -41,23 +41,30 @@ rewriting old reports or relabeling nominal evidence. Physical-cell RMSE and
 coverage heatmaps, a factor metric matrix using the actual single-factor and
 compositional floors, planning slices and latency, separate like-for-like trend
 axes, scalability, resource use, storage, bottlenecks, and unsupported claims
-are visible in one portable file. It now includes three pauseable/replayable
-inline-SVG trajectory examples: best, representative, and worst by current-
-position error. A real public compositional rerun stores only 15 rounded world
-X--Z keyframes per example; all three payloads total `8,265` bytes, with no
-retained RGB-D, images, GIF, or video. Reduced-motion preferences disable
-autoplay.
+are visible in one portable file. It now includes three observed tracking and
+three two-second open-loop forecast animations. Each card deterministically
+chooses and labels its strongest-motion world plane, aligns persistent colours
+only after public inference, and provides play, replay, and time scrubbing.
+Forecasts start at mature frame 15, contain the six real evaluated horizons,
+ingest no later observations, and exclude unseen future actions or membership
+changes. Reduced-motion preferences disable autoplay.
 
-The managed run tree is `11,225,919` bytes (about 10.71 MiB) against the 250
-MiB cap; `.archive` is a separately displayed `34,315,899` bytes (about 32.73
-MiB). The dashboard itself is `145,636` bytes and contains no external assets.
-The animation evidence run is
-`runs/20260909-capability-compositional-physical-v5`. It passed all declared
-compositional physical gates, retained three 15-keyframe examples, and occupies
-`302,921` bytes in total. The selected examples span N=2 best, N=6
-representative, and N=1 worst episodes and visibly annotate birth, collision,
-and known-action onsets where present. Artifact-policy dry-run proposes no
-deletion.
+The final animation evidence run is
+`runs/20260909-capability-compositional-physical-v8`. It passes every declared
+compositional physical gate. The six vector payloads total `15,418` bytes, the
+complete run occupies `380,271` bytes, and the dashboard is `170,267` bytes.
+All contain only rounded positions, identity correspondence, timestamps, and
+sparse events—no retained RGB-D, image, GIF, or video. The managed run tree is
+`12,386,284` bytes (about 11.81 MiB) against the 250 MiB cap; `.archive` remains
+separately displayed at `34,315,899` bytes (about 32.73 MiB). Artifact-policy
+dry-run proposes no deletion.
+
+A real headless-Chromium regression opens the portable file directly and
+exercises animation advance, pause, replay, and exact endpoint scrubbing on all
+six cards. It reports zero page errors, stable pauses, and zero image/video
+elements. The forecast examples cover N=6 best (`0.014866 m` 2-second RMSE),
+N=4 representative contact (`0.031503 m`), and N=5 worst contact (`0.087379
+m`).
 
 The real 22-cell single-factor screens are compact (about 0.20 MiB each) and
 retain no generated episodes or checkpoints. Calibrated camera motion and
@@ -108,10 +115,11 @@ histories are unstable and fine impulse magnitude selection under the combined
 shift remains a real downstream rejection. Failed task populations mark the
 invariant cover unmeasured rather than fabricating individual violations.
 
-The exact post-change repository gate passes with `2404 passed, 16 skipped`
-and 13 established governed-execution thread-setting warnings in `4030.05 s`.
-The 139-test focused capability gate, Ruff lint/format, Python compilation, and
-diff-integrity checks also pass.
+The most recent complete repository gate before this presentation repair passes
+with `2404 passed, 16 skipped` and 13 established governed-execution thread-
+setting warnings in `4030.05 s`.
+The latest 90-test focused animation/evaluation/planning/artifact/dynamic-set
+gate, Ruff lint/format, Python compilation, and diff-integrity checks also pass.
 
 New runs receive manifest-scoped compact retention: summaries/HTML are kept,
 optimizer state is dropped at terminal completion, debug data is capped at

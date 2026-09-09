@@ -14,7 +14,9 @@ from scripts.run_capability_factor import arguments, main
 from world_model.evaluation.capability_factor_runner import (
     CAPABILITY_ANIMATION_MAX_BYTES,
     SUPPORTED_CAPABILITY_FACTORS,
+    _animation_projection_axes,
     _compact_animation_payload,
+    _compact_forecast_animation_payload,
     factor_physical_rows,
     materialize_capability_physical_episode,
 )
@@ -109,6 +111,7 @@ def test_qualitative_animation_keeps_only_bounded_vector_keyframes() -> None:
     trace = SimpleNamespace(
         frames=tuple(
             SimpleNamespace(
+                frame_index=frame_index,
                 object_id=objects["id"][frame_index],
                 active=objects["active"][frame_index],
                 position=objects["position"][frame_index],
@@ -127,8 +130,123 @@ def test_qualitative_animation_keeps_only_bounded_vector_keyframes() -> None:
     encoded = json.dumps(animation, separators=(",", ":")).encode("utf-8")
 
     assert animation["schema"] == "world_model_compact_animation_v1"
+    assert animation["projection"] in {"world_xy", "world_xz", "world_yz"}
+    assert animation["bounds"].keys() == {"horizontal", "vertical"}
+    assert len(animation["axis_labels"]) == 2
     assert len(animation["frames"]) == 15
     assert animation["frames"][-1]["frame"] == 55
+    first_slot = int(torch.nonzero(objects["active"][0], as_tuple=False)[0])
+    vertical_axis = {"x": 0, "y": 1, "z": 2}[animation["axis_labels"][1]]
+    assert animation["frames"][0]["truth"][0][2] == round(
+        float(objects["position"][0, first_slot, vertical_axis]), 4
+    )
+    assert len(encoded) <= CAPABILITY_ANIMATION_MAX_BYTES
+    assert "rgb" not in encoded.decode("utf-8")
+    assert "depth" not in encoded.decode("utf-8")
+
+
+def test_animation_projection_includes_the_axis_that_actually_moves() -> None:
+    active = torch.tensor([True])
+    series = [
+        (active, torch.tensor([[0.0, 0.0, 0.0]])),
+        (active, torch.tensor([[0.0, 0.0, 1.0]])),
+        (active, torch.tensor([[0.0, 0.0, 2.0]])),
+    ]
+
+    assert _animation_projection_axes(series) == (0, 2)
+
+
+def test_animation_aligns_public_persistent_ids_for_reference_colours_only() -> None:
+    capability_row, physical_row = next(
+        pair
+        for pair in factor_physical_rows("sensor_noise")
+        if pair[1].object_count == 2 and not pair[1].dynamic_membership
+    )
+    materialization = materialize_capability_physical_episode(
+        capability_row,
+        physical_row,
+        apply_factor=True,
+    )
+    objects = materialization.episode["objects"]
+    frames = []
+    for frame_index in range(56):
+        model_id = objects["id"][frame_index].clone()
+        active_slots = torch.nonzero(objects["active"][frame_index], as_tuple=False).flatten()
+        model_id[active_slots] = model_id[active_slots].flip(0)
+        frames.append(
+            SimpleNamespace(
+                frame_index=frame_index,
+                object_id=model_id,
+                active=objects["active"][frame_index],
+                position=objects["position"][frame_index],
+                timestamp=frame_index / 20.0,
+            )
+        )
+
+    animation = _compact_animation_payload(
+        materialization,
+        SimpleNamespace(frames=tuple(frames)),
+        label="representative",
+        current_position_rmse_m=0.0,
+    )
+
+    assert animation["frames"][0]["model"] == animation["frames"][0]["truth"]
+    assert animation["identity_alignment"].startswith("post-inference")
+
+
+def test_unmatched_public_animation_identity_cannot_collide_with_reference() -> None:
+    points = runner._frame_points(
+        torch.tensor([7]),
+        torch.tensor([True]),
+        torch.tensor([[0.0, 0.0, 0.0]]),
+        identity_map={},
+    )
+
+    assert points[0][0] == -8
+
+
+def test_forecast_animation_keeps_six_real_open_loop_horizons() -> None:
+    capability_row, physical_row = factor_physical_rows("sensor_noise")[0]
+    materialization = materialize_capability_physical_episode(
+        capability_row,
+        physical_row,
+        apply_factor=True,
+    )
+    objects = materialization.episode["objects"]
+    target_frames = (16, 17, 20, 25, 35, 55)
+    trace = SimpleNamespace(
+        frames=tuple(
+            SimpleNamespace(
+                frame_index=frame_index,
+                object_id=objects["id"][frame_index],
+                active=objects["active"][frame_index],
+                position=objects["position"][frame_index],
+                timestamp=frame_index / 20.0,
+            )
+            for frame_index in range(56)
+        ),
+        horizon=SimpleNamespace(
+            anchor_frame=15,
+            source_object_id=objects["id"][15],
+            timestamps=torch.tensor([frame / 20.0 for frame in target_frames]),
+            positions=torch.stack([objects["position"][frame] for frame in target_frames]),
+            active_mask=torch.stack([objects["active"][frame] for frame in target_frames]),
+        ),
+    )
+
+    animation = _compact_forecast_animation_payload(
+        materialization,
+        trace,
+        label="representative",
+        two_second_position_rmse_m=0.0123,
+    )
+    encoded = json.dumps(animation, separators=(",", ":")).encode("utf-8")
+
+    assert animation["schema"] == "world_model_compact_forecast_animation_v1"
+    assert animation["mode"] == "forecast"
+    assert animation["anchor_frame"] == 15
+    assert animation["rollout_horizons_s"] == [0.05, 0.1, 0.25, 0.5, 1.0, 2.0]
+    assert [frame["frame"] for frame in animation["frames"]] == [15, *target_frames]
     assert len(encoded) <= CAPABILITY_ANIMATION_MAX_BYTES
     assert "rgb" not in encoded.decode("utf-8")
     assert "depth" not in encoded.decode("utf-8")

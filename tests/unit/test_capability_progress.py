@@ -252,8 +252,10 @@ def test_dashboard_keeps_three_lightweight_vector_animations_from_latest_evidenc
         "contact": False,
         "dynamic_membership": False,
         "current_position_rmse_m": 0.001,
-        "projection": "world_xz",
-        "bounds": {"x": [-1.0, 1.0], "z": [-1.0, 1.0]},
+        "mode": "tracking",
+        "projection": "world_xy",
+        "axis_labels": ["x", "y"],
+        "bounds": {"horizontal": [-1.0, 1.0], "vertical": [-1.0, 1.0]},
         "frames": [
             {
                 "frame": 0,
@@ -271,6 +273,20 @@ def test_dashboard_keeps_three_lightweight_vector_animations_from_latest_evidenc
         "events": [{"frame": 28, "kind": "known action"}],
         "reference": "private simulator truth used only after public inference",
     }
+    forecast = {
+        **animation,
+        "schema": "world_model_compact_forecast_animation_v1",
+        "mode": "forecast",
+        "anchor_frame": 15,
+        "two_second_position_rmse_m": 0.02,
+        "rollout_horizons_s": [0.05, 0.1, 0.25, 0.5, 1.0, 2.0],
+        "frames": [
+            {"frame": 15, "time_s": 0.0, "truth": [[0, -0.5, 0.0]], "model": [[0, -0.49, 0.01]]},
+            {"frame": 16, "time_s": 0.05, "truth": [[0, -0.4, 0.1]], "model": [[0, -0.39, 0.11]]},
+            {"frame": 55, "time_s": 2.0, "truth": [[0, 0.5, 0.0]], "model": [[0, 0.49, -0.01]]},
+        ],
+        "reference": "private future truth opened only after the public open-loop rollout",
+    }
     runs = tmp_path / "runs"
     physical_directory = runs / "physical"
     planning_directory = runs / "planning"
@@ -280,7 +296,11 @@ def test_dashboard_keeps_three_lightweight_vector_animations_from_latest_evidenc
         _summary("physical"),
         created_at_utc="2026-09-08T00:00:00+00:00",
         source_format="world_model_capability_factor_report_v1",
-        qualitative={**_summary("physical").qualitative, "animations": [animation] * 4},
+        qualitative={
+            **_summary("physical").qualitative,
+            "animations": [animation] * 4,
+            "forecast_animations": [forecast] * 4,
+        },
     )
     planning = replace(
         _summary("planning"),
@@ -296,12 +316,17 @@ def test_dashboard_keeps_three_lightweight_vector_animations_from_latest_evidenc
 
     content = build_progress_dashboard(runs).read_text(encoding="utf-8")
 
-    assert "Lightweight trajectory examples" in content
-    assert content.count('class="animation-card"') == 3
+    assert "Observed tracking examples" in content
+    assert "Two-second open-loop forecasts" in content
+    assert content.count('class="animation-card"') == 6
     assert "● model" in content and "○ reference" in content
+    assert "world X–Y" in content
     assert "Pause" in content and "Replay" in content
+    assert 'type="range"' in content
+    assert 'class="animation-trail animation-trail-model"' in content
     assert "requestAnimationFrame" in content
     assert '"animation_source_run": "physical"' in content
+    assert '"forecast_animation_source_run": "physical"' in content
     assert "latest-planning-qualitative-marker" in content
     assert "<video" not in content and "<img" not in content
     assert "data:image" not in content

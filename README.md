@@ -54,10 +54,13 @@ N=8/12/16 state-only scaling, latency/memory/weights/disk usage, bottlenecks,
 and explicit unsupported claims. Current historical reports are adapted
 read-only. The dashboard merges each family's newest evidence and labels the
 source run, while keeping nominal and factor-conditioned planning distinct.
-Its best, representative, and worst trajectory examples animate the public
-model state against the post-inference private reference in a top-down world
-view. They are pauseable/replayable inline SVG: each keeps only 15 rounded
-position keyframes, with no GIF, video, image directory, or external asset.
+Its best, representative, and worst observed trajectories animate the public
+model state against the post-inference private reference. Three additional
+open-loop examples roll the mature frame-15 belief through the evaluated
+0.05--2.0 second horizons without later observations. Each card chooses and
+labels the world-axis plane containing the most motion, provides play, replay,
+and scrubbing controls, and remains inline SVG. No GIF, video, image directory,
+RGB-D frames, or external asset is retained.
 
 Run or reproduce one streamed physical factor without retaining its episodes:
 

@@ -4,6 +4,20 @@
 
 ### 2026-09-09 streamed capability evidence
 
+- Repaired the compact animation presentation after browser reproduction and
+  visual inspection. Playback itself had no JavaScript error, but subtle/late
+  motion, an in-plot readout, and unaligned public/reference identity colours
+  made examples appear broken. Cards now choose and label their strongest
+  motion plane, align persistent IDs for display only after inference, place
+  the readout outside the stage, interpolate in physical time, and provide a
+  scrubber. A real Chromium smoke exercises advance/pause/replay/scrub on all
+  six cards with zero page errors.
+- Added three compact two-second open-loop forecast animations. They begin at
+  the frozen mature frame-15 belief, contain the six real evaluated rollout
+  horizons, exclude unseen future actions and membership changes, and show
+  model/reference path trails and 2-second RMSE. Tracking plus forecast payloads
+  occupy `15,418` bytes in the passing v8 evidence run; no rendered media or
+  source episode is retained.
 - Added three bounded model-versus-reference trajectory animations to portable
   run reports and the progress dashboard. Best, representative, and worst
   examples are selected from the evaluated current-position evidence, then
