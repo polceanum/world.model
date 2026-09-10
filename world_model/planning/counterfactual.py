@@ -13,7 +13,7 @@ from torch import Tensor
 
 from world_model.belief import BeliefTrajectory, WorldBelief, fast_packing_map
 from world_model.belief._base import TensorDataclassMixin
-from world_model.dynamics import WorldImpulseAction
+from world_model.dynamics import WorldAction, WorldImpulseAction, WorldImpulseSchedule
 
 
 class _KnownActionDynamics(Protocol):
@@ -21,7 +21,7 @@ class _KnownActionDynamics(Protocol):
         self,
         belief: WorldBelief,
         query_times: Tensor | Sequence[float],
-        action: WorldImpulseAction | None,
+        action: WorldAction | None,
     ) -> Tensor: ...
 
     def rollout(
@@ -29,7 +29,7 @@ class _KnownActionDynamics(Protocol):
         belief: WorldBelief,
         query_times: Tensor | Sequence[float],
         *,
-        action: WorldImpulseAction | None = None,
+        action: WorldAction | None = None,
         return_events: bool = True,
         return_auxiliary: bool = True,
     ) -> BeliefTrajectory: ...
@@ -60,7 +60,7 @@ class CounterfactualCostWeights:
 class CounterfactualPlanResult:
     """All candidate rollouts and costs, retaining every differentiable branch."""
 
-    actions: tuple[WorldImpulseAction | None, ...]
+    actions: tuple[WorldAction | None, ...]
     trajectories: tuple[BeliefTrajectory, ...]
     object_id_by_slot: Tensor
     terminal_squared_error: Tensor
@@ -283,7 +283,7 @@ def _slice_candidate_trajectory(
         name: value[start:stop]
         for name, value in trajectory.auxiliary.items()
         if not drop_known_action_auxiliary
-        or name not in {"known_action_applied", "known_impulse_world"}
+        or name not in {"known_action_applied", "known_impulse_world", "known_action_count"}
     }
     return BeliefTrajectory(
         timestamps=trajectory.timestamps[start:stop],
@@ -304,7 +304,7 @@ def _vectorized_candidate_rollouts(
     dynamics: _KnownActionDynamics,
     belief: WorldBelief,
     offsets: Tensor,
-    actions: tuple[WorldImpulseAction | None, ...],
+    actions: tuple[WorldAction | None, ...],
     *,
     return_events: bool,
     return_auxiliary: bool,
@@ -313,8 +313,11 @@ def _vectorized_candidate_rollouts(
     repeated_belief = _repeat_belief_for_candidates(belief, candidate_count)
     repeated_offsets = torch.cat([offsets] * candidate_count, dim=0)
     action_template = next((action for action in actions if action is not None), None)
-    batched_action: WorldImpulseAction | None = None
-    if action_template is not None:
+    batched_action: WorldAction | None = None
+    if action_template is not None and not any(
+        isinstance(action, WorldImpulseSchedule) for action in actions if action is not None
+    ):
+        assert isinstance(action_template, WorldImpulseAction)
         action_rows = tuple(
             action
             if action is not None
@@ -338,6 +341,45 @@ def _vectorized_candidate_rollouts(
             impulse_world=torch.cat([action.impulse_world for action in action_rows], dim=0),
             application_mask=application_mask,
         )
+    elif action_template is not None:
+        sequences = tuple(
+            ()
+            if action is None
+            else action.actions
+            if isinstance(action, WorldImpulseSchedule)
+            else (action,)
+            for action in actions
+        )
+        maximum_actions = max(len(sequence) for sequence in sequences)
+        flattened_actions: list[WorldImpulseAction] = []
+        for action_index in range(maximum_actions):
+            template = next(
+                sequence[action_index] for sequence in sequences if action_index < len(sequence)
+            )
+            rows: list[WorldImpulseAction] = []
+            masks: list[Tensor] = []
+            for sequence in sequences:
+                if action_index < len(sequence):
+                    row = sequence[action_index]
+                    mask = row._application_mask_for(belief)
+                else:
+                    row = WorldImpulseAction(
+                        timestamp=template.timestamp,
+                        object_id=template.object_id,
+                        impulse_world=torch.zeros_like(template.impulse_world),
+                    )
+                    mask = torch.zeros_like(template.timestamp, dtype=torch.bool)
+                rows.append(row)
+                masks.append(mask)
+            flattened_actions.append(
+                _FlattenedCandidateAction(
+                    timestamp=torch.cat([row.timestamp for row in rows], dim=0),
+                    object_id=torch.cat([row.object_id for row in rows], dim=0),
+                    impulse_world=torch.cat([row.impulse_world for row in rows], dim=0),
+                    application_mask=torch.cat(masks, dim=0),
+                )
+            )
+        batched_action = WorldImpulseSchedule(actions=tuple(flattened_actions))
 
     vectorized = dynamics.rollout(
         repeated_belief,
@@ -362,7 +404,7 @@ def _serial_candidate_rollouts(
     dynamics: _KnownActionDynamics,
     belief: WorldBelief,
     offsets: Tensor,
-    actions: tuple[WorldImpulseAction | None, ...],
+    actions: tuple[WorldAction | None, ...],
     *,
     return_events: bool,
     return_auxiliary: bool,
@@ -383,7 +425,7 @@ def plan_counterfactual_actions(
     dynamics: _KnownActionDynamics,
     belief: WorldBelief,
     query_times: Tensor | Sequence[float],
-    candidates: Sequence[WorldImpulseAction | None],
+    candidates: Sequence[WorldAction | None],
     goal: TerminalWorldPositionGoal,
     *,
     weights: CounterfactualCostWeights = _DEFAULT_COST_WEIGHTS,
@@ -423,8 +465,13 @@ def plan_counterfactual_actions(
     target_mask = _validate_goal(goal, belief)
     latest_timestamp = belief.timestamp + offsets[:, -1]
     for action in actions:
-        if action is not None and not isinstance(action, WorldImpulseAction):
-            raise TypeError("each candidate must be WorldImpulseAction or None")
+        if action is not None and not isinstance(
+            action,
+            (WorldImpulseAction, WorldImpulseSchedule),
+        ):
+            raise TypeError(
+                "each candidate must be WorldImpulseAction, WorldImpulseSchedule, or None"
+            )
         if action is not None:
             action.validate_for(belief, latest_timestamp=latest_timestamp)
 
@@ -466,8 +513,15 @@ def plan_counterfactual_actions(
         position_variances.append(terminal_log_variance.exp().sum(dim=-1))
         if action is None:
             impulse_efforts.append(belief.objects.position.new_zeros(belief.batch_size))
-        else:
+        elif isinstance(action, WorldImpulseAction):
             impulse_efforts.append(action.impulse_world.square().sum(dim=-1))
+        else:
+            impulse_efforts.append(
+                torch.stack(
+                    [item.impulse_world.square().sum(dim=-1) for item in action.actions],
+                    dim=-1,
+                ).sum(dim=-1)
+            )
 
     terminal_squared_error = torch.stack(squared_errors, dim=-1)
     terminal_position_variance = torch.stack(position_variances, dim=-1)

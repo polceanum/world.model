@@ -9,7 +9,7 @@ import torch
 from torch import Tensor, nn
 
 from world_model.belief import BeliefTrajectory, MotionMode, WorldBelief
-from world_model.dynamics.actions import WorldImpulseAction
+from world_model.dynamics.actions import WorldAction, WorldImpulseAction, WorldImpulseSchedule
 from world_model.dynamics.analytic import AnalyticKinematics
 from world_model.dynamics.rollout import RolloutEngine, RolloutStep
 
@@ -40,7 +40,7 @@ class AnalyticFreeMotionDynamics(nn.Module):
         belief: WorldBelief,
         dt: float | Tensor,
         *,
-        action: WorldImpulseAction | None = None,
+        action: WorldAction | None = None,
     ) -> RolloutStep:
         if action is None:
             elapsed = torch.as_tensor(
@@ -85,8 +85,27 @@ class AnalyticFreeMotionDynamics(nn.Module):
                 auxiliary={},
             )
 
+        if isinstance(action, WorldImpulseSchedule):
+            elapsed = self._normalise_elapsed_time(belief, dt)
+            trajectory = self.rollout(belief, elapsed.unsqueeze(-1), action=action)
+            objects = belief.objects.replace(
+                position=trajectory.positions[:, 0],
+                velocity=trajectory.velocities[:, 0],
+                orientation=trajectory.orientations[:, 0],
+                motion_mode_logits=trajectory.motion_mode_logits[:, 0],
+                fast_log_variance=trajectory.fast_log_variance[:, 0],
+                active=trajectory.active_mask[:, 0],
+            )
+            return RolloutStep(
+                belief=belief.replace(
+                    timestamp=trajectory.timestamps[:, 0],
+                    objects=objects,
+                ),
+                event_logits=trajectory.event_logits[:, 0],
+                auxiliary={name: value[:, 0] for name, value in trajectory.auxiliary.items()},
+            )
         if not isinstance(action, WorldImpulseAction):
-            raise TypeError("action must be a WorldImpulseAction or None")
+            raise TypeError("action must be a WorldImpulseAction, WorldImpulseSchedule, or None")
         elapsed = self._normalise_elapsed_time(belief, dt)
         target_mask = action.validate_for(
             belief,
@@ -124,7 +143,7 @@ class AnalyticFreeMotionDynamics(nn.Module):
         belief: WorldBelief,
         dt: float | Tensor,
         *,
-        action: WorldImpulseAction | None = None,
+        action: WorldAction | None = None,
     ) -> WorldBelief:
         if action is None:
             return self.predict_step(belief, dt).belief
@@ -134,7 +153,7 @@ class AnalyticFreeMotionDynamics(nn.Module):
         self,
         belief: WorldBelief,
         query_times: Tensor | Sequence[float],
-        action: WorldImpulseAction | None,
+        action: WorldAction | None,
     ) -> Tensor:
         """Purely normalize queries and validate one optional action.
 
@@ -146,8 +165,8 @@ class AnalyticFreeMotionDynamics(nn.Module):
         offsets = self.rollout_engine._normalise_query_times(belief, query_times)
         if action is None:
             return offsets
-        if not isinstance(action, WorldImpulseAction):
-            raise TypeError("action must be a WorldImpulseAction or None")
+        if not isinstance(action, (WorldImpulseAction, WorldImpulseSchedule)):
+            raise TypeError("action must be a WorldImpulseAction, WorldImpulseSchedule, or None")
         if offsets.shape[1] == 0:
             raise ValueError("an action rollout requires at least one query time")
         action.validate_for(
@@ -161,7 +180,7 @@ class AnalyticFreeMotionDynamics(nn.Module):
         belief: WorldBelief,
         query_times: Tensor | Sequence[float],
         *,
-        action: WorldImpulseAction | None = None,
+        action: WorldAction | None = None,
         return_events: bool = True,
         return_auxiliary: bool = True,
         auxiliary_names: Collection[str] | None = None,
@@ -177,6 +196,16 @@ class AnalyticFreeMotionDynamics(nn.Module):
             )
 
         offsets = self.validate_action_rollout(belief, query_times, action)
+        if isinstance(action, WorldImpulseSchedule):
+            return self._rollout_schedule(
+                belief,
+                offsets,
+                action,
+                return_events=return_events,
+                return_auxiliary=return_auxiliary,
+                auxiliary_names=auxiliary_names,
+            )
+        assert isinstance(action, WorldImpulseAction)
         selected_auxiliary = self._validate_action_auxiliary_request(
             return_auxiliary=return_auxiliary,
             auxiliary_names=auxiliary_names,
@@ -227,6 +256,112 @@ class AnalyticFreeMotionDynamics(nn.Module):
             auxiliary=auxiliary,
         )
         return trajectory.validate()
+
+    def _rollout_schedule(
+        self,
+        belief: WorldBelief,
+        offsets: Tensor,
+        schedule: WorldImpulseSchedule,
+        *,
+        return_events: bool,
+        return_auxiliary: bool,
+        auxiliary_names: Collection[str] | None,
+    ) -> BeliefTrajectory:
+        """Exploit linear superposition for an exact multi-impulse rollout."""
+
+        selected_auxiliary = self._validate_schedule_auxiliary_request(
+            return_auxiliary=return_auxiliary,
+            auxiliary_names=auxiliary_names,
+        )
+        ordinary = self.rollout_engine.rollout(
+            self.predict_step,
+            belief,
+            offsets,
+            return_events=return_events,
+            return_auxiliary=return_auxiliary,
+            auxiliary_names=() if return_auxiliary else None,
+        )
+        schedule.validate_for(
+            belief,
+            latest_timestamp=belief.timestamp + offsets[:, -1],
+        )
+        absolute_times = belief.timestamp.unsqueeze(-1) + offsets
+        position_delta = torch.zeros_like(ordinary.positions)
+        velocity_delta = torch.zeros_like(ordinary.velocities)
+        applied = torch.zeros(
+            ordinary.active_mask.shape,
+            device=belief.device,
+            dtype=torch.bool,
+        )
+        known_impulse = ordinary.positions.new_zeros(ordinary.positions.shape)
+        action_count = torch.zeros(
+            ordinary.active_mask.shape,
+            device=belief.device,
+            dtype=torch.int64,
+        )
+        for item in schedule.actions:
+            target_mask = item.validate_for(
+                belief,
+                latest_timestamp=belief.timestamp + offsets[:, -1],
+            )
+            item_position, item_velocity = self._action_response(
+                belief,
+                absolute_times,
+                item,
+                target_mask,
+            )
+            item_applied, item_impulse = self._action_interval_auxiliaries(
+                belief,
+                absolute_times,
+                item,
+                target_mask,
+            )
+            application_mask = item._application_mask_for(belief)
+            row_mask = application_mask[:, None, None]
+            vector_mask = row_mask.unsqueeze(-1)
+            position_delta = position_delta + torch.where(
+                vector_mask,
+                item_position,
+                torch.zeros_like(item_position),
+            )
+            velocity_delta = velocity_delta + torch.where(
+                vector_mask,
+                item_velocity,
+                torch.zeros_like(item_velocity),
+            )
+            item_applied = item_applied & row_mask
+            applied = applied | item_applied
+            known_impulse = known_impulse + torch.where(
+                item_applied.unsqueeze(-1),
+                item_impulse,
+                torch.zeros_like(item_impulse),
+            )
+            action_count = action_count + item_applied.to(dtype=torch.int64)
+
+        auxiliary = dict(ordinary.auxiliary)
+        if return_auxiliary and (
+            selected_auxiliary is None or "known_action_applied" in selected_auxiliary
+        ):
+            auxiliary["known_action_applied"] = applied
+        if return_auxiliary and (
+            selected_auxiliary is None or "known_impulse_world" in selected_auxiliary
+        ):
+            auxiliary["known_impulse_world"] = known_impulse
+        if return_auxiliary and (
+            selected_auxiliary is None or "known_action_count" in selected_auxiliary
+        ):
+            auxiliary["known_action_count"] = action_count
+        return replace(
+            ordinary,
+            positions=ordinary.positions + position_delta,
+            velocities=ordinary.velocities + velocity_delta,
+            event_logits=(
+                self._with_action_events(ordinary.event_logits, applied)
+                if ordinary.event_logits is not None
+                else None
+            ),
+            auxiliary=auxiliary,
+        ).validate()
 
     @staticmethod
     def _normalise_elapsed_time(belief: WorldBelief, dt: float | Tensor) -> Tensor:
@@ -333,6 +468,26 @@ class AnalyticFreeMotionDynamics(nn.Module):
         if any(not isinstance(name, str) or not name for name in selected):
             raise ValueError("auxiliary_names must contain nonempty strings")
         missing = selected - _KNOWN_ACTION_AUXILIARIES
+        if missing:
+            raise KeyError(
+                "predictor did not emit requested auxiliaries: " + ", ".join(sorted(missing))
+            )
+        return selected
+
+    @staticmethod
+    def _validate_schedule_auxiliary_request(
+        *,
+        return_auxiliary: bool,
+        auxiliary_names: Collection[str] | None,
+    ) -> frozenset[str] | None:
+        if auxiliary_names is not None and not return_auxiliary:
+            raise ValueError("auxiliary_names requires return_auxiliary=True")
+        if auxiliary_names is None:
+            return None
+        selected = frozenset(auxiliary_names)
+        if any(not isinstance(name, str) or not name for name in selected):
+            raise ValueError("auxiliary_names must contain nonempty strings")
+        missing = selected - (_KNOWN_ACTION_AUXILIARIES | {"known_action_count"})
         if missing:
             raise KeyError(
                 "predictor did not emit requested auxiliaries: " + ", ".join(sorted(missing))

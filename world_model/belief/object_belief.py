@@ -8,6 +8,7 @@ from enum import IntEnum
 from torch import Tensor
 
 from world_model.belief._base import TensorDataclassMixin
+from world_model.belief.geometry import RigidGeometryCodec
 
 
 class MotionMode(IntEnum):
@@ -113,9 +114,19 @@ class ObjectBeliefTensor(TensorDataclassMixin):
     def radius(self) -> Tensor:
         """Positive toy-sphere radius ``[B,N,1]`` from the geometry code."""
 
-        if self.geometry_dim < 1:
-            raise ValueError("geometry must contain radius in component zero")
-        return self.geometry[..., :1].clamp_min(1e-6)
+        return RigidGeometryCodec.bounding_radius(self.geometry)
+
+    @property
+    def geometry_primitive(self) -> Tensor:
+        """Decode a primitive tag, treating every legacy row as a sphere."""
+
+        return RigidGeometryCodec.primitive(self.geometry)
+
+    @property
+    def geometry_half_extents(self) -> Tensor:
+        """Return local half-extents for geometry-aware downstream code."""
+
+        return RigidGeometryCodec.half_extents(self.geometry)
 
     @property
     def mass(self) -> Tensor:

@@ -68,7 +68,7 @@ from world_model.runtime.state import (
 )
 
 if TYPE_CHECKING:
-    from world_model.dynamics import WorldImpulseAction
+    from world_model.dynamics import WorldAction
     from world_model.planning import (
         CounterfactualCostWeights,
         CounterfactualPlanResult,
@@ -1022,7 +1022,7 @@ class OnlineWorldModel(nn.Module):
         self,
         target_timestamp: float | Tensor,
         *,
-        action: WorldImpulseAction | None = None,
+        action: WorldAction | None = None,
     ) -> PreparedPropagation:
         """Predict once from the current runtime revision for one future ingest."""
 
@@ -1030,10 +1030,12 @@ class OnlineWorldModel(nn.Module):
         if current is None:
             raise RuntimeError("cannot prepare propagation before belief initialization")
         if action is not None:
-            from world_model.dynamics import WorldImpulseAction
+            from world_model.dynamics import WorldImpulseAction, WorldImpulseSchedule
 
-            if not isinstance(action, WorldImpulseAction):
-                raise TypeError("action must be a WorldImpulseAction or None")
+            if not isinstance(action, (WorldImpulseAction, WorldImpulseSchedule)):
+                raise TypeError(
+                    "action must be a WorldImpulseAction, WorldImpulseSchedule, or None"
+                )
             if self.hypothesis_controller is not None:
                 raise NotImplementedError(
                     "known actions are unsupported while the runtime hypothesis "
@@ -1200,14 +1202,23 @@ class OnlineWorldModel(nn.Module):
                 "prepared propagation source belief tensors have changed"
             )
         if prepared.action is not None:
-            from world_model.dynamics import WorldImpulseAction
+            from world_model.dynamics import WorldImpulseAction, WorldImpulseSchedule
 
-            if not isinstance(prepared.action, WorldImpulseAction):
+            if not isinstance(
+                prepared.action,
+                (WorldImpulseAction, WorldImpulseSchedule),
+            ):
                 raise PreparedPropagationError("prepared propagation action type has changed")
         if tensor_identity_version_signature(prepared.action) != prepared.action_tensor_signature:
             raise PreparedPropagationError("prepared propagation action tensors have changed")
-        if prepared.action is not None and prepared.action.frame != "world":
-            raise PreparedPropagationError("prepared propagation action metadata has changed")
+        if prepared.action is not None:
+            frames = (
+                (prepared.action.frame,)
+                if isinstance(prepared.action, WorldImpulseAction)
+                else tuple(item.frame for item in prepared.action.actions)
+            )
+            if any(frame != "world" for frame in frames):
+                raise PreparedPropagationError("prepared propagation action metadata has changed")
         if not torch.equal(requested, prepared.target_timestamp):
             raise PreparedPropagationError(
                 "prepared propagation target timestamp does not match observation"
@@ -1639,16 +1650,18 @@ class OnlineWorldModel(nn.Module):
         packets: ObservationPacket | Sequence[ObservationPacket],
         *,
         prepared: PreparedPropagation | None = None,
-        action: WorldImpulseAction | None = None,
+        action: WorldAction | None = None,
     ) -> WorldBelief:
         packet_list = [packets] if isinstance(packets, ObservationPacket) else list(packets)
         if not packet_list:
             raise ValueError("ingest requires at least one observation packet")
         if action is not None:
-            from world_model.dynamics import WorldImpulseAction
+            from world_model.dynamics import WorldImpulseAction, WorldImpulseSchedule
 
-            if not isinstance(action, WorldImpulseAction):
-                raise TypeError("action must be a WorldImpulseAction or None")
+            if not isinstance(action, (WorldImpulseAction, WorldImpulseSchedule)):
+                raise TypeError(
+                    "action must be a WorldImpulseAction, WorldImpulseSchedule, or None"
+                )
             if prepared is not None:
                 raise PreparedPropagationError(
                     "pass known actions to prepare_propagation, not prepared ingest"
@@ -1848,7 +1861,7 @@ class OnlineWorldModel(nn.Module):
         self,
         query_times: Sequence[float] | Tensor,
         *,
-        action: WorldImpulseAction | None = None,
+        action: WorldAction | None = None,
     ) -> BeliefTrajectory:
         if self.state.belief is None:
             raise RuntimeError("OnlineWorldModel must ingest an observation first")
@@ -1868,10 +1881,10 @@ class OnlineWorldModel(nn.Module):
                     return selected
             return self.dynamics.rollout(self.state.belief, times)
 
-        from world_model.dynamics import WorldImpulseAction
+        from world_model.dynamics import WorldImpulseAction, WorldImpulseSchedule
 
-        if not isinstance(action, WorldImpulseAction):
-            raise TypeError("action must be a WorldImpulseAction or None")
+        if not isinstance(action, (WorldImpulseAction, WorldImpulseSchedule)):
+            raise TypeError("action must be a WorldImpulseAction, WorldImpulseSchedule, or None")
         if self.hypothesis_controller is not None:
             raise NotImplementedError(
                 "known actions are unsupported while the runtime hypothesis controller is enabled"
@@ -1890,7 +1903,7 @@ class OnlineWorldModel(nn.Module):
     def plan(
         self,
         query_times: Sequence[float] | Tensor,
-        candidates: Sequence[WorldImpulseAction | None],
+        candidates: Sequence[WorldAction | None],
         goal: TerminalWorldPositionGoal,
         *,
         weights: CounterfactualCostWeights | None = None,

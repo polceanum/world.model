@@ -16,7 +16,7 @@ from world_model.belief import (
     ObjectBeliefTensor,
     WorldBelief,
 )
-from world_model.dynamics.actions import WorldImpulseAction
+from world_model.dynamics.actions import WorldAction, WorldImpulseAction, WorldImpulseSchedule
 from world_model.dynamics.analytic import AnalyticKinematics
 from world_model.dynamics.applicability import (
     PairApplicability,
@@ -1428,6 +1428,157 @@ class DynamicsModel(nn.Module):
             )
         )
 
+    def _combine_interval_segments(
+        self,
+        accumulated: RolloutStep,
+        segment: RolloutStep,
+        *,
+        use_segment: Tensor,
+    ) -> RolloutStep:
+        """Accumulate physical evidence across an arbitrary causal split."""
+
+        event_logits = self._where_batch(
+            use_segment,
+            segment.event_logits,
+            accumulated.event_logits,
+        ).clone()
+        event_logits[..., MotionMode.COLLISION] = torch.maximum(
+            accumulated.event_logits[..., MotionMode.COLLISION],
+            segment.event_logits[..., MotionMode.COLLISION],
+        )
+        if accumulated.auxiliary.keys() != segment.auxiliary.keys():
+            raise RuntimeError("split dynamics segments emitted different auxiliary schemas")
+        auxiliary: dict[str, Tensor] = {}
+        for name, previous in accumulated.auxiliary.items():
+            current = segment.auxiliary[name]
+            if name in _ACTION_INTERVAL_OR_AUXILIARIES:
+                value = previous | current
+            elif name in _ACTION_INTERVAL_MAX_AUXILIARIES:
+                value = torch.maximum(previous, current)
+            elif name in _ACTION_INTERVAL_EVENT_AUXILIARIES:
+                endpoint = self._where_batch(use_segment, current, previous)
+                value = torch.stack(
+                    (
+                        endpoint[..., 0],
+                        torch.maximum(previous[..., 1], current[..., 1]),
+                    ),
+                    dim=-1,
+                )
+            elif name == "learned_effect_evaluation_count":
+                value = previous + torch.where(
+                    use_segment,
+                    current,
+                    torch.zeros_like(current),
+                )
+            else:
+                value = self._where_batch(use_segment, current, previous)
+            auxiliary[name] = value
+        return self._validate_finite_segment(
+            RolloutStep(
+                belief=segment.belief,
+                event_logits=event_logits,
+                auxiliary=auxiliary,
+            )
+        )
+
+    def _predict_step_with_validated_schedule(
+        self,
+        belief: WorldBelief,
+        elapsed: Tensor,
+        schedule: WorldImpulseSchedule,
+        consumed: Tensor,
+    ) -> tuple[RolloutStep, Tensor]:
+        """Split one interval around every due impulse in timestamp order."""
+
+        target_timestamp = belief.timestamp + elapsed
+        current = belief
+        accumulated = self._zero_step(belief)
+        applied_any = torch.zeros_like(belief.objects.active)
+        impulse_sum = torch.zeros_like(belief.objects.position)
+        action_count = torch.zeros_like(belief.objects.object_id)
+        updated_consumed = consumed.clone()
+
+        for index, action in enumerate(schedule.actions):
+            application_mask = action._application_mask_for(belief)
+            owns_action = (
+                application_mask
+                & ~updated_consumed[:, index]
+                & (current.timestamp < action.timestamp)
+                & (action.timestamp <= target_timestamp)
+            )
+            before_elapsed = torch.where(
+                owns_action,
+                action.timestamp - current.timestamp,
+                torch.zeros_like(elapsed),
+            )
+            before = self._predict_step_batch_independent(current, before_elapsed)
+            accumulated = self._combine_interval_segments(
+                accumulated,
+                before,
+                use_segment=before_elapsed > 0.0,
+            )
+            current = before.belief
+
+            target_mask = current.objects.active & (
+                current.objects.object_id == action.object_id.unsqueeze(-1)
+            )
+            physical_target = owns_action.unsqueeze(-1) & target_mask
+            nonzero = torch.any(action.impulse_world != 0.0, dim=-1)
+            applied = physical_target & nonzero.unsqueeze(-1)
+            velocity_jump = action.impulse_world.unsqueeze(1) / current.objects.mass
+            velocity = current.objects.velocity + torch.where(
+                physical_target.unsqueeze(-1),
+                velocity_jump,
+                torch.zeros_like(velocity_jump),
+            )
+            current = current.replace(
+                timestamp=torch.where(owns_action, action.timestamp, current.timestamp),
+                objects=current.objects.replace(velocity=velocity),
+            )
+            accumulated = RolloutStep(
+                belief=current,
+                event_logits=accumulated.event_logits,
+                auxiliary=accumulated.auxiliary,
+            )
+            applied_any = applied_any | applied
+            expanded_impulse = action.impulse_world.unsqueeze(1).expand_as(impulse_sum)
+            impulse_sum = impulse_sum + torch.where(
+                applied.unsqueeze(-1),
+                expanded_impulse,
+                torch.zeros_like(expanded_impulse),
+            )
+            action_count = action_count + applied.to(dtype=torch.int64)
+            updated_consumed[:, index] = updated_consumed[:, index] | owns_action
+
+        after_elapsed = (target_timestamp - current.timestamp).clamp_min(0.0)
+        after = self._predict_step_batch_independent(current, after_elapsed)
+        accumulated = self._combine_interval_segments(
+            accumulated,
+            after,
+            use_segment=after_elapsed > 0.0,
+        )
+        auxiliary = dict(accumulated.auxiliary)
+        auxiliary.update(
+            {
+                "known_action_applied": applied_any,
+                "known_impulse_world": impulse_sum,
+                "known_action_count": action_count,
+            }
+        )
+        return (
+            self._validate_finite_segment(
+                RolloutStep(
+                    belief=accumulated.belief.replace(timestamp=target_timestamp),
+                    event_logits=self._with_known_action_event(
+                        accumulated.event_logits,
+                        applied_any,
+                    ),
+                    auxiliary=auxiliary,
+                )
+            ),
+            updated_consumed,
+        )
+
     def _predict_step_with_validated_action(
         self,
         belief: WorldBelief,
@@ -1679,12 +1830,142 @@ class DynamicsModel(nn.Module):
             },
         )
 
+    def _predict_event_driven_schedule_segment(
+        self,
+        belief: WorldBelief,
+        elapsed: Tensor,
+        schedule: WorldImpulseSchedule,
+        consumed: Tensor,
+        *,
+        collect_pair_events: bool,
+    ) -> tuple[RolloutStep, Tensor]:
+        """Apply all due schedule entries on the fast state-only path."""
+
+        target_timestamp = belief.timestamp + elapsed
+        current = belief
+        updated_consumed = consumed.clone()
+        applied_any = torch.zeros_like(belief.objects.active)
+        impulse_sum = torch.zeros_like(belief.objects.position)
+        action_count = torch.zeros_like(belief.objects.object_id)
+        pair_collision = torch.zeros(
+            belief.batch_size,
+            belief.objects.max_objects,
+            belief.objects.max_objects,
+            dtype=torch.bool,
+            device=belief.device,
+        )
+        pair_event_logits = belief.objects.position.new_full(
+            (
+                belief.batch_size,
+                belief.objects.max_objects,
+                belief.objects.max_objects,
+                2,
+            ),
+            -4.0,
+        )
+        latest_event_logits = belief.objects.motion_mode_logits.clone()
+        latest_event_logits[..., MotionMode.COLLISION] = -4.0
+
+        def integrate(duration: Tensor) -> None:
+            nonlocal current, pair_collision, pair_event_logits, latest_event_logits
+            segment = self._event_driven_state_step(
+                current,
+                duration,
+                collect_pair_events=collect_pair_events,
+            )
+            used = duration > 0.0
+            current = segment.belief
+            latest_event_logits = self._where_batch(
+                used,
+                segment.event_logits,
+                latest_event_logits,
+            )
+            if collect_pair_events:
+                current_pair_logits = segment.auxiliary["pair_event_logits"]
+                endpoint = self._where_batch(used, current_pair_logits, pair_event_logits)
+                pair_event_logits = torch.stack(
+                    (
+                        endpoint[..., 0],
+                        torch.maximum(
+                            pair_event_logits[..., 1],
+                            current_pair_logits[..., 1],
+                        ),
+                    ),
+                    dim=-1,
+                )
+                pair_collision = pair_collision | segment.auxiliary["pair_collision"]
+
+        for index, action in enumerate(schedule.actions):
+            application_mask = action._application_mask_for(belief)
+            owns_action = (
+                application_mask
+                & ~updated_consumed[:, index]
+                & (current.timestamp < action.timestamp)
+                & (action.timestamp <= target_timestamp)
+            )
+            before_elapsed = torch.where(
+                owns_action,
+                action.timestamp - current.timestamp,
+                torch.zeros_like(elapsed),
+            )
+            integrate(before_elapsed)
+            target_mask = current.objects.active & (
+                current.objects.object_id == action.object_id.unsqueeze(-1)
+            )
+            physical_target = owns_action.unsqueeze(-1) & target_mask
+            nonzero = torch.any(action.impulse_world != 0.0, dim=-1)
+            applied = physical_target & nonzero.unsqueeze(-1)
+            velocity_jump = action.impulse_world.unsqueeze(1) / current.objects.mass
+            current = current.replace(
+                timestamp=torch.where(owns_action, action.timestamp, current.timestamp),
+                objects=current.objects.replace(
+                    velocity=current.objects.velocity
+                    + torch.where(
+                        physical_target.unsqueeze(-1),
+                        velocity_jump,
+                        torch.zeros_like(velocity_jump),
+                    )
+                ),
+            )
+            applied_any = applied_any | applied
+            expanded_impulse = action.impulse_world.unsqueeze(1).expand_as(impulse_sum)
+            impulse_sum = impulse_sum + torch.where(
+                applied.unsqueeze(-1),
+                expanded_impulse,
+                torch.zeros_like(expanded_impulse),
+            )
+            action_count = action_count + applied.to(dtype=torch.int64)
+            updated_consumed[:, index] = updated_consumed[:, index] | owns_action
+
+        integrate((target_timestamp - current.timestamp).clamp_min(0.0))
+        auxiliary: dict[str, Tensor] = {}
+        if collect_pair_events:
+            auxiliary = {
+                "pair_collision": pair_collision,
+                "pair_event_logits": pair_event_logits,
+                "pair_collision_logits": pair_event_logits[..., 1],
+                "known_action_applied": applied_any,
+                "known_impulse_world": impulse_sum,
+                "known_action_count": action_count,
+            }
+        return (
+            RolloutStep(
+                belief=current.replace(timestamp=target_timestamp),
+                event_logits=self._with_known_action_event(
+                    latest_event_logits,
+                    applied_any,
+                ),
+                auxiliary=auxiliary,
+            ),
+            updated_consumed,
+        )
+
     def predict_state_only_step(
         self,
         belief: WorldBelief,
         dt: float | Tensor,
         *,
-        action: WorldImpulseAction | None = None,
+        action: WorldAction | None = None,
     ) -> RolloutStep:
         """Return one fast state interval plus compact pair-event evidence.
 
@@ -1704,8 +1985,27 @@ class DynamicsModel(nn.Module):
                 elapsed,
                 collect_pair_events=True,
             )
+        if isinstance(action, WorldImpulseSchedule):
+            action.validate_for(
+                belief,
+                latest_timestamp=belief.timestamp + elapsed,
+            )
+            application = torch.stack(
+                [item._application_mask_for(belief) for item in action.actions],
+                dim=-1,
+            )
+            step, consumed = self._predict_event_driven_schedule_segment(
+                belief,
+                elapsed,
+                action,
+                ~application,
+                collect_pair_events=True,
+            )
+            if not bool(consumed.all()):
+                raise RuntimeError("validated action schedule was not consumed")
+            return step
         if not isinstance(action, WorldImpulseAction):
-            raise TypeError("action must be a WorldImpulseAction or None")
+            raise TypeError("action must be a WorldImpulseAction, WorldImpulseSchedule, or None")
         target_mask = action.validate_for(
             belief,
             latest_timestamp=belief.timestamp + elapsed,
@@ -1731,7 +2031,7 @@ class DynamicsModel(nn.Module):
         self,
         belief: WorldBelief,
         query_times: Tensor | Sequence[float],
-        action: WorldImpulseAction | None,
+        action: WorldAction | None,
     ) -> BeliefTrajectory:
         """Return an event-free trajectory from the opt-in fast state path."""
 
@@ -1745,6 +2045,39 @@ class DynamicsModel(nn.Module):
                 return_auxiliary=False,
             )
 
+        if isinstance(action, WorldImpulseSchedule):
+            application = torch.stack(
+                [item._application_mask_for(belief) for item in action.actions],
+                dim=-1,
+            )
+            consumed = ~application
+
+            def predict_schedule_segment(
+                current: WorldBelief,
+                segment_elapsed: Tensor,
+            ) -> RolloutStep:
+                nonlocal consumed
+                step, consumed = self._predict_event_driven_schedule_segment(
+                    current,
+                    segment_elapsed,
+                    action,
+                    consumed,
+                    collect_pair_events=False,
+                )
+                return step
+
+            trajectory = self.rollout_engine.rollout(
+                predict_schedule_segment,
+                belief,
+                offsets,
+                return_events=False,
+                return_auxiliary=False,
+            )
+            if not bool(consumed.all()):
+                raise RuntimeError("validated action schedule was not consumed")
+            return trajectory
+
+        assert isinstance(action, WorldImpulseAction)
         application_mask = action._application_mask_for(belief)
         consumed = ~application_mask
 
@@ -1787,7 +2120,7 @@ class DynamicsModel(nn.Module):
         belief: WorldBelief,
         dt: float | Tensor,
         *,
-        action: WorldImpulseAction | None = None,
+        action: WorldAction | None = None,
     ) -> WorldBelief:
         """Predict a new belief after elapsed seconds without mutating input."""
 
@@ -1798,15 +2131,33 @@ class DynamicsModel(nn.Module):
         belief: WorldBelief,
         dt: float | Tensor,
         *,
-        action: WorldImpulseAction | None = None,
+        action: WorldAction | None = None,
     ) -> RolloutStep:
         """Return the endpoint belief plus events over the elapsed interval."""
 
         if action is None:
             return self._predict_step(belief, dt)
-        if not isinstance(action, WorldImpulseAction):
-            raise TypeError("action must be a WorldImpulseAction or None")
         elapsed = self._normalise_dt(belief, dt)
+        if isinstance(action, WorldImpulseSchedule):
+            action.validate_for(
+                belief,
+                latest_timestamp=belief.timestamp + elapsed,
+            )
+            application = torch.stack(
+                [item._application_mask_for(belief) for item in action.actions],
+                dim=-1,
+            )
+            step, consumed = self._predict_step_with_validated_schedule(
+                belief,
+                elapsed,
+                action,
+                ~application,
+            )
+            if not bool(consumed.all().detach().cpu().item()):
+                raise RuntimeError("validated action schedule was not consumed")
+            return step
+        if not isinstance(action, WorldImpulseAction):
+            raise TypeError("action must be a WorldImpulseAction, WorldImpulseSchedule, or None")
         action.validate_for(
             belief,
             latest_timestamp=belief.timestamp + elapsed,
@@ -1825,15 +2176,15 @@ class DynamicsModel(nn.Module):
         self,
         belief: WorldBelief,
         query_times: Tensor | Sequence[float],
-        action: WorldImpulseAction | None,
+        action: WorldAction | None,
     ) -> Tensor:
         """Purely normalize rollout offsets and validate one optional action."""
 
         offsets = self.rollout_engine._normalise_query_times(belief, query_times)
         if action is None:
             return offsets
-        if not isinstance(action, WorldImpulseAction):
-            raise TypeError("action must be a WorldImpulseAction or None")
+        if not isinstance(action, (WorldImpulseAction, WorldImpulseSchedule)):
+            raise TypeError("action must be a WorldImpulseAction, WorldImpulseSchedule, or None")
         if offsets.shape[1] == 0:
             raise ValueError("an action rollout requires at least one query time")
         action.validate_for(
@@ -1847,7 +2198,7 @@ class DynamicsModel(nn.Module):
         belief: WorldBelief,
         query_times: Tensor | Sequence[float],
         *,
-        action: WorldImpulseAction | None = None,
+        action: WorldAction | None = None,
         return_events: bool = True,
         return_auxiliary: bool = True,
         auxiliary_names: Collection[str] | None = None,
@@ -1879,6 +2230,39 @@ class DynamicsModel(nn.Module):
             )
 
         offsets = self.validate_action_rollout(belief, query_times, action)
+        if isinstance(action, WorldImpulseSchedule):
+            application = torch.stack(
+                [item._application_mask_for(belief) for item in action.actions],
+                dim=-1,
+            )
+            consumed = ~application
+
+            def predict_schedule_segment(
+                current: WorldBelief,
+                elapsed: Tensor,
+            ) -> RolloutStep:
+                nonlocal consumed
+                result, consumed = self._predict_step_with_validated_schedule(
+                    current,
+                    elapsed,
+                    action,
+                    consumed,
+                )
+                return result
+
+            trajectory = self.rollout_engine.rollout(
+                predict_schedule_segment,
+                belief,
+                offsets,
+                return_events=return_events,
+                return_auxiliary=return_auxiliary,
+                auxiliary_names=auxiliary_names,
+            )
+            if not bool(consumed.all().detach().cpu().item()):
+                raise RuntimeError("validated action schedule was not consumed by the rollout")
+            return trajectory
+
+        assert isinstance(action, WorldImpulseAction)
         application_mask = action._application_mask_for(belief)
         nonzero = torch.any(action.impulse_world != 0.0, dim=-1)
         consumed = ~application_mask

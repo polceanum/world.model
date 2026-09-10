@@ -6,7 +6,7 @@ from world_model.abstractions import (
     PredictiveTokenBatch,
 )
 from world_model.belief import BeliefTrajectory, WorldBelief
-from world_model.dynamics import WorldImpulseAction
+from world_model.dynamics import WorldAction, WorldImpulseAction, WorldImpulseSchedule
 from world_model.observations import ObservationPacket
 from world_model.planning import (
     CounterfactualCostWeights,
@@ -31,6 +31,8 @@ __all__ = [
     "PredictiveTokenBatch",
     "TerminalWorldPositionGoal",
     "WorldImpulseAction",
+    "WorldImpulseSchedule",
+    "WorldAction",
     "WorldBelief",
     "__version__",
     "load_config",

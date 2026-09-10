@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Literal
+from typing import Literal, TypeAlias
 
 import torch
 from torch import Tensor
@@ -127,4 +127,74 @@ class WorldImpulseAction(TensorDataclassMixin):
         return matches
 
 
-__all__ = ["WorldImpulseAction"]
+@dataclass(frozen=True)
+class WorldImpulseSchedule:
+    """An ordered sequence of known world-frame impulses.
+
+    The schedule is intentionally a thin immutable container around the
+    existing action type.  That keeps one-action callers and checkpoints
+    exactly compatible while allowing causal rollouts and planners to express
+    several future interventions.  Every action is validated against the
+    source belief before propagation starts, and timestamps must be strictly
+    increasing on each batch row that owns consecutive actions.
+    """
+
+    actions: tuple[WorldImpulseAction, ...]
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.actions, tuple):
+            raise TypeError("WorldImpulseSchedule actions must be a tuple")
+        if not self.actions:
+            raise ValueError("WorldImpulseSchedule requires at least one action")
+        if any(not isinstance(action, WorldImpulseAction) for action in self.actions):
+            raise TypeError("WorldImpulseSchedule entries must be WorldImpulseAction values")
+
+    @classmethod
+    def from_action(cls, action: WorldImpulseAction) -> WorldImpulseSchedule:
+        """Wrap one legacy action without changing its tensor identity."""
+
+        if not isinstance(action, WorldImpulseAction):
+            raise TypeError("action must be a WorldImpulseAction")
+        return cls(actions=(action,))
+
+    def validate_for(
+        self,
+        belief: WorldBelief,
+        *,
+        latest_timestamp: Tensor | None = None,
+    ) -> tuple[Tensor, ...]:
+        """Validate the complete schedule before execution and return targets."""
+
+        target_masks: list[Tensor] = []
+        previous_timestamp = belief.timestamp
+        previous_active = torch.zeros(
+            belief.batch_size,
+            dtype=torch.bool,
+            device=belief.device,
+        )
+        for action in self.actions:
+            target_masks.append(action.validate_for(belief, latest_timestamp=latest_timestamp))
+            active = action._application_mask_for(belief)
+            if not isinstance(active, Tensor):
+                raise TypeError("action application mask must be a tensor")
+            if active.shape != (belief.batch_size,):
+                raise ValueError("action application mask must have shape [B]")
+            if active.dtype is not torch.bool:
+                raise TypeError("action application mask must be boolean")
+            if active.device != belief.device:
+                raise ValueError("action application mask must match belief device")
+            if active.requires_grad:
+                raise ValueError("action application mask must not require gradients")
+            if torch.any(active & previous_active & (action.timestamp <= previous_timestamp)):
+                raise ValueError(
+                    "schedule timestamps must be strictly increasing on every active row"
+                )
+            previous_timestamp = torch.where(active, action.timestamp, previous_timestamp)
+            previous_active = previous_active | active
+        return tuple(target_masks)
+
+
+WorldAction: TypeAlias = WorldImpulseAction | WorldImpulseSchedule
+
+
+__all__ = ["WorldAction", "WorldImpulseAction", "WorldImpulseSchedule"]

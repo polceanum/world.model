@@ -1,5 +1,52 @@
 # Project status
 
+## Impact-first scale foundation — 2026-09-10
+
+The revised scale plan now begins with capabilities a downstream controller can
+use, rather than calibration or evaluation-throughput work. Ordered public
+multi-action schedules propagate causally through the shared analytic contact
+dynamics, and `OnlineWorldModel.predict`, prepared propagation, and
+counterfactual planning accept them without changing the existing single-action
+or action-free contracts. Candidate schedules are still evaluated in one
+flattened `B x K` rollout and the serial path remains the exact oracle.
+
+The governed state-first run `runs/20260910-impact-scale-v3` passes all declared
+4/8-second physical and K=8/K=32 action-sequence planning gates. It covers pair,
+floor, wall, and repeated contacts with two or three exactly-once actions. The
+worst 8-second position RMSE is `5.994e-4 m`; the hardest compound-contact slice
+has collision F1 `0.9167` and one-frame timing error. Every planning slice has
+the correct oracle winner, zero regret, successful terminal goal, exact
+serial/vectorized agreement, and consistent replanning; vectorized latency is
+`0.018`--`0.037 s`.
+
+The failed v1 pilot is retained as diagnostic provenance. It exposed that
+loading the incumbent also restored its old plane buffers over a newly
+configured evaluation boundary. Those buffers describe the environment, not
+learned state, so the long-horizon loader now rebinds the configured normals and
+offsets after checkpoint loading. A direct regression protects the fix.
+
+An independent N=8 RGB-D development profile derives ten proposals from eight
+object slots plus two birth proposals. It strictly loads the current incumbent
+and observes all eight separated objects over three public frames with finite
+state, `5.96e-8 m` position RMSE, `0.293 s` total three-frame inference latency,
+and `87,436` learned-weight bytes. It is labeled development-only and does not
+claim full N=8 qualification. A centralized rigid-geometry codec also adds
+backward-compatible sphere/box metadata; it is a representation seam, not yet
+evidence of box perception or contact behavior.
+
+The dashboard now renders the real 4/8-second vector forecasts, action-sequence
+planning/replanning evidence, a measured capability frontier, ablation
+attribution, and the N=8 development measurements. The passing run remains
+exactly `181,850` bytes and the dashboard `196,818` bytes; no RGB-D frames or
+video are retained. The next high-impact work is observable box behavior
+followed by the full N=7/8 perception/lifecycle/contact/planning ladder, as
+recorded in `project/NEXT_SCALE_PLAN.md`.
+
+The exact final tree passes Ruff, Ruff format, compileall, diff hygiene, the
+156-test focused cross-section, and the complete repository suite: `2434
+passed, 16 skipped` in `1:11:38`. The skips are the expected unavailable-MPS
+cases.
+
 ## General capability with compact visual progress — 2026-09-09
 
 The active goal is now the 8 September general-capability amendment on the

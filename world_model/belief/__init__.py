@@ -1,6 +1,7 @@
 """Public persistent-belief contracts."""
 
 from world_model.belief.camera_belief import CameraBelief
+from world_model.belief.geometry import RigidGeometryCodec, RigidPrimitive
 from world_model.belief.hypotheses import HypothesisSet
 from world_model.belief.lifecycle import (
     BirthAssignments,
@@ -44,6 +45,8 @@ __all__ = [
     "BeliefTrajectory",
     "BirthAssignments",
     "CameraBelief",
+    "RigidGeometryCodec",
+    "RigidPrimitive",
     "HypothesisSet",
     "LifecycleConfig",
     "MotionMode",

@@ -6,6 +6,37 @@ to make every heading unambiguous; the suffixes do not imply precedence, no
 substantive decision or chronology changed, and the one corresponding
 cross-reference was disambiguated.
 
+## ADR-186 — Scale causal behavior before model capacity
+
+- **Date:** 2026-09-10
+- **Status:** accepted and partially implemented
+- **Context:** The prior sequence put narrow uncertainty calibration and
+  evaluator optimization ahead of larger behavioral gains. The public action
+  type could express only one intervention, the governed horizon ended at two
+  seconds, and state-only scaling did not exercise perception. Those limits
+  mattered more to a useful controller than the two existing boundary coverage
+  misses.
+- **Decision:** Make ordered known-action schedules and 4/8-second repeated-
+  contact behavior the first scale tier. Validate schedules atomically, split
+  propagation at each absolute action timestamp, preserve the original
+  single-action path, and require serial/vectorized sequence-planning parity
+  plus replanning consistency. Planning remains an evaluation, not a loss.
+- **Decision:** Treat collision planes as environment configuration when loading
+  the incumbent into a bounded evaluation scene. Learned state may load from a
+  checkpoint, but the newly constructed plane normals and offsets are rebound
+  afterward. Retain the failed run that exposed this distinction.
+- **Decision:** Separate representation, state-first dynamics, and RGB-D
+  qualification claims. A rigid-geometry codec may introduce explicit box
+  metadata while decoding legacy geometry exactly, but box capability remains
+  unsupported until perception/contact/planning pass. Likewise, a successful
+  separated N=8 RGB-D probe is development evidence until the complete
+  contact/lifecycle/recovery/planning ladder passes.
+- **Consequences:** The final v3 pilot passes pair/floor/wall/repeated-contact
+  rollouts through eight seconds and all K=8/K=32 sequence-planning tasks, with
+  compact artifacts. The next justified expansion is observable box behavior
+  and full N=7/8 qualification. Calibration and evaluation throughput are now
+  conditional repairs rather than mandatory gates before capability work.
+
 ## ADR-185 — Make visual semantics explicit and scale the envelope in stages
 
 - **Date:** 2026-09-10

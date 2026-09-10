@@ -50,17 +50,36 @@ Then open `runs/progress/index.html` in any browser (or double-click it).
 
 The dashboard shows incumbent/candidate score, run trends, physical-cell and
 factor coverage, horizon and uncertainty behavior, K=8/K=32 planning,
-N=8/12/16 state-only scaling, latency/memory/weights/disk usage, bottlenecks,
-and explicit unsupported claims. Current historical reports are adapted
-read-only. The dashboard merges each family's newest evidence and labels the
-source run, while keeping nominal and factor-conditioned planning distinct.
+action-sequence replanning, N=8 RGB-D development evidence, N=8/12/16
+state-only scaling, latency/memory/weights/disk usage, bottlenecks, and explicit
+unsupported claims. Current historical reports are adapted read-only. The
+dashboard merges each family's newest evidence and labels the source run, while
+keeping nominal, factor-conditioned, and state-first evidence distinct.
 Its best, representative, and worst observed trajectories animate the public
 model state against the post-inference private reference. Three additional
 open-loop examples roll the mature frame-15 belief through the evaluated
-0.05--2.0 second horizons without later observations. Each card chooses and
-labels the world-axis plane containing the most motion, provides play, replay,
-and scrubbing controls, and remains inline SVG. No GIF, video, image directory,
-RGB-D frames, or external asset is retained.
+0.05--2.0 second horizons without later observations. The impact-first pilot
+adds three state-first recursive 4/8-second examples with several public known
+actions and repeated contacts. Each card chooses and labels the world-axis
+plane containing the most motion, provides play, replay, and scrubbing controls,
+and remains inline SVG. No GIF, video, image directory, RGB-D frames, or
+external asset is retained.
+
+Reproduce the compact impact-first pilot or inspect its deterministic manifest:
+
+```bash
+conda run -n orpheus python scripts/run_long_horizon_capability.py --dry-run
+conda run -n orpheus python scripts/run_long_horizon_capability.py
+conda run -n orpheus python scripts/probe_n8_perception.py
+```
+
+The long-horizon runner evaluates two/three-action schedules through pair,
+floor, wall, and repeated contact, plus K=8/K=32 action-sequence selection and
+replanning. The N=8 command is a separated-object, three-frame public RGB-D
+development probe; it is not a complete N=8 qualification.
+
+The current impact-first implementation passes the complete repository gate:
+`2434 passed, 16 skipped` (the skips require unavailable MPS hardware).
 
 Run or reproduce one streamed physical factor without retaining its episodes:
 
@@ -113,10 +132,12 @@ conda run -n orpheus python scripts/run_world_model_workbench.py --profile devel
 ```
 
 The next scale-up sequence is documented in
-[`project/NEXT_SCALE_PLAN.md`](project/NEXT_SCALE_PLAN.md). It diagnoses the
-remaining compositional-planning owner first, reduces evaluation cost, then
-adds genuine 4/8-second rollouts and an N=8 perceptual qualification boundary.
-N=12/16 remain explicitly state-only until the lower-count visual model passes.
+[`project/NEXT_SCALE_PLAN.md`](project/NEXT_SCALE_PLAN.md). Multi-action
+4/8-second behavior, action-sequence replanning, a backward-compatible rigid-
+geometry seam, and a separated N=8 RGB-D development probe are now implemented.
+Observable box behavior and the complete N=7/8 contact/lifecycle/recovery/
+planning ladder are next. N=12/16 remain explicitly state-only until the
+lower-count visual model passes.
 
 The first vertical slice uses a deterministic synthetic RGB sphere world with
 collisions, occlusion, camera motion, and variable drag/restitution. Simulator

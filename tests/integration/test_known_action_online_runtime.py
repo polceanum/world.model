@@ -8,7 +8,12 @@ from pathlib import Path
 import pytest
 import torch
 
-from world_model.dynamics import DynamicsModel, WorldImpulseAction, free_motion_position_velocity
+from world_model.dynamics import (
+    DynamicsModel,
+    WorldImpulseAction,
+    WorldImpulseSchedule,
+    free_motion_position_velocity,
+)
 from world_model.observations import ObservationPacket
 from world_model.planning import TerminalWorldPositionGoal, resolve_appearance_handle
 from world_model.runtime import OnlineWorldModel
@@ -187,6 +192,32 @@ def test_runtime_none_action_is_exact_and_known_action_is_read_only() -> None:
     assert tensor_identity_version_signature(model.state.temporal_histories) == histories
     assert model.diagnostics.latest is diagnostics
     assert model.last_measurements is measurements
+
+
+def test_runtime_accepts_ordered_multi_action_schedule_without_mutation() -> None:
+    model, _, _ = _ingested_runtime()
+    assert model.belief is not None
+    source_identity = tensor_identity_version_signature(model.belief)
+    source = model.belief.clone()
+    first = _action(model, torch.tensor([[0.012, -0.004, 0.006]]))
+    second = replace(
+        first,
+        timestamp=first.timestamp + 0.35,
+        impulse_world=torch.tensor([[-0.003, 0.007, -0.002]]),
+    )
+    schedule = WorldImpulseSchedule((first, second))
+
+    acted = model.predict([0.1, 0.3, 0.5, 0.8, 1.2], action=schedule)
+    prepared = model.prepare_propagation(
+        model.belief.timestamp + model.belief.timestamp.new_tensor(1.2),
+        action=schedule,
+    )
+
+    assert acted.auxiliary["known_action_applied"].sum().item() == 2
+    assert acted.auxiliary["known_action_count"].sum().item() == 2
+    assert prepared.action is schedule
+    assert tensor_identity_version_signature(model.belief) == source_identity
+    _assert_nested_equal(model.belief, source)
 
 
 def test_runtime_action_and_plan_retain_rgbd_and_impulse_gradients() -> None:

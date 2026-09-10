@@ -489,6 +489,55 @@ def _planning_table(summary: CapabilityRunSummary) -> str:
                     slices,
                 )
             )
+    sequence_by_count = summary.planning.get("by_candidate_count")
+    if not groups and isinstance(sequence_by_count, Mapping) and sequence_by_count:
+        aggregate_rows = []
+        for candidate_count, values in sorted(
+            sequence_by_count.items(),
+            key=lambda item: int(item[0]),
+        ):
+            if not isinstance(values, Mapping):
+                continue
+            aggregate_rows.append(
+                "<tr>"
+                f"<td>K{_escape(candidate_count)}</td>"
+                f"<td>{_format_number(values.get('winner_accuracy'))}</td>"
+                f"<td>{_format_number(values.get('median_normalized_regret'))}</td>"
+                f"<td>{_format_number(values.get('goal_success'))}</td>"
+                f"<td>{_format_number(values.get('replanning_consistency'))}</td>"
+                "</tr>"
+            )
+        tasks = summary.planning.get("tasks")
+        task_rows = []
+        if isinstance(tasks, list):
+            for item in tasks:
+                if not isinstance(item, Mapping):
+                    continue
+                task_rows.append(
+                    "<tr>"
+                    f"<td>{_escape(item.get('scenario', 'unknown'))}</td>"
+                    f"<td>K{_escape(item.get('candidate_count', '?'))}</td>"
+                    f"<td>{_escape(item.get('winner_correct', '—'))}</td>"
+                    f"<td>{_format_number(item.get('normalized_regret'))}</td>"
+                    f"<td>{_escape(item.get('replanning_consistent', '—'))}</td>"
+                    f"<td>{_format_number(item.get('vectorized_latency_seconds'))}</td>"
+                    "</tr>"
+                )
+        task_table = (
+            f'<details class="planning-slices"><summary>Action-sequence task ledger ({len(task_rows)} tasks)</summary>'
+            "<table><thead><tr><th>Scenario</th><th>Candidates</th><th>Winner correct</th>"
+            "<th>Normalized regret</th><th>Replan consistent</th><th>Latency (s)</th></tr></thead>"
+            f"<tbody>{''.join(task_rows)}</tbody></table></details>"
+            if task_rows
+            else ""
+        )
+        return (
+            "<h3>Action-sequence planning and replanning</h3>"
+            '<p class="table-note">Planning is evaluated downstream only; no winner, ranking, regret, or task-success loss is optimized.</p>'
+            "<table><thead><tr><th>Candidates</th><th>Winner accuracy</th>"
+            "<th>Median regret</th><th>Goal success</th><th>Replan consistency</th></tr></thead>"
+            f"<tbody>{''.join(aggregate_rows)}</tbody></table>{task_table}"
+        )
     if not groups:
         return '<div class="empty">Planning slices: unmeasured</div>'
     latency_rows: list[str] = []
@@ -582,6 +631,21 @@ def _n16_latency(resources: Mapping[str, Any]) -> float | None:
             latency = probe.get("median_latency_seconds")
             if isinstance(latency, (int, float)) and math.isfinite(float(latency)):
                 return float(latency)
+    return None
+
+
+def _n8_perceptual_probe(resources: Mapping[str, Any]) -> Mapping[str, Any] | None:
+    """Return the newest explicit N=8 RGB-D development probe, if present."""
+
+    scalability = resources.get("scalability")
+    if not isinstance(scalability, Mapping):
+        return None
+    probes = scalability.get("perceptual_development_probes")
+    if not isinstance(probes, list):
+        return None
+    for probe in reversed(probes):
+        if isinstance(probe, Mapping) and probe.get("object_count") == 8:
+            return probe
     return None
 
 
@@ -754,13 +818,28 @@ def _animation_section(
                 event_labels.append(str(item["kind"]))
                 continue
             if mode == "forecast":
-                event_time = f"+{(event_frame - anchor_frame) / 20.0:.2f} s"
+                frame_rate = animation.get("frame_rate", 20.0)
+                try:
+                    frame_rate_value = float(frame_rate)
+                except (TypeError, ValueError):
+                    frame_rate_value = 20.0
+                if not math.isfinite(frame_rate_value) or frame_rate_value <= 0.0:
+                    frame_rate_value = 20.0
+                event_time = f"+{(event_frame - anchor_frame) / frame_rate_value:.2f} s"
             else:
                 event_time = f"{event_frame / 20.0:.2f} s"
             event_labels.append(f"{item['kind']} @ {event_time}")
         if mode == "forecast":
-            error_label = "2 s RMSE"
-            error_value = animation.get("two_second_position_rmse_m")
+            endpoint = animation.get("long_horizon_endpoint_s", 2.0)
+            try:
+                endpoint_value = float(endpoint)
+            except (TypeError, ValueError):
+                endpoint_value = 2.0
+            error_label = f"{endpoint_value:g} s RMSE"
+            error_value = animation.get(
+                "endpoint_position_rmse_m",
+                animation.get("two_second_position_rmse_m"),
+            )
         else:
             error_label = "current RMSE"
             error_value = animation.get("current_position_rmse_m")
@@ -845,21 +924,163 @@ def _animation_cards(summary: CapabilityRunSummary) -> str:
             "from its motion, using bounded downsampled vector keyframes."
         ),
     )
-    forecasts = _animation_section(
-        summary,
-        collection="forecast_animations",
-        title="Two-second open-loop forecasts",
-        introduction=(
+    forecast_values = summary.qualitative.get("forecast_animations")
+    long_endpoints = []
+    if isinstance(forecast_values, list):
+        for animation in forecast_values:
+            if not isinstance(animation, Mapping):
+                continue
+            endpoint = animation.get("long_horizon_endpoint_s")
+            if isinstance(endpoint, (int, float)) and math.isfinite(float(endpoint)):
+                long_endpoints.append(float(endpoint))
+    if long_endpoints and max(long_endpoints) > 2.0:
+        forecast_title = "Four/eight-second causal forecasts"
+        forecast_introduction = (
+            "State-first pilot rollouts apply each declared future impulse exactly once and "
+            "continue through analytic pair, floor, and wall contacts. Curves are compact "
+            "vector keyframes; no rendered frame directories are retained."
+        )
+    else:
+        forecast_title = "Two-second open-loop forecasts"
+        forecast_introduction = (
             "Each forecast starts from the mature frame-15 public belief and rolls forward "
             "without later observations. Lines connect the evaluated 0.05, 0.10, 0.25, "
             "0.50, 1.0, and 2.0 second horizons; future actions and membership changes are "
             "excluded."
-        ),
+        )
+    forecasts = _animation_section(
+        summary,
+        collection="forecast_animations",
+        title=forecast_title,
+        introduction=forecast_introduction,
     )
     return tracking + forecasts
 
 
-def _summary_section(summary: CapabilityRunSummary) -> str:
+def _frontier_table(history: Sequence[CapabilityRunSummary]) -> str:
+    """Combine measured count/horizon evidence without upgrading its claim type."""
+
+    evidence: dict[tuple[int, float], str] = {}
+    for summary in history:
+        curve = summary.horizon_curves.get("candidate_position_rmse_m")
+        if not isinstance(curve, Mapping):
+            continue
+        horizons = []
+        for value in curve:
+            try:
+                horizon = float(value)
+            except (TypeError, ValueError):
+                continue
+            if math.isfinite(horizon) and horizon > 0.0:
+                horizons.append(horizon)
+        counts: set[int] = set()
+        for name in summary.cell_metrics:
+            prefix = str(name).split("/", 1)[0]
+            if prefix.startswith("N") and prefix[1:].isdigit():
+                counts.add(int(prefix[1:]))
+        state_first = bool(summary.configuration.get("state_first"))
+        if state_first:
+            animations = summary.qualitative.get("forecast_animations")
+            if isinstance(animations, list):
+                counts.update(
+                    int(item["object_count"])
+                    for item in animations
+                    if isinstance(item, Mapping) and isinstance(item.get("object_count"), int)
+                )
+        claim = "state" if state_first else "RGB-D"
+        for count in counts:
+            for horizon in horizons:
+                previous = evidence.get((count, horizon))
+                if previous != "RGB-D" or claim == "RGB-D":
+                    evidence[(count, horizon)] = claim
+
+        scalability = summary.resources.get("scalability")
+        if isinstance(scalability, Mapping):
+            probes = scalability.get("probes")
+            if isinstance(probes, list):
+                for probe in probes:
+                    if not isinstance(probe, Mapping):
+                        continue
+                    count = probe.get("object_count")
+                    finite = probe.get("finite")
+                    independent = probe.get("batch_independent")
+                    if isinstance(count, int) and finite is True and independent is True:
+                        evidence.setdefault((count, 2.0), "state")
+    if not evidence:
+        return '<div class="empty">Capability frontier: unmeasured</div>'
+    counts = sorted({key[0] for key in evidence})
+    horizons = sorted({key[1] for key in evidence})
+    header = "".join(f"<th>N={count}</th>" for count in counts)
+    rows = []
+    for horizon in horizons:
+        cells = []
+        for count in counts:
+            claim = evidence.get((count, horizon))
+            cells.append(
+                '<td class="unmeasured">—</td>'
+                if claim is None
+                else f'<td><span class="tag measured">{_escape(claim)}</span></td>'
+            )
+        rows.append(f"<tr><th>{horizon:g} s</th>{''.join(cells)}</tr>")
+    return (
+        '<table class="frontier"><thead><tr><th>Forecast horizon</th>'
+        f"{header}</tr></thead><tbody>{''.join(rows)}</tbody></table>"
+        '<p class="table-note">RGB-D = measured from a public observation-derived belief; '
+        "state = state-first or state-only pressure test. A measured cell is not automatically "
+        "a promotion pass.</p>"
+    )
+
+
+def _ablation_attribution(summary: CapabilityRunSummary) -> str:
+    attribution = summary.failure_attribution
+    rows: list[tuple[str, str, str]] = []
+    same_seed = attribution.get("same_seed_nominal_restoration")
+    if isinstance(same_seed, Mapping):
+        reductions = same_seed.get("all_reductions")
+        if isinstance(reductions, Mapping):
+            for intervention, reduction in reductions.items():
+                rows.append(
+                    (
+                        str(intervention),
+                        _format_number(reduction),
+                        "owner" if intervention == same_seed.get("owner") else "diagnostic",
+                    )
+                )
+    ablations = attribution.get("ablations")
+    if isinstance(ablations, Mapping):
+        for intervention, result in ablations.items():
+            if isinstance(result, Mapping):
+                rows.append(
+                    (
+                        str(intervention),
+                        _format_number(result.get("error_reduction")),
+                        str(result.get("status", "measured")),
+                    )
+                )
+    if not rows:
+        return (
+            f"<p>Primary bottleneck: {_escape(attribution.get('primary_bottleneck', 'unavailable'))}"
+            f"<br>Current owner: {_escape(attribution.get('ablation_owner', 'unmeasured'))}</p>"
+            '<div class="empty">Intervention attribution: unmeasured</div>'
+        )
+    body = "".join(
+        f"<tr><td>{_escape(name)}</td><td>{reduction}</td><td>{_escape(status)}</td></tr>"
+        for name, reduction, status in rows
+    )
+    return (
+        f"<p>Primary bottleneck: {_escape(attribution.get('primary_bottleneck', 'unavailable'))}"
+        f"<br>Current owner: {_escape(attribution.get('ablation_owner', 'unmeasured'))}</p>"
+        "<table><thead><tr><th>Intervention</th><th>Absolute error reduction</th>"
+        f"<th>Interpretation</th></tr></thead><tbody>{body}</tbody></table>"
+    )
+
+
+def _summary_section(
+    summary: CapabilityRunSummary,
+    *,
+    history: Sequence[CapabilityRunSummary],
+) -> str:
+    frontier_history = tuple(history) if history else (summary,)
     candidate_score = _score_value(summary, "candidate")
     incumbent_score = _score_value(summary, "incumbent")
     horizon = summary.horizon_curves.get("candidate_position_rmse_m", {})
@@ -869,6 +1090,7 @@ def _summary_section(summary: CapabilityRunSummary) -> str:
         else []
     )
     resources = summary.resources
+    n8_probe = _n8_perceptual_probe(resources) or {}
     coverage = summary.uncertainty.get("coverage_90_range", ())
     coverage_text = (
         f"{_format_number(coverage[0])}–{_format_number(coverage[1])}"
@@ -889,11 +1111,16 @@ def _summary_section(summary: CapabilityRunSummary) -> str:
     <section class="grid two"><article><h2>Capability coverage</h2>{_factor_table(summary)}</article><article><h2>Horizon error</h2>{_svg_line_chart(horizon_points, title="Position RMSE across horizon", x_label="Prediction horizon (s)", y_label="Position RMSE (m)")}</article></section>
     <section><h2>Factor performance</h2>{_factor_metric_matrix(summary)}</section>
     <section><h2>Physical behavior</h2>{_heatmap(summary, metric="current_position_rmse_m", title="Current-position RMSE (m) by object count, contact, and membership", lower_is_better=True)}{_heatmap(summary, metric="uncertainty_90_coverage", title="90% uncertainty coverage by object count, contact, and membership", lower_is_better=True, ideal_value=0.90)}</section>
+    <section class="grid two"><article><h2>Capability frontier</h2>{_frontier_table(frontier_history)}</article><article><h2>Ablation attribution</h2>{_ablation_attribution(summary)}</article></section>
     <section><h2>Downstream planning</h2>{_planning_table(summary)}</section>
     <section class="grid two"><article><h2>Efficiency and storage</h2><dl>
       <dt>Perception latency</dt><dd>{_format_number(resources.get("perception_latency_seconds"))} s</dd>
       <dt>Six-horizon rollout</dt><dd>{_format_number(resources.get("six_horizon_rollout_seconds"))} s</dd>
       <dt>State-only N=16</dt><dd>{_format_number(_n16_latency(resources))} s</dd>
+      <dt>N=8 RGB-D development</dt><dd>{_format_number(n8_probe.get("inference_latency_seconds"))} s</dd>
+      <dt>N=8 observed objects</dt><dd>{_format_number(n8_probe.get("observed_active_count"))} / {_format_number(n8_probe.get("object_count"))}</dd>
+      <dt>N=8 position RMSE</dt><dd>{_format_number(n8_probe.get("position_rmse_m"))} m</dd>
+      <dt>N=8 claim level</dt><dd>{"qualified" if n8_probe.get("full_perceptual_qualification") is True else "development only"}</dd>
       <dt>Learned weights</dt><dd>{_format_number(resources.get("learned_weight_bytes"))} bytes</dd>
       <dt>Persistent tensors</dt><dd>{_format_number(resources.get("persistent_tensor_bytes"))} bytes</dd>
       <dt>RSS</dt><dd>{_format_number(resources.get("process_rss_bytes"))} bytes</dd>
@@ -1094,7 +1321,7 @@ def render_summary_html(
         else ""
     )
     animation_script = _ANIMATION_SCRIPT if _animation_cards(summary) else ""
-    return f"""<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">{refresh}<title>{_escape(title)}</title><style>{_STYLE}</style></head><body><main>{_summary_section(summary)}{notice_html}<section class="run-list"><h2>Capability trend</h2>{_trend_charts(history)}{history_ledger}</section><footer>Portable report · schema {CAPABILITY_SUMMARY_SCHEMA} · no external assets</footer></main><script type="application/json" id="capability-run-summary">{embedded}</script>{animation_script}</body></html>"""
+    return f"""<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">{refresh}<title>{_escape(title)}</title><style>{_STYLE}</style></head><body><main>{_summary_section(summary, history=history)}{notice_html}<section class="run-list"><h2>Capability trend</h2>{_trend_charts(history)}{history_ledger}</section><footer>Portable report · schema {CAPABILITY_SUMMARY_SCHEMA} · no external assets</footer></main><script type="application/json" id="capability-run-summary">{embedded}</script>{animation_script}</body></html>"""
 
 
 def _directory_size(path: Path) -> int:

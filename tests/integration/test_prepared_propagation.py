@@ -7,7 +7,7 @@ import pytest
 import torch
 from torch import Tensor
 
-from world_model.dynamics import WorldImpulseAction
+from world_model.dynamics import WorldImpulseAction, WorldImpulseSchedule
 from world_model.observations import ObservationPacket
 from world_model.runtime import (
     OnlineWorldModel,
@@ -281,6 +281,27 @@ def test_prepared_known_action_is_version_bound_and_unambiguous() -> None:
             _oracle_packet(0.1, torch.tensor([[0.0, 1.0, 0.0]])),
             prepared=propagation,
             action=replacement,
+        )
+    assert not propagation.consumed
+
+
+def test_prepared_multi_action_schedule_is_recursively_version_bound() -> None:
+    model = OnlineWorldModel.from_config(_oracle_config(), device="cpu")
+    model.ingest(_oracle_packet(0.0, torch.tensor([[0.0, 1.0, 0.0]])))
+    model.ingest(_oracle_packet(0.05, torch.tensor([[0.0, 1.0, 0.0]])))
+    schedule = WorldImpulseSchedule(
+        (
+            _oracle_action(model, 0.075),
+            _oracle_action(model, 0.1),
+        )
+    )
+    propagation = model.prepare_propagation(0.1, action=schedule)
+    schedule.actions[1].impulse_world.add_(0.01)
+
+    with pytest.raises(PreparedPropagationError, match="action tensors have changed"):
+        model.ingest(
+            _oracle_packet(0.1, torch.tensor([[0.0, 1.0, 0.0]])),
+            prepared=propagation,
         )
     assert not propagation.consumed
 

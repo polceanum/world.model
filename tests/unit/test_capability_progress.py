@@ -98,9 +98,40 @@ def test_summary_roundtrip_and_active_refresh_are_versioned(tmp_path: Path) -> N
     assert "Planning quality by cardinality" in active_html
     assert "Worst-cardinality planning quality" in active_html
     assert 'class="metric-pass"' in active_html
+    assert "Capability frontier" in active_html
+    assert "RGB-D" in active_html
+    assert "Ablation attribution" in active_html
 
     completed_html = render_summary_html(replace(active, lifecycle_status="completed"))
     assert 'http-equiv="refresh"' not in completed_html
+
+
+def test_report_labels_n8_rgbd_probe_as_development_only() -> None:
+    summary = _summary("n8-development", "completed")
+    summary = replace(
+        summary,
+        resources={
+            **summary.resources,
+            "scalability": {
+                "full_perceptual_qualification": False,
+                "perceptual_development_probes": [
+                    {
+                        "object_count": 8,
+                        "observed_active_count": 8,
+                        "position_rmse_m": 0.001,
+                        "inference_latency_seconds": 0.2,
+                        "full_perceptual_qualification": False,
+                    }
+                ],
+            },
+        },
+    )
+
+    html = render_summary_html(summary)
+
+    assert "N=8 RGB-D development" in html
+    assert "N=8 observed objects" in html
+    assert "development only" in html
 
 
 def test_dashboard_handles_current_historical_missing_and_malformed_runs(
@@ -410,6 +441,45 @@ def test_dashboard_keeps_three_lightweight_vector_animations_from_latest_evidenc
     assert "<video" not in content and "<img" not in content
     assert "data:image" not in content
     assert len(content.encode("utf-8")) < 250_000
+
+
+def test_long_horizon_animation_uses_declared_endpoint_and_frame_rate() -> None:
+    long_horizon = {
+        "schema": "world_model_compact_long_horizon_animation_v1",
+        "label": "eight-second causal scene",
+        "episode": "state-first:causal-scene",
+        "object_count": 2,
+        "contact": True,
+        "dynamic_membership": False,
+        "mode": "forecast",
+        "frame_rate": 10.0,
+        "anchor_frame": 0,
+        "long_horizon_endpoint_s": 8.0,
+        "endpoint_position_rmse_m": 0.12,
+        "projection": "world_xy",
+        "axis_labels": ["x", "y"],
+        "bounds": {"horizontal": [-2.0, 2.0], "vertical": [0.0, 2.5]},
+        "frames": [
+            {"frame": 0, "time_s": 0.0, "truth": [[1, 0.0, 1.0]], "model": [[1, 0.0, 1.0]]},
+            {"frame": 80, "time_s": 8.0, "truth": [[1, 1.0, 1.0]], "model": [[1, 0.9, 1.0]]},
+        ],
+        "events": [{"frame": 40, "kind": "known action"}],
+    }
+    summary = replace(
+        _summary("long-horizon"),
+        configuration={"state_first": True},
+        qualitative={
+            **_summary("long-horizon").qualitative,
+            "forecast_animations": [long_horizon],
+        },
+    )
+
+    content = render_summary_html(summary)
+
+    assert "Four/eight-second causal forecasts" in content
+    assert "8 s RMSE 0.1200 m" in content
+    assert "known action @ +4.00 s" in content
+    assert "state-first or state-only pressure test" in content
 
 
 def test_compositional_metric_matrix_uses_holdout_gates_only() -> None:

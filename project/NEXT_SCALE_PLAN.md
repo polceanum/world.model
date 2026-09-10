@@ -1,159 +1,149 @@
-# General-capability scale-up plan
+# Impact-first world-model scale plan
 
-## Outcome
+## Objective
 
-Scale the compact CPU-first world model along three useful dimensions—factor
-composition, open-loop horizon, and visible object count—without changing its
-public belief/action/rollout interfaces, training planning outcomes directly,
-or growing artifacts beyond the managed 250 MiB budget.
+Expand the compact CPU-first model's useful behavioral envelope: make it reason
+causally over several known interventions, remain accurate through repeated
+contacts over 4--8 seconds, support more visible objects, and establish a clean
+route from spheres to general rigid geometry. Preserve the public belief,
+observation, action, rollout, and planning contracts and the managed 250 MiB
+artifact budget.
 
-The calibrated structured checkpoint remains the incumbent. Scaling means a
-larger verified behavioral envelope, not merely more parameters, episodes, or
-optimizer updates.
+This plan deliberately prioritizes capabilities a downstream controller can use.
+Calibration polish and evaluator throughput remain conditional work: undertake
+them only when they block a capability gate or make the next governed run
+impractical.
 
-## Current evidence and first bottleneck
+## Guardrails checked before implementation
 
-- N=1--6 physical behavior passes calibrated camera motion, known actions,
-  partial visibility, and the compositional physical holdout.
-- Sensor noise and variable physical parameters miss only opposite edges of
-  the declared uncertainty-coverage interval.
-- Factor-conditioned planning is exact for four families. Sensor-noise K=32
-  has one immature target history; compositional K=32 fails mainly through
-  unstable target histories and fine impulse-magnitude ordering.
-- State-only N=8/12/16 execution is already finite, batch-independent, and
-  comfortably inside the N=16 latency gate. Full RGB-D evidence stops at N=6.
-- Evaluation throughput, rather than learned-model size, is the current
-  engineering bottleneck.
+- Planning remains a required downstream acceptance test and is never a
+  training loss.
+- Every future intervention is a public, known action applied at its absolute
+  timestamp. Hidden simulator actions remain censored.
+- The original single-action and action-free paths are compatibility oracles.
+- State-first tests establish dynamics evidence only; they cannot be presented
+  as RGB-D perceptual qualification.
+- New shape metadata must decode old one-component sphere checkpoints exactly.
+- Scale object capacity through configuration and packed active interactions,
+  not learned slot identity or a large attention model.
+- Retain summaries and bounded vector animation data, never episode tensors or
+  rendered frame sequences.
 
-The next run is therefore diagnostic, not a larger training campaign.
+## Phase A — Multi-action causal dynamics and genuine long horizons
 
-## Stage 1 — Locate and repair the existing failure owner
+Status: **implemented and passing** in
+`runs/20260910-impact-scale-v3`.
 
-1. Run the remaining same-task ablations on the sensor and compositional
-   planning failures: clean observation, truth association, truth physical
-   parameters, truth anchor state/history, and truth-state rollout. Open the
-   private oracle only after each public candidate decision, as today.
-2. Record which intervention changes target resolution, winner identity,
-   regret, and goal success. Require a repeatable owner on at least two seed
-   blocks before changing model capacity.
-3. Calibrate covariance independently of state means using only observable
-   quality signals such as valid-depth fraction, innovation magnitude, track
-   age, and post-event sample count. Fit on public development calibration
-   rows and validate on disjoint rows. Prefer a monotone, bounded calibrator
-   over a neural head.
-4. Repair immature planning anchors by making task eligibility and history
-   maturity explicit. Do not fabricate velocity evidence or silently remove a
-   failing cardinality.
+1. Add an immutable ordered `WorldImpulseSchedule` around the existing
+   `WorldImpulseAction`. Validate the whole schedule before rollout and require
+   strictly increasing timestamps per batch row.
+2. Split each dynamics interval at every scheduled timestamp, apply each
+   impulse exactly once to its persistent target, and continue through the same
+   analytic contact resolver. Preserve the exact single-action branch.
+3. Exercise 4- and 8-second recursive rollouts with two or three actions,
+   object contact, floor contact, wall contact, and repeated bounded contact.
+4. Measure horizon position/velocity error, collision F1 and timing, energy
+   error, exact action count, latency, and source-belief immutability.
+5. Keep the three illustrative trajectories as inline vector payloads capped at
+   96 KiB each.
 
-Exit when both boundary calibration misses have margin inside the accepted
-coverage band, the compositional K=32 error has an evidence-backed owner, and
-all existing physical/planning regressions remain within 2%.
+The corrected pilot passes every declared gate. Its worst 8-second position
+RMSE is `5.994e-4 m`; the floor/wall compound collision F1 is `0.9167` with a
+one-frame timing error. The first v1 run remains as a failed diagnostic: it
+identified that checkpoint loading incorrectly replaced scene-configured plane
+offsets. Environment buffers are now rebound after learned-state loading and
+the regression is tested directly.
 
-## Stage 2 — Make evaluation cheaper before making it larger
+## Phase B — Action-sequence planning and replanning
 
-1. Reuse public observation encodings and paired incumbent/candidate episode
-   materialization within one process. Never cache private truth in runtime
-   inputs or retain RGB-D after reduction.
-2. Batch only semantically identical public inference work. Keep B1 and dense
-   dynamics as numerical oracles and require exact identities/events plus
-   numerical agreement within the existing `1e-6` parity tolerance before
-   enabling a faster path by default.
-3. Benchmark three repetitions of the complete 22-cell physical pass and the
-   12-slice planning pass. Target at least a 40% wall-time reduction with no
-   more than 10% latency regression in any public online path.
+Status: **implemented and passing** in the same governed pilot.
 
-This stage is infrastructure-only: it cannot promote a checkpoint.
+1. Accept single impulses, schedules, and the existing no-action candidate in
+   the planner without changing the public result shape.
+2. Flatten `B x K` candidates into one rollout, including heterogeneous
+   schedule lengths, while retaining the serial implementation as the exact
+   oracle.
+3. Certify candidate sets privately only after public costs are produced.
+   Require a unique oracle winner and normalized winner margin.
+4. Test K=8 and K=32 choices for pair contact and repeated-wall behavior, then
+   replan after executing the shared first action.
 
-## Stage 3 — Add a real long-horizon ladder
+All four K/scenario slices select the oracle winner with zero normalized
+regret, successful terminal goals, exact replanning consistency, and zero
+serial/vectorized cost difference. Measured vectorized latencies range from
+`0.018` to `0.037 s`.
 
-1. Add deterministic state-first episodes long enough for 4- and 8-second
-   open-loop evaluation from a mature public anchor. Extend the existing
-   horizon vector to `0.05/0.10/0.25/0.50/1/2/4/8 s`.
-2. Start with fixed membership and no unobserved future action. Then add known
-   future actions passed causally into rollout, single contact, and repeated
-   bounded contacts as separate strata.
-3. Report position/velocity error, uncertainty coverage, collision timing,
-   energy drift, and planning winner/regret at every horizon. Measure recursive
-   compounding rather than interpolating a two-second result.
-4. Add at most three 4/8-second vector forecast examples to the dashboard,
-   including uncertainty envelopes and horizon labels. Keep each example below
-   96 KiB and all qualitative evidence for a run below 1 MiB.
+## Phase C — General rigid geometry without a compatibility break
 
-Run an incumbent-only pilot first. Freeze absolute gates from task geometry
-and safety tolerance before any training sees these manifests; never derive a
-passing threshold from the incumbent's observed error.
+Status: **representation seam implemented; behavioral support remains open**.
 
-## Stage 4 — Promote perceptual capacity from N=6 to N=8
+1. Encode primitive geometry explicitly while retaining component zero as the
+   legacy conservative radius. A one-component geometry tensor decodes exactly
+   as a sphere.
+2. Support sphere and box tags plus box half-extents in a centralized codec;
+   keep `ObjectBelief.radius` behavior unchanged for legacy callers.
+3. Next, add an analytic oriented-box reference simulator and observable RGB-D
+   box fitting. Qualify static/moving boxes before mixed sphere/box contacts.
+4. Add SAT-based box contact and sphere-box closest-point contact behind the
+   existing dynamics interface. Dense N<=6 remains the numerical oracle; any
+   learned correction must be bounded, antisymmetric, and justified by a
+   truth-state ablation.
 
-1. Keep proposal capacity configurable as `max_objects + birth_proposals` and
-   instantiate N=8 without changing legacy N=1/2/6 checkpoint loading.
-2. Qualify packed active-pair interaction against the dense oracle at N<=6,
-   then use it for N=8. Retain N=12/16 as state-only pressure tests until N=8
-   perception, association, lifecycle, and planning pass.
-3. Create controlled N=7/8 RGB-D strata for separated objects, contact, dynamic
-   membership, short occlusion/recovery, and the strongest existing two-factor
-   compositions. Increase image resolution only if a pixel-support ablation
-   proves 64x64 is the owner.
-4. Preserve the current CPU ceilings where meaningful: learned weights <=1
-   MiB, RSS <=2.5 GiB, state-only N=16 six-horizon rollout <=0.10 s, and no more
-   than 10% incumbent latency regression. Report N=8 perception latency
-   separately rather than hiding it in aggregate wall time.
+Do not call the codec itself box support. Promotion requires visible RGB-D
+recovery, persistent identity, action targeting, contact timing, and planning
+on held-out aspect ratios and orientations.
 
-N=8 is a new qualification boundary. N=12/16 perceptual support must not be
-claimed from state-only probes.
+## Phase D — Increase visible-set capacity
 
-## Stage 5 — Broaden composition, then add the smallest owned residual
+Status: **N=8 separated-object development probe passes; qualification open**.
 
-Introduce pairwise compositions before a single broad mixture:
+The independent N=8 profile derives ten proposals from
+`max_objects=8 + birth_proposals=2`, loads the incumbent strictly, and ingests
+three public calibrated RGB-D frames. It observes all eight objects with
+`5.96e-8 m` position RMSE, `0.293 s` measured three-frame inference latency,
+finite state,
+and `87,436` learned-weight bytes. This is explicitly development evidence,
+not full perceptual qualification.
 
-1. sensor noise + camera motion;
-2. physical variation + known actions;
-3. contact + partial visibility/recovery;
-4. the three-way combinations that dominate downstream planning regret.
+Next qualify N=7/8 across:
 
-Use the Stage-1 ablations to choose at most one component change per attempt:
+1. separated motion and broad known actions;
+2. pair contact and repeated contact;
+3. birth/removal and remove-then-birth slot reuse;
+4. short partial occlusion and identity recovery;
+5. the strongest sensor/camera/parameter compositions.
 
-- clean-observation ownership: improve observable proposal geometry;
-- association ownership: add bounded appearance/recovery memory;
-- parameter ownership: improve observable parameter estimation and its
-  uncertainty;
-- truth-state contact ownership: add or widen only the antisymmetric relation
-  residual;
-- no state/dynamics ownership: repair planning task resolution or cost
-  sensitivity, not the world model.
+Raise image resolution only if pixel-support ablation identifies it as the
+owner. Keep N=12/16 state-only until N=8 passes the complete perception,
+lifecycle, contact, and downstream planning gates.
 
-Every learned change must pass the 64-example/256-update screen before a
-2,048-update run. Extend by 1,024 updates only after a complete validation
-improves; stop at 8,192 updates, 24 hours, or the existing four-validation
-plateau rule.
+## Phase E — Integrated capability benchmark
 
-## Promotion and visualization
+Status: **not started**.
 
-Retain the existing absolute physical/planning gates. Promotion additionally
-requires a >=3% paired macro-score improvement with positive 95% bootstrap
-bound, >=1% improvement in the worst supported family, no accepted-like slice
-regression above 2%, and online latency no more than 10% worse than the
-incumbent.
+After box and N=8 single-family gates pass, add a compact integrated benchmark
+that combines changing membership, a moving calibrated camera, short
+occlusion, mixed rigid primitives, repeated contact, and a two/three-action
+schedule. Use deterministic manifests, stream RGB-D, reduce online, and retain
+only summaries plus three small vector examples.
 
-Add two compact dashboard views as the envelope expands:
+The checkpoint may advance only if it:
 
-- a capability-frontier matrix with object count on X, forecast horizon on Y,
-  and cells marked measured/pass/fail/unmeasured;
-- an ablation attribution panel showing which intervention recovers each
-  failed metric and whether a model change is justified.
-
-Keep summaries and portable HTML, the incumbent and two recent promoted
-checkpoints, and only the newest bounded failed-run diagnostics. Retain no
-generated episodes or frame media. Ordinary completed runs remain below 5 MiB
-where practical, and optional evidence stops being retained before protected
-artifacts could exceed the 250 MiB rolling cap.
+- passes the existing absolute physical and planning floors;
+- passes the new 4/8-second action-sequence floors;
+- improves the paired macro capability score by at least 3% with a positive
+  95% bootstrap bound and improves the worst supported family by at least 1%;
+- regresses no accepted-like slice by more than 2%;
+- remains within 1 MiB learned weights, 2.5 GiB RSS, the N=16 state-only
+  `0.10 s` gate, and no more than 10% incumbent online-latency regression.
 
 ## Immediate execution order
 
-1. Implement the paired sensor/compositional ablation runner and dashboard
-   attribution panel.
-2. Measure and optimize evaluation throughput with exact parity tests.
-3. Apply the smallest observable covariance/history repair supported by the
-   ablations; rerun all six factor families and planning gates.
-4. Run the incumbent-only 4/8-second pilot and freeze the long-horizon gates.
-5. Open N=8 perceptual development only after the N<=6 envelope is clean.
+1. Preserve Phase A/B as a regression tier and keep v1--v3 provenance visible.
+2. Implement and qualify observable boxes before widening a learned model.
+3. Run the complete N=7/8 RGB-D capability ladder using the separate capacity
+   profile.
+4. Run the integrated benchmark only after those isolated owners are clean.
+5. Train or widen one bounded residual only when a clean-observation,
+   truth-association, truth-parameter, or truth-state ablation repeatedly owns
+   the remaining error.

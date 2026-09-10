@@ -2,6 +2,41 @@
 
 ## Unreleased — 2026-07-28
 
+### 2026-09-10 impact-first long-horizon and scale foundation
+
+- Added immutable ordered `WorldImpulseSchedule` support throughout analytic
+  and hybrid dynamics, online prediction, prepared propagation, and
+  counterfactual planning. Multiple public impulses split propagation at their
+  exact absolute timestamps, target persistent IDs, apply once, and retain the
+  existing single-action/action-free compatibility paths.
+- Added a compact state-first 4/8-second evaluator covering pair, floor, wall,
+  repeated-contact, and two/three-action scenarios. It reports recursive
+  horizon errors, collision quality and timing, energy error, action count,
+  latency, mutation checks, and three sub-96-KiB inline vector animations.
+- Added K=8/K=32 action-sequence planning with private unique-winner
+  certification, regret and goal metrics, exact serial/vectorized parity, and
+  replanning after a shared first action. Planning remains downstream-only.
+- Preserved the failed `20260910-impact-scale-v1` pilot, which revealed that
+  checkpoint loading overwrote newly configured plane boundaries. Rebound
+  environment-owned plane buffers after loading and protected the correction
+  with a regression. The corrected v2 run first passed every declared physical
+  and planning gate; v3 reproduces the pass and makes its manifest-inclusive
+  `181,850`-byte run size exact.
+- Added a backward-compatible rigid-geometry codec: component-zero remains the
+  legacy conservative radius, while wider tensors can encode an explicit sphere
+  or box tag and box half-extents. This is representation infrastructure only.
+- Added a separate N=8 RGB-D development probe using ten derived proposals. It
+  observes eight separated objects with finite state and explicitly records
+  that full perceptual qualification remains false.
+- Extended the static dashboard with real long-horizon forecasts,
+  action-sequence/replanning evidence, the capability frontier, ablation
+  attribution, and separately labeled N=8 RGB-D development measurements.
+  Rewrote `NEXT_SCALE_PLAN.md` around observable geometry and full N=7/8
+  qualification rather than unconditional calibration/throughput work.
+- Verified the exact final tree with Ruff, Ruff format, compileall, diff
+  hygiene, 156 focused tests, and the complete `2434 passed, 16 skipped`
+  repository suite.
+
 ### 2026-09-10 dashboard polish and scale-up plan
 
 - Completed the dashboard semantics pass: charts now show named axes, units,

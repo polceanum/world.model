@@ -1,5 +1,33 @@
 # Tasks
 
+## Impact-first scale foundation — active 2026-09-10
+
+- [x] Add an ordered, immutable multi-action schedule while preserving exact
+  action-free and single-action behavior.
+- [x] Apply every known impulse exactly once at its absolute timestamp through
+  shared analytic contact dynamics, runtime prediction, prepared propagation,
+  and vectorized planning.
+- [x] Add governed 4/8-second recursive probes spanning pair, wall, floor, and
+  repeated contacts; retain three bounded vector animations and no frame media.
+- [x] Add K=8/K=32 action-sequence selection plus replanning after a shared
+  first action, with private unique-winner certification and exact serial parity.
+- [x] Diagnose and fix evaluation-boundary buffers being overwritten by
+  checkpoint loading; retain the failed v1 and passing v2 evidence.
+- [x] Add a backward-compatible sphere/box geometry codec without claiming
+  unsupported box perception or contact behavior.
+- [x] Add a separate N=8 RGB-D development profile and expose its count,
+  accuracy, latency, capacity, and development-only claim in compact reports.
+- [x] Pass the exact final-tree quality gate: Ruff, format, compileall, diff
+  hygiene, 156 focused tests, and `2434 passed, 16 skipped` repository-wide.
+- [ ] Implement observable oriented-box rendering/fitting and analytic box/box
+  plus sphere/box reference contacts; qualify held-out geometry and planning.
+- [ ] Qualify N=7/8 RGB-D across contact, lifecycle, recovery, actions, and the
+  strongest factor compositions. Keep N=12/16 state-only until then.
+- [ ] Run the integrated changing-set, moving-camera, mixed-geometry,
+  multi-action benchmark only after its isolated capability families pass.
+- [ ] Add or widen one bounded learned residual only after repeated owner
+  ablations justify that exact component.
+
 ## General-capability world model — active 2026-09-09
 
 - [x] Reconcile and commit the calibrated capability-first workbench baseline
@@ -28,9 +56,9 @@
   expose numeric animation bounds and evidence sources, colour uncertainty by
   distance from its 90% target, summarize worst-cardinality planning, and
   collapse the complete planning/run ledgers without discarding their data.
-- [ ] Execute the staged general-capability scale-up in
-  `project/NEXT_SCALE_PLAN.md`: failure-owner ablations, parity-safe evaluation
-  throughput, 4/8-second rollout qualification, then N=8 RGB-D perception.
+- [x] Replace the low-impact staged order with the checked impact-first plan in
+  `project/NEXT_SCALE_PLAN.md`; complete its multi-action, long-horizon,
+  sequence-planning, geometry-seam, and N=8 development foundations.
 - [x] Add manifest-scoped run inventory/prune/clear management with a 250 MiB
   rolling cap, protected incumbent/pins/archive, and fail-closed path safety.
 - [x] Stream physical workbench episodes and remove terminal optimizer state;
