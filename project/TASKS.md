@@ -19,11 +19,11 @@
   accuracy, latency, capacity, and development-only claim in compact reports.
 - [x] Pass the exact final-tree quality gate: Ruff, format, compileall, diff
   hygiene, 156 focused tests, and `2434 passed, 16 skipped` repository-wide.
-- [ ] Implement observable oriented-box rendering/fitting and analytic box/box
+- [x] Implement observable oriented-box rendering/fitting and analytic box/box
   plus sphere/box reference contacts; qualify held-out geometry and planning.
-- [ ] Qualify N=7/8 RGB-D across contact, lifecycle, recovery, actions, and the
+- [x] Qualify N=7/8 RGB-D across contact, lifecycle, recovery, actions, and the
   strongest factor compositions. Keep N=12/16 state-only until then.
-- [ ] Run the integrated changing-set, moving-camera, mixed-geometry,
+- [x] Run the integrated changing-set, moving-camera, mixed-geometry,
   multi-action benchmark only after its isolated capability families pass.
 - [ ] Add or widen one bounded learned residual only after repeated owner
   ablations justify that exact component.

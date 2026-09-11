@@ -23,7 +23,7 @@ persistent WorldBelief
           │
           ├── derived predictive-abstraction router
           │       ├── point trajectory for free motion
-          │       └── rigid sphere for contact execution
+          │       └── sphere / oriented box for contact execution
           │
           ├── reversible typed belief tokens
           │       └── scene / camera / kinematic / programme / lifecycle
@@ -169,16 +169,18 @@ learned state, or optimizer updates. That reviewed result is published through
 acceptance commit `00a712d640cdb828f24a194817443daa57e6df65`; it establishes
 neither general camera motion nor unknown- or learned-pose inference.
 
-The attempted partial-visibility/recovery, variable-radius, and identifiable-
+The attempted historical partial-visibility/recovery, variable-radius, and identifiable-
 drag families all failed their bounded development protocols and are closed.
 None may be revived, renamed, or treated as the next rung. Their executable
 source remains isolated on dedicated branches rather than merged into the
 accepted runtime. No next capability is currently selected: any successor must
 add a genuinely new capability under its own frozen pre-access manifests and
 gates while preserving every accepted lower-rung contract. Variable count,
-contact/material identification, known actions/planning, richer modalities,
-and learned capacity therefore remain unqualified candidates rather than an
-active launch plan.
+contact/material identification, richer modalities, and learned capacity were
+unqualified at that historical boundary. The later impact-first tier now adds
+known multi-actions, observable sphere/box geometry, complete N=7/8 visual
+qualification, and a compact integrated mixed-rigid bridge without rewriting
+those frozen results.
 
 Evaluation seed manifests are explicit. `fresh_validation` starts after the
 checkpoint's trainer-validation episodes by default; `--seed-offset` can select
@@ -190,8 +192,10 @@ The abstraction and token layers are derived from `WorldBelief` on demand.
 They do not cache physical state and add no parameters to existing
 checkpoints. The initial router selects the lowest-complexity executable
 operator supported by current evidence: point-trajectory execution in free
-motion and rigid-sphere execution for contact-like modes. Full geometry and
-slow parameters remain in the belief, making refinement lossless.
+motion and analytic sphere/oriented-box execution for contact-like modes when
+the wider geometry codec carries observable support. Legacy one-component
+geometry still decodes and executes exactly as a sphere. Full geometry and slow
+parameters remain in the belief, making refinement lossless.
 This first assignment is inspectable but does not yet prune the hybrid
 dynamics path: free objects still run cheap contact-candidate detection so
 they can refine before an imminent impact.

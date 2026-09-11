@@ -29,6 +29,8 @@ from world_model.simulator.physics import (
     empty_physics_events,
 )
 from world_model.simulator.renderer import RenderOutput, render_spheres
+from world_model.simulator.rigid import RigidBodyState, render_rigid_bodies
+from world_model.simulator.rigid_physics import advance_rigid_bodies
 from world_model.simulator.sphere_world import (
     LifecycleEvents,
     SphereWorld,
@@ -47,10 +49,12 @@ __all__ = [
     "PhysicsConfig",
     "PhysicsStepEvents",
     "RenderOutput",
+    "RigidBodyState",
     "SphereState",
     "SphereWorld",
     "SphereWorldConfig",
     "advance_spheres",
+    "advance_rigid_bodies",
     "backproject_pixels",
     "camera_to_world",
     "empty_physics_events",
@@ -60,6 +64,7 @@ __all__ = [
     "make_intrinsics",
     "project_camera_points",
     "render_spheres",
+    "render_rigid_bodies",
     "resolve_axis_aligned_boundaries",
     "resolve_sphere_sphere_collisions",
     "sphere_sphere_relative_restitution",

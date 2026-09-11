@@ -6,6 +6,35 @@ to make every heading unambiguous; the suffixes do not imply precedence, no
 substantive decision or chronology changed, and the one corresponding
 cross-reference was disambiguated.
 
+## ADR-187 — Add observable rigid behavior and qualify before widening
+
+- **Date:** 2026-09-11
+- **Status:** accepted and implemented
+- **Context:** The rigid codec and separated N=8 probe created representation
+  seams but did not prove useful box behavior or visual scaling. The first
+  integrated development pass further showed that millimetre-scale public
+  geometry jitter could shift repeated contacts even when truth-state dynamics
+  were exact.
+- **Decision:** Keep the public belief/action/rollout contracts and analytic
+  dynamics authority. Add exact sphere/OBB rendering, parameter-free calibrated
+  multi-view surface fitting, analytic SAT/closest-point contact, and an
+  independent rigid oracle. Preserve the all-sphere path exactly. Correct
+  public geometry and native-rate state estimates before considering learned
+  capacity.
+- **Decision:** Require isolated held-out rigid qualification, the full N=7/8
+  RGB-D ladder, and then one integrated mixed-rigid/lifecycle/camera/action
+  benchmark. Planning remains downstream-only and must pass winner, regret,
+  goal, exact serial parity, action invariants, and `0.10/0.35 s` K=8/K=32
+  latency ceilings in the integrated gate. Retain only summaries, HTML, and
+  bounded vector keyframes.
+- **Consequences:** Public plane and algebraic sphere fitting remove the
+  integrated contact drift without widening a model. Rigid v2, N=7/8 v1, and
+  integrated v2 all pass. The integrated forecast matches five contact frames
+  over four seconds and K=32 planning remains `0.033 s`. This qualifies the
+  incumbent behavior but does not trigger checkpoint promotion or the paired
+  3% candidate-improvement rule. Rotational collision response and visual
+  qualification beyond N=8 remain future work.
+
 ## ADR-186 — Scale causal behavior before model capacity
 
 - **Date:** 2026-09-10

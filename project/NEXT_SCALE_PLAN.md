@@ -75,14 +75,15 @@ serial/vectorized cost difference. Measured vectorized latencies range from
 
 ## Phase C — General rigid geometry without a compatibility break
 
-Status: **representation seam implemented; behavioral support remains open**.
+Status: **implemented and passing** in
+`runs/20260910-rigid-capability-v2`.
 
 1. Encode primitive geometry explicitly while retaining component zero as the
    legacy conservative radius. A one-component geometry tensor decodes exactly
    as a sphere.
 2. Support sphere and box tags plus box half-extents in a centralized codec;
    keep `ObjectBelief.radius` behavior unchanged for legacy callers.
-3. Next, add an analytic oriented-box reference simulator and observable RGB-D
+3. Add an analytic oriented-box reference simulator and observable RGB-D
    box fitting. Qualify static/moving boxes before mixed sphere/box contacts.
 4. Add SAT-based box contact and sphere-box closest-point contact behind the
    existing dynamics interface. Dense N<=6 remains the numerical oracle; any
@@ -93,9 +94,20 @@ Do not call the codec itself box support. Promotion requires visible RGB-D
 recovery, persistent identity, action targeting, contact timing, and planning
 on held-out aspect ratios and orientations.
 
+The completed implementation preserves the exact legacy all-sphere renderer
+and contact path. It adds exact ray/OBB RGB-D rendering, public multi-view
+surface fitting, oriented SAT box/box contact, closest-point sphere/box
+contact, and a separate rigid reference integrator. The held-out box/box and
+sphere/box qualification passes primitive recovery, metric geometry, two-second
+prediction, collision timing, action invariants, and K=8/K=32 planning. The
+passing run is `134,420` bytes. The v1 diagnostic remains visible because it
+identified an overly narrow action-isolation tolerance and an insufficiently
+separated planning task; neither protected threshold was weakened.
+
 ## Phase D — Increase visible-set capacity
 
-Status: **N=8 separated-object development probe passes; qualification open**.
+Status: **complete N=7/8 qualification implemented and passing** in
+`runs/20260910-perceptual-scale-v1`.
 
 The independent N=8 profile derives ten proposals from
 `max_objects=8 + birth_proposals=2`, loads the incumbent strictly, and ingests
@@ -105,7 +117,7 @@ finite state,
 and `87,436` learned-weight bytes. This is explicitly development evidence,
 not full perceptual qualification.
 
-Next qualify N=7/8 across:
+The governed ladder qualifies N=7/8 across:
 
 1. separated motion and broad known actions;
 2. pair contact and repeated contact;
@@ -117,9 +129,17 @@ Raise image resolution only if pixel-support ablation identifies it as the
 owner. Keep N=12/16 state-only until N=8 passes the complete perception,
 lifecycle, contact, and downstream planning gates.
 
+All twelve count/family cells pass proposal, exact-count, current-position,
+identity, lifecycle/recovery, action, contact, and finite-state gates. The four
+N=7/8 by K=8/32 planning slices select the oracle winner with zero regret and
+exact serial/vectorized agreement. The run retains three small N=8 vector
+animations and no generated frames; it occupies `279,700` bytes. N=12/16
+remain state-only because no higher-count visual evidence was added.
+
 ## Phase E — Integrated capability benchmark
 
-Status: **not started**.
+Status: **implemented and passing** in
+`runs/20260911-integrated-capability-v2`.
 
 After box and N=8 single-family gates pass, add a compact integrated benchmark
 that combines changing membership, a moving calibrated camera, short
@@ -137,13 +157,30 @@ The checkpoint may advance only if it:
 - remains within 1 MiB learned weights, 2.5 GiB RSS, the N=16 state-only
   `0.10 s` gate, and no more than 10% incumbent online-latency regression.
 
-## Immediate execution order
+The deterministic four-object bridge combines two spheres, two held-out
+oriented boxes, lifecycle changes, a moving calibrated camera, one-frame full
+occlusion and recovery, five repeated contact intervals, three absolute-time
+known actions, and a four-second open-loop rollout. Its public RGB-D geometry
+and native-rate post-event state produce `2.824e-6 m` four-second position RMSE
+and `1.694e-6 m/s` velocity RMSE; all five model/reference contact frames match.
+K=8/K=32 planning selects the oracle winner with zero regret, exact serial
+parity, and `0.020/0.033 s` vectorized latency. The portable evidence occupies
+`86,746` bytes and includes the true 4.00-second endpoint as an inline vector
+animation. This qualifies the incumbent behavior; it is not a new learned
+checkpoint promotion, so the paired 3% candidate-improvement rule was not
+invoked and no residual was widened.
 
-1. Preserve Phase A/B as a regression tier and keep v1--v3 provenance visible.
-2. Implement and qualify observable boxes before widening a learned model.
-3. Run the complete N=7/8 RGB-D capability ladder using the separate capacity
-   profile.
-4. Run the integrated benchmark only after those isolated owners are clean.
-5. Train or widen one bounded residual only when a clean-observation,
-   truth-association, truth-parameter, or truth-state ablation repeatedly owns
-   the remaining error.
+## Completion and next frontier
+
+Phases A--E are implemented in order and remain separate regression tiers. No
+learned module was widened because the only integrated development failure was
+owned by public geometry/state estimation: public face-plane and algebraic
+sphere fits removed it directly. The next scale phase should retain these gates
+while extending only genuinely new behavior—rotational contact response,
+less appearance-supervised discovery, or visual qualification beyond N=8—after
+a fresh plan freezes the corresponding observability and efficiency limits.
+
+The implementation gate passed Ruff, Ruff format, compileall, diff hygiene,
+the focused and broad compatibility checks, and the complete repository suite:
+`2457 passed, 16 skipped` in `1:11:47`. The final report-copy reconciliation
+then passed all 12 focused dashboard tests plus Ruff, format, and diff hygiene.

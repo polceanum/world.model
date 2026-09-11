@@ -12,7 +12,8 @@ network-weight updates.
 
 The same belief can be viewed through a predictive-abstraction router. Free
 motion currently selects a cheap point trajectory; contact-like modes refine
-the entity to rigid-sphere execution. A reversible typed token adapter exposes
+the entity to analytic sphere or oriented-box execution when observable shape
+evidence is available; legacy geometry remains exactly spherical. A reversible typed token adapter exposes
 scene, camera, kinematic, programme, and lifecycle information for future
 attention-based models. These are derived interfaces, not alternate runtime
 state.

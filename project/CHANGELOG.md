@@ -2,6 +2,37 @@
 
 ## Unreleased — 2026-07-28
 
+### 2026-09-11 rigid, N=8, and integrated capability completion
+
+- Added an independent sphere/oriented-box state, exact CPU RGB-D renderer,
+  and central low-friction rigid reference integrator. Sphere-only rendering
+  delegates to the existing renderer exactly.
+- Added parameter-free public multi-view rigid fitting. Algebraic sphere
+  fitting removes pixel-dependent centre jitter; per-view surface-plane bases
+  recover oriented-box centres, extents, and orientations without accepting
+  simulator identity or primitive labels.
+- Extended the shared analytic contact resolver with SAT box/box,
+  closest-point sphere/box, and oriented box/plane support while preserving the
+  exact one-component all-sphere path. Added conservation, rotated-contact,
+  finite-gradient, renderer, reference-physics, and truth-isolation tests.
+- Added and executed the complete N=7/8 RGB-D qualification across twelve
+  contact/action/lifecycle/recovery/compositional cells and four K=8/K=32
+  planning slices. The passing run is `279,700` bytes and keeps three bounded
+  N=8 vector animations with no source frames.
+- Added and executed held-out rigid capability and the final integrated
+  four-object bridge. The passing integrated v2 run matches all five contact
+  frames, reaches `2.824e-6 m` four-second RMSE, applies three actions exactly
+  once, and passes K=8/K=32 planning at `0.020/0.033 s`.
+- Completed the portable report details: exact fractional-frame action times,
+  true terminal keyframes, position and velocity horizon charts with units,
+  populated integrated factor/cell metrics, generic single-action planning
+  labels, and real task latencies. Artifacts remain manifest-scoped and far
+  below the 250 MiB budget.
+- The implementation gate passed Ruff, Ruff format, compileall, diff hygiene,
+  focused and broad compatibility checks, and the complete `2457 passed, 16
+  skipped` repository suite in `1:11:47`. The final report-copy reconciliation
+  passed all 12 focused dashboard tests plus Ruff, format, and diff hygiene.
+
 ### 2026-09-10 impact-first long-horizon and scale foundation
 
 - Added immutable ordered `WorldImpulseSchedule` support throughout analytic

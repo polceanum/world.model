@@ -435,6 +435,51 @@ def _merge_latest_factor_evidence(
         ("animations", "animation_source_run"),
         ("forecast_animations", "forecast_animation_source_run"),
     ):
+        if field == "forecast_animations":
+            collected: list[dict[str, Any]] = []
+            source_runs: list[str] = []
+            seen_from_newer: set[tuple[str, str]] = set()
+            # Prefer a compact gallery of genuine long-horizon forecasts from
+            # the newest distinct runs, then fill any remaining card slots
+            # with shorter forecasts. Repeated cards inside one source run are
+            # preserved for backward-compatible best/median/worst galleries.
+            for long_only in (True, False):
+                for summary in reversed(summaries):
+                    values = summary.qualitative.get(field)
+                    if not isinstance(values, list) or not values:
+                        continue
+                    source_keys: set[tuple[str, str]] = set()
+                    for animation in values:
+                        if not isinstance(animation, Mapping):
+                            continue
+                        endpoint = animation.get("long_horizon_endpoint_s", 2.0)
+                        try:
+                            is_long = float(endpoint) > 2.0
+                        except (TypeError, ValueError):
+                            is_long = False
+                        if long_only != is_long:
+                            continue
+                        key = (
+                            str(animation.get("episode", "")),
+                            str(animation.get("label", "")),
+                        )
+                        if key in seen_from_newer:
+                            continue
+                        collected.append({**dict(animation), "source_run": summary.run_id})
+                        source_keys.add(key)
+                        if summary.run_id not in source_runs:
+                            source_runs.append(summary.run_id)
+                        if len(collected) == 3:
+                            break
+                    seen_from_newer.update(source_keys)
+                    if len(collected) == 3:
+                        break
+                if len(collected) == 3:
+                    break
+            if collected:
+                qualitative[field] = collected
+                animation_sources[source_field] = ", ".join(source_runs)
+            continue
         if isinstance(qualitative.get(field), list) and qualitative.get(field):
             existing_source = latest.provenance.get(source_field)
             animation_sources[source_field] = (
@@ -491,6 +536,11 @@ def _planning_table(summary: CapabilityRunSummary) -> str:
             )
     sequence_by_count = summary.planning.get("by_candidate_count")
     if not groups and isinstance(sequence_by_count, Mapping) and sequence_by_count:
+        tasks = summary.planning.get("tasks")
+        task_values = (
+            [item for item in tasks if isinstance(item, Mapping)] if isinstance(tasks, list) else []
+        )
+        has_replanning = any("replanning_consistent" in item for item in task_values)
         aggregate_rows = []
         for candidate_count, values in sorted(
             sequence_by_count.items(),
@@ -498,44 +548,59 @@ def _planning_table(summary: CapabilityRunSummary) -> str:
         ):
             if not isinstance(values, Mapping):
                 continue
+            replan_cell = (
+                f"<td>{_format_number(values.get('replanning_consistency'))}</td>"
+                if has_replanning
+                else ""
+            )
             aggregate_rows.append(
                 "<tr>"
                 f"<td>K{_escape(candidate_count)}</td>"
                 f"<td>{_format_number(values.get('winner_accuracy'))}</td>"
                 f"<td>{_format_number(values.get('median_normalized_regret'))}</td>"
                 f"<td>{_format_number(values.get('goal_success'))}</td>"
-                f"<td>{_format_number(values.get('replanning_consistency'))}</td>"
+                f"{replan_cell}"
                 "</tr>"
             )
-        tasks = summary.planning.get("tasks")
         task_rows = []
-        if isinstance(tasks, list):
-            for item in tasks:
-                if not isinstance(item, Mapping):
-                    continue
-                task_rows.append(
-                    "<tr>"
-                    f"<td>{_escape(item.get('scenario', 'unknown'))}</td>"
-                    f"<td>K{_escape(item.get('candidate_count', '?'))}</td>"
-                    f"<td>{_escape(item.get('winner_correct', '—'))}</td>"
-                    f"<td>{_format_number(item.get('normalized_regret'))}</td>"
-                    f"<td>{_escape(item.get('replanning_consistent', '—'))}</td>"
-                    f"<td>{_format_number(item.get('vectorized_latency_seconds'))}</td>"
-                    "</tr>"
-                )
+        for item in task_values:
+            replan_cell = (
+                f"<td>{_escape(item.get('replanning_consistent', '—'))}</td>"
+                if has_replanning
+                else ""
+            )
+            latency = item.get("vectorized_latency_seconds", item.get("latency_seconds"))
+            task_rows.append(
+                "<tr>"
+                f"<td>{_escape(item.get('scenario', 'unknown'))}</td>"
+                f"<td>K{_escape(item.get('candidate_count', '?'))}</td>"
+                f"<td>{_escape(item.get('winner_correct', '—'))}</td>"
+                f"<td>{_format_number(item.get('normalized_regret'))}</td>"
+                f"{replan_cell}"
+                f"<td>{_format_number(latency)}</td>"
+                "</tr>"
+            )
+        task_heading = "Action-sequence task ledger" if has_replanning else "Planning task ledger"
+        replan_heading = "<th>Replan consistent</th>" if has_replanning else ""
         task_table = (
-            f'<details class="planning-slices"><summary>Action-sequence task ledger ({len(task_rows)} tasks)</summary>'
+            f'<details class="planning-slices"><summary>{task_heading} ({len(task_rows)} tasks)</summary>'
             "<table><thead><tr><th>Scenario</th><th>Candidates</th><th>Winner correct</th>"
-            "<th>Normalized regret</th><th>Replan consistent</th><th>Latency (s)</th></tr></thead>"
+            f"<th>Normalized regret</th>{replan_heading}<th>Latency (s)</th></tr></thead>"
             f"<tbody>{''.join(task_rows)}</tbody></table></details>"
             if task_rows
             else ""
         )
+        heading = (
+            "Action-sequence planning and replanning"
+            if has_replanning
+            else "Counterfactual action planning"
+        )
+        aggregate_replan_heading = "<th>Replan consistency</th>" if has_replanning else ""
         return (
-            "<h3>Action-sequence planning and replanning</h3>"
+            f"<h3>{heading}</h3>"
             '<p class="table-note">Planning is evaluated downstream only; no winner, ranking, regret, or task-success loss is optimized.</p>'
             "<table><thead><tr><th>Candidates</th><th>Winner accuracy</th>"
-            "<th>Median regret</th><th>Goal success</th><th>Replan consistency</th></tr></thead>"
+            f"<th>Median regret</th><th>Goal success</th>{aggregate_replan_heading}</tr></thead>"
             f"<tbody>{''.join(aggregate_rows)}</tbody></table>{task_table}"
         )
     if not groups:
@@ -813,7 +878,7 @@ def _animation_section(
             if not isinstance(item, Mapping) or not item.get("kind"):
                 continue
             try:
-                event_frame = int(item.get("frame"))
+                event_frame = float(item.get("frame"))
             except (TypeError, ValueError):
                 event_labels.append(str(item["kind"]))
                 continue
@@ -825,9 +890,22 @@ def _animation_section(
                     frame_rate_value = 20.0
                 if not math.isfinite(frame_rate_value) or frame_rate_value <= 0.0:
                     frame_rate_value = 20.0
-                event_time = f"+{(event_frame - anchor_frame) / frame_rate_value:.2f} s"
+                explicit_time = item.get("time_s")
+                try:
+                    event_seconds = float(explicit_time)
+                except (TypeError, ValueError):
+                    event_seconds = (event_frame - anchor_frame) / frame_rate_value
+                precision = 2 if abs(event_seconds * 100 - round(event_seconds * 100)) < 1e-9 else 3
+                event_time = f"+{event_seconds:.{precision}f} s"
             else:
-                event_time = f"{event_frame / 20.0:.2f} s"
+                frame_rate = animation.get("frame_rate", 20.0)
+                try:
+                    frame_rate_value = float(frame_rate)
+                except (TypeError, ValueError):
+                    frame_rate_value = 20.0
+                if not math.isfinite(frame_rate_value) or frame_rate_value <= 0.0:
+                    frame_rate_value = 20.0
+                event_time = f"{event_frame / frame_rate_value:.2f} s"
             event_labels.append(f"{item['kind']} @ {event_time}")
         if mode == "forecast":
             endpoint = animation.get("long_horizon_endpoint_s", 2.0)
@@ -854,6 +932,12 @@ def _animation_section(
             if bool(animation.get("dynamic_membership"))
             else "static membership"
         )
+        animation_source = animation.get("source_run")
+        source_label = (
+            f" · source {_escape(animation_source)}"
+            if isinstance(animation_source, str) and animation_source
+            else ""
+        )
         horizontal_name = f"World {str(axis_labels[0]).upper()} (m)"
         vertical_name = f"World {str(axis_labels[1]).upper()} (m)"
         cards.append(
@@ -864,7 +948,7 @@ def _animation_section(
             f'<p class="animation-meta">{_escape(animation.get("episode", "unknown episode"))}'
             f" · N={_escape(animation.get('object_count', '?'))}"
             f" · {_escape(contact_label)} · {_escape(membership_label)}"
-            f" · {_escape(error_label)} {_format_number(error_value)} m</p>"
+            f" · {_escape(error_label)} {_format_number(error_value)} m{source_label}</p>"
             '<svg class="world-animation" viewBox="0 0 336 244" role="img" '
             f'aria-label="{_escape(animation.get("label", "example"))} model versus reference world trajectory; horizontal axis {_escape(horizontal_name)}; vertical axis {_escape(vertical_name)}">'
             '<rect x="48" y="18" width="268" height="184" rx="7" class="animation-stage"/>'
@@ -936,9 +1020,10 @@ def _animation_cards(summary: CapabilityRunSummary) -> str:
     if long_endpoints and max(long_endpoints) > 2.0:
         forecast_title = "Four/eight-second causal forecasts"
         forecast_introduction = (
-            "State-first pilot rollouts apply each declared future impulse exactly once and "
-            "continue through analytic pair, floor, and wall contacts. Curves are compact "
-            "vector keyframes; no rendered frame directories are retained."
+            "Long-horizon rollouts apply each declared future impulse exactly once and continue "
+            "through analytic pair, floor, and wall contacts. Integrated RGB-D and state-first "
+            "evidence remain labelled by source; compact vector keyframes replace rendered "
+            "frame directories."
         )
     else:
         forecast_title = "Two-second open-loop forecasts"
@@ -1089,6 +1174,22 @@ def _summary_section(
         if isinstance(horizon, Mapping)
         else []
     )
+    velocity_horizon = summary.horizon_curves.get("candidate_velocity_rmse_mps", {})
+    velocity_horizon_points = (
+        [(f"{key}s", float(value)) for key, value in velocity_horizon.items()]
+        if isinstance(velocity_horizon, Mapping)
+        else []
+    )
+    velocity_chart = (
+        _svg_line_chart(
+            velocity_horizon_points,
+            title="Velocity RMSE across horizon",
+            x_label="Prediction horizon (s)",
+            y_label="Velocity RMSE (m/s)",
+        )
+        if velocity_horizon_points
+        else ""
+    )
     resources = summary.resources
     n8_probe = _n8_perceptual_probe(resources) or {}
     coverage = summary.uncertainty.get("coverage_90_range", ())
@@ -1108,7 +1209,7 @@ def _summary_section(
       <article><h2>Uncertainty</h2><p class="metric">{coverage_text}</p><p>Observed nominal-90% coverage range</p></article>
       <article><h2>Planning parity</h2><p class="metric">{_escape(summary.planning.get("serial_vectorized_winner_parity", "—"))}</p><p>Maximum cost difference {_format_number(summary.planning.get("maximum_cost_difference"))}</p></article>
     </section>
-    <section class="grid two"><article><h2>Capability coverage</h2>{_factor_table(summary)}</article><article><h2>Horizon error</h2>{_svg_line_chart(horizon_points, title="Position RMSE across horizon", x_label="Prediction horizon (s)", y_label="Position RMSE (m)")}</article></section>
+    <section class="grid two"><article><h2>Capability coverage</h2>{_factor_table(summary)}</article><article><h2>Horizon error</h2>{_svg_line_chart(horizon_points, title="Position RMSE across horizon", x_label="Prediction horizon (s)", y_label="Position RMSE (m)")}{velocity_chart}</article></section>
     <section><h2>Factor performance</h2>{_factor_metric_matrix(summary)}</section>
     <section><h2>Physical behavior</h2>{_heatmap(summary, metric="current_position_rmse_m", title="Current-position RMSE (m) by object count, contact, and membership", lower_is_better=True)}{_heatmap(summary, metric="uncertainty_90_coverage", title="90% uncertainty coverage by object count, contact, and membership", lower_is_better=True, ideal_value=0.90)}</section>
     <section class="grid two"><article><h2>Capability frontier</h2>{_frontier_table(frontier_history)}</article><article><h2>Ablation attribution</h2>{_ablation_attribution(summary)}</article></section>

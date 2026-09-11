@@ -78,8 +78,27 @@ floor, wall, and repeated contact, plus K=8/K=32 action-sequence selection and
 replanning. The N=8 command is a separated-object, three-frame public RGB-D
 development probe; it is not a complete N=8 qualification.
 
+Reproduce the completed visual-scale, rigid-geometry, and integrated gates:
+
+```bash
+conda run -n orpheus python scripts/run_perceptual_scale_qualification.py --dry-run
+conda run -n orpheus python scripts/run_perceptual_scale_qualification.py
+conda run -n orpheus python scripts/run_rigid_capability.py --dry-run
+conda run -n orpheus python scripts/run_rigid_capability.py
+conda run -n orpheus python scripts/run_integrated_capability.py --dry-run
+conda run -n orpheus python scripts/run_integrated_capability.py
+```
+
+The first gate spans all N=7/8 separated, action, contact, lifecycle,
+occlusion-recovery, and compositional cells. The second qualifies observable
+held-out oriented boxes and mixed sphere/box contact. The final four-object
+bridge combines moving calibration, changing membership, recovery, mixed
+geometry, repeated contact, three known actions, four-second prediction, and
+required K=8/K=32 planning. These runs retain only compact summaries, portable
+HTML, and bounded vector keyframes.
+
 The current impact-first implementation passes the complete repository gate:
-`2434 passed, 16 skipped` (the skips require unavailable MPS hardware).
+`2457 passed, 16 skipped` (the skips require unavailable MPS hardware).
 
 Run or reproduce one streamed physical factor without retaining its episodes:
 
@@ -134,10 +153,9 @@ conda run -n orpheus python scripts/run_world_model_workbench.py --profile devel
 The next scale-up sequence is documented in
 [`project/NEXT_SCALE_PLAN.md`](project/NEXT_SCALE_PLAN.md). Multi-action
 4/8-second behavior, action-sequence replanning, a backward-compatible rigid-
-geometry seam, and a separated N=8 RGB-D development probe are now implemented.
-Observable box behavior and the complete N=7/8 contact/lifecycle/recovery/
-planning ladder are next. N=12/16 remain explicitly state-only until the
-lower-count visual model passes.
+geometry behavior, complete N=7/8 RGB-D qualification, and the integrated
+mixed-rigid bridge are now implemented. N=12/16 remain explicitly state-only;
+the next visual expansion must earn its own observability and efficiency gates.
 
 The first vertical slice uses a deterministic synthetic RGB sphere world with
 collisions, occlusion, camera motion, and variable drag/restitution. Simulator
@@ -154,6 +172,13 @@ Physical evaluation streams generated RGB-D and immediately discards it;
 factor-conditioned planning covers N=1--6 and K=8/32 without entering the
 training objective. The incumbent is not promoted while its explicit
 calibration and compositional-planning failures remain.
+
+The impact-first extension now also qualifies observable oriented boxes,
+sphere/box and box/box contacts, the full N=7/8 RGB-D ladder, and one integrated
+four-object mixed-rigid scenario. This adds no wide learned module and does not
+promote a new checkpoint; it broadens the structured incumbent's demonstrated
+behavior while preserving the unresolved factor-conditioned calibration and
+planning failures above.
 
 The full `OnlineWorldModel` train/evaluate/demo path remains runnable, but old
 one-shot ladders and multi-day campaigns are audit history rather than the

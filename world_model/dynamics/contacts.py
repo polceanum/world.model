@@ -9,10 +9,110 @@ from dataclasses import dataclass, replace
 import torch
 from torch import Tensor, nn
 
-from world_model.belief import ObjectBeliefTensor
+from world_model.belief import ObjectBeliefTensor, RigidPrimitive
 from world_model.dynamics.graph import InteractionOutput
 
 _TANGENT_DIRECTION_EPSILON = 1.0e-7
+_RIGID_AXIS_EPSILON = 1.0e-7
+
+
+def _quaternion_rotation_matrix(quaternion: Tensor) -> Tensor:
+    """Return scalar-last quaternion rotations with finite identity fallback."""
+
+    if quaternion.shape[-1] != 4:
+        raise ValueError("orientation quaternion must end in four components")
+    norm = torch.linalg.vector_norm(quaternion, dim=-1, keepdim=True)
+    identity = torch.zeros_like(quaternion)
+    identity[..., 3] = 1.0
+    unit = torch.where(norm > 1.0e-8, quaternion / norm.clamp_min(1.0e-8), identity)
+    x, y, z, w = unit.unbind(dim=-1)
+    return torch.stack(
+        (
+            1.0 - 2.0 * (y.square() + z.square()),
+            2.0 * (x * y - z * w),
+            2.0 * (x * z + y * w),
+            2.0 * (x * y + z * w),
+            1.0 - 2.0 * (x.square() + z.square()),
+            2.0 * (y * z - x * w),
+            2.0 * (x * z - y * w),
+            2.0 * (y * z + x * w),
+            1.0 - 2.0 * (x.square() + y.square()),
+        ),
+        dim=-1,
+    ).reshape(*quaternion.shape[:-1], 3, 3)
+
+
+def _oriented_box_axis(
+    first_position: Tensor,
+    first_half_extents: Tensor,
+    first_rotation: Tensor,
+    second_position: Tensor,
+    second_half_extents: Tensor,
+    second_rotation: Tensor,
+) -> tuple[Tensor, Tensor]:
+    """Return the first-to-second minimum separating axis and signed gap."""
+
+    first_axes = first_rotation.transpose(-1, -2)
+    second_axes = second_rotation.transpose(-1, -2)
+    cross_axes = torch.linalg.cross(
+        first_axes.unsqueeze(-2),
+        second_axes.unsqueeze(-3),
+        dim=-1,
+    ).flatten(start_dim=-3, end_dim=-2)
+    candidates = torch.cat((first_axes, second_axes, cross_axes), dim=-2)
+    norms = torch.linalg.vector_norm(candidates, dim=-1)
+    valid = norms > _RIGID_AXIS_EPSILON
+    safe_axes = candidates / torch.where(valid, norms, torch.ones_like(norms)).unsqueeze(-1)
+    delta = second_position - first_position
+    centre_projection = torch.einsum("bai,bi->ba", safe_axes, delta).abs()
+    # Sum the absolute projection of each local basis vector.  Keeping the
+    # absolute value inside the sum is essential for oblique axes.
+    first_projection = (
+        torch.einsum("bai,bji->baj", safe_axes, first_axes).abs() * first_half_extents.unsqueeze(-2)
+    ).sum(dim=-1)
+    second_projection = (
+        torch.einsum("bai,bji->baj", safe_axes, second_axes).abs()
+        * second_half_extents.unsqueeze(-2)
+    ).sum(dim=-1)
+    gaps = centre_projection - first_projection - second_projection
+    gaps = torch.where(valid, gaps, torch.full_like(gaps, -torch.inf))
+    selected_index = gaps.argmax(dim=-1)
+    batch = torch.arange(gaps.shape[0], device=gaps.device)
+    axis = safe_axes[batch, selected_index]
+    signed = (delta * axis).sum(dim=-1)
+    direction = torch.where(signed < 0.0, -torch.ones_like(signed), torch.ones_like(signed))
+    return axis * direction.unsqueeze(-1), gaps[batch, selected_index]
+
+
+def _sphere_box_axis(
+    sphere_position: Tensor,
+    sphere_radius: Tensor,
+    box_position: Tensor,
+    box_half_extents: Tensor,
+    box_rotation: Tensor,
+) -> tuple[Tensor, Tensor]:
+    """Return sphere-to-box contact normal and signed surface gap."""
+
+    relative = sphere_position - box_position
+    local = torch.einsum("bij,bj->bi", box_rotation.transpose(-1, -2), relative)
+    closest = torch.minimum(torch.maximum(local, -box_half_extents), box_half_extents)
+    local_to_box = closest - local
+    world_to_box = torch.einsum("bij,bj->bi", box_rotation, local_to_box)
+    distance = torch.linalg.vector_norm(world_to_box, dim=-1)
+    outside_normal = world_to_box / distance.clamp_min(_RIGID_AXIS_EPSILON).unsqueeze(-1)
+    inside = (local.abs() <= box_half_extents).all(dim=-1)
+    clearance = box_half_extents - local.abs()
+    face_index = clearance.argmin(dim=-1)
+    face = torch.nn.functional.one_hot(face_index, num_classes=3).to(local.dtype)
+    outward = face * torch.where(local < 0.0, -torch.ones_like(local), torch.ones_like(local))
+    # The resolver moves the first body opposite the returned normal.  For a
+    # sphere centre inside a box, invert the nearest outward direction so the
+    # correction expels it through that face.
+    inside_normal = -torch.einsum("bij,bj->bi", box_rotation, outward)
+    normal = torch.where(inside.unsqueeze(-1), inside_normal, outside_normal)
+    inside_depth = clearance.gather(-1, face_index.unsqueeze(-1)).squeeze(-1)
+    gap = torch.where(inside, -(inside_depth + sphere_radius), distance - sphere_radius)
+    return normal, gap
 
 
 def _safe_tangent_direction(tangential: Tensor, tangent_speed: Tensor) -> Tensor:
@@ -261,11 +361,7 @@ class SphereContactResolver(nn.Module):
         """Measure symmetric pair contact without applying another jump."""
 
         _, count = objects.active.shape
-        rel_position = objects.position[:, None, :, :] - objects.position[:, :, None, :]
-        distance = torch.linalg.vector_norm(rel_position, dim=-1).clamp_min(1e-7)
-        normal = rel_position / distance.unsqueeze(-1)
-        radius = objects.radius.squeeze(-1)
-        gap = distance - radius[:, :, None] - radius[:, None, :]
+        normal, gap, _ = self._pair_geometry(objects)
         position_variance = objects.fast_log_variance[..., :3].exp()
         relative_variance = position_variance[:, :, None, :] + position_variance[:, None, :, :]
         gap_sigma = (relative_variance * normal.square()).sum(dim=-1).sqrt()
@@ -290,7 +386,8 @@ class SphereContactResolver(nn.Module):
             dtype=objects.position.dtype,
         )
         signed_center = torch.einsum("bnc,pc->bnp", objects.position, normals)
-        gap = signed_center - offsets[None, None, :] - objects.radius
+        support = self._plane_support(objects, normals)
+        gap = signed_center - offsets[None, None, :] - support
         position_variance = objects.fast_log_variance[..., :3].exp()
         gap_sigma = torch.einsum(
             "bnc,pc->bnp",
@@ -306,19 +403,14 @@ class SphereContactResolver(nn.Module):
         graph: InteractionOutput | None,
     ) -> tuple[ObjectBeliefTensor, Tensor, Tensor, Tensor, Tensor, Tensor]:
         batch, count = objects.active.shape
-        rel_position = objects.position[:, None, :, :] - objects.position[:, :, None, :]
-        distance = torch.linalg.vector_norm(rel_position, dim=-1).clamp_min(1e-7)
-        normal = rel_position / distance.unsqueeze(-1)
+        normal, gap, penetration = self._pair_geometry(objects)
         rel_velocity = objects.velocity[:, None, :, :] - objects.velocity[:, :, None, :]
         relative_normal_velocity = (rel_velocity * normal).sum(dim=-1)
-        radius = objects.radius.squeeze(-1)
-        penetration = (radius[:, :, None] + radius[:, None, :] - distance).clamp_min(0.0)
         active_pair = objects.active[:, :, None] & objects.active[:, None, :]
         upper = torch.triu(
             torch.ones(count, count, device=objects.active.device, dtype=torch.bool),
             diagonal=1,
         ).unsqueeze(0)
-        gap = distance - radius[:, :, None] - radius[:, None, :]
         position_variance = objects.fast_log_variance[..., :3].exp()
         relative_variance = position_variance[:, :, None, :] + position_variance[:, None, :, :]
         gap_sigma = (relative_variance * normal.square()).sum(dim=-1).sqrt()
@@ -403,6 +495,107 @@ class SphereContactResolver(nn.Module):
             residual,
         )
 
+    @staticmethod
+    def _has_box_geometry(objects: ObjectBeliefTensor) -> bool:
+        if objects.geometry_dim < 5:
+            return False
+        primitive = objects.geometry_primitive
+        return bool((objects.active & (primitive == int(RigidPrimitive.BOX))).any())
+
+    def _pair_geometry(
+        self,
+        objects: ObjectBeliefTensor,
+    ) -> tuple[Tensor, Tensor, Tensor]:
+        """Return pair normals, signed gaps, and nonnegative penetrations."""
+
+        relative = objects.position[:, None, :, :] - objects.position[:, :, None, :]
+        distance = torch.linalg.vector_norm(relative, dim=-1).clamp_min(1.0e-7)
+        normal = relative / distance.unsqueeze(-1)
+        radius = objects.radius.squeeze(-1)
+        gap = distance - radius[:, :, None] - radius[:, None, :]
+        if not self._has_box_geometry(objects):
+            return normal, gap, (-gap).clamp_min(0.0)
+
+        primitive = objects.geometry_primitive
+        half_extents = objects.geometry_half_extents
+        rotation = _quaternion_rotation_matrix(objects.orientation)
+        batch, count = objects.active.shape
+        for first in range(count):
+            for second in range(first + 1, count):
+                first_box = primitive[:, first] == int(RigidPrimitive.BOX)
+                second_box = primitive[:, second] == int(RigidPrimitive.BOX)
+                any_box = first_box | second_box
+                if not bool((objects.active[:, first] & objects.active[:, second] & any_box).any()):
+                    continue
+                box_box_normal, box_box_gap = _oriented_box_axis(
+                    objects.position[:, first],
+                    half_extents[:, first],
+                    rotation[:, first],
+                    objects.position[:, second],
+                    half_extents[:, second],
+                    rotation[:, second],
+                )
+                first_sphere_normal, first_sphere_gap = _sphere_box_axis(
+                    objects.position[:, first],
+                    radius[:, first],
+                    objects.position[:, second],
+                    half_extents[:, second],
+                    rotation[:, second],
+                )
+                second_sphere_normal, second_sphere_gap = _sphere_box_axis(
+                    objects.position[:, second],
+                    radius[:, second],
+                    objects.position[:, first],
+                    half_extents[:, first],
+                    rotation[:, first],
+                )
+                pair_normal = torch.where(
+                    (first_box & second_box).unsqueeze(-1),
+                    box_box_normal,
+                    torch.where(
+                        (~first_box & second_box).unsqueeze(-1),
+                        first_sphere_normal,
+                        -second_sphere_normal,
+                    ),
+                )
+                pair_gap = torch.where(
+                    first_box & second_box,
+                    box_box_gap,
+                    torch.where(~first_box & second_box, first_sphere_gap, second_sphere_gap),
+                )
+                normal[:, first, second] = torch.where(
+                    any_box.unsqueeze(-1),
+                    pair_normal,
+                    normal[:, first, second],
+                )
+                normal[:, second, first] = -normal[:, first, second]
+                gap[:, first, second] = torch.where(
+                    any_box,
+                    pair_gap,
+                    gap[:, first, second],
+                )
+                gap[:, second, first] = gap[:, first, second]
+        return normal, gap, (-gap).clamp_min(0.0)
+
+    def _plane_support(self, objects: ObjectBeliefTensor, normals: Tensor) -> Tensor:
+        """Return shape support along each inward environment-plane normal."""
+
+        sphere_support = objects.radius.expand(-1, -1, normals.shape[0])
+        if not self._has_box_geometry(objects):
+            return sphere_support
+        primitive = objects.geometry_primitive
+        half_extents = objects.geometry_half_extents
+        rotation = _quaternion_rotation_matrix(objects.orientation)
+        local_axes = rotation.transpose(-1, -2)
+        box_support = (
+            torch.einsum("pi,bnji->bnpj", normals, local_axes).abs() * half_extents.unsqueeze(-2)
+        ).sum(dim=-1)
+        return torch.where(
+            (primitive == int(RigidPrimitive.BOX)).unsqueeze(-1),
+            box_support,
+            sphere_support,
+        )
+
     def _resolve_planes(
         self,
         objects: ObjectBeliefTensor,
@@ -429,7 +622,8 @@ class SphereContactResolver(nn.Module):
             normal = normals[plane_index]
             offset = offsets[plane_index]
             signed_center = (position * normal).sum(dim=-1)
-            gap = signed_center - offset - objects.radius.squeeze(-1)
+            support = self._plane_support(objects, normal.unsqueeze(0)).squeeze(-1)
+            gap = signed_center - offset - support
             gap_sigma = (position_variance * normal.square()).sum(dim=-1).sqrt()
             confident_gap = gap + self.contact_confidence_sigma * gap_sigma
             contact = objects.active & (confident_gap <= self.boundary_contact_tolerance)

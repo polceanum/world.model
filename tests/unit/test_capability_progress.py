@@ -44,7 +44,10 @@ def _summary(run_id: str, status: str = "completed") -> CapabilityRunSummary:
         cell_metrics={
             "N1/contact=0/dynamic=0": {"current_position_rmse_m": {"value": 0.01, "support": 12}}
         },
-        horizon_curves={"candidate_position_rmse_m": {"0.05": 0.012, "2.0": 0.10}},
+        horizon_curves={
+            "candidate_position_rmse_m": {"0.05": 0.012, "2.0": 0.10},
+            "candidate_velocity_rmse_mps": {"0.05": 0.02, "2.0": 0.08},
+        },
         uncertainty={"coverage_90_range": [0.86, 0.94]},
         planning={
             "serial_vectorized_winner_parity": True,
@@ -88,6 +91,8 @@ def test_summary_roundtrip_and_active_refresh_are_versioned(tmp_path: Path) -> N
     assert "Position RMSE across horizon" in active_html
     assert "Prediction horizon (s)" in active_html
     assert "Position RMSE (m)" in active_html
+    assert "Velocity RMSE across horizon" in active_html
+    assert "Velocity RMSE (m/s)" in active_html
     assert "N1/contact=0/dynamic=0" in active_html
     assert "Factor performance" in active_html
     assert "Proposal F1" in active_html

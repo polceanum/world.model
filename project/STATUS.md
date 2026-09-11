@@ -1,5 +1,56 @@
 # Project status
 
+## Impact-first capability completion — 2026-09-11
+
+The impact-first scale plan is implemented through its integrated gate. The
+legacy-compatible dynamics now execute observable spheres and oriented boxes:
+the independent renderer uses exact ray/sphere and ray/OBB intersections, the
+public fitter reconstructs spheres algebraically and boxes from calibrated
+multi-view surface planes, and the shared contact resolver adds SAT box/box and
+closest-point sphere/box contact. All-sphere rendering and one-component
+geometry remain exact compatibility oracles. A separate rigid integrator owns
+reference physics and does not call model contact code.
+
+`runs/20260910-rigid-capability-v2` qualifies held-out box aspect ratios and
+orientations plus mixed sphere/box behavior. Both scenes recover primitive
+type, metric geometry, collision identity/timing, two-second state, action
+targeting, and K=8/K=32 downstream planning. Learned weights remain `6,492`
+bytes. The earlier v1 run is retained as diagnostic evidence.
+
+`runs/20260910-perceptual-scale-v1` closes the N=7/8 visual ladder across all
+twelve separated-motion, known-action, pair-contact, lifecycle,
+occlusion-recovery, and compositional cells. Every cell passes its proposal,
+count, position, persistent-ID, lifecycle/action/contact, and finite-state
+floors. All four count-by-K planning slices select the oracle winner with zero
+regret and exact serial/vectorized cost agreement. Three small N=8 vector
+animations are retained; generated RGB-D frames are not.
+
+`runs/20260911-integrated-capability-v2` combines four mixed rigid bodies,
+changing membership, a moving calibrated camera, short full occlusion and
+identity recovery, five repeated contact intervals, three known impulses, and
+a four-second open-loop forecast. Public geometry and post-event native-rate
+state produce `2.824e-6 m` four-second position RMSE and `1.694e-6 m/s`
+velocity RMSE. Predicted/reference contact frames are exactly
+`12/38/50/57/68`; K=8/K=32 planning has the correct winner, zero regret, exact
+serial parity, and `0.020/0.033 s` vectorized latency. The run is `86,746`
+bytes and the dashboard exposes its exact action times, endpoint, position and
+velocity axes, contacts, and inline vector forecast.
+
+No residual was widened and no new checkpoint was promoted: the initial
+integrated miss was owned by public geometry/state estimation and was removed
+there. N=12/16 remain state-only. Unknown calibration, hidden actions,
+articulated/deformable dynamics, rotational collision response, discovery
+without known appearance handles, and long-term memory remain outside the
+claim. The managed run tree is about `13.67 MB` against the `250 MiB` policy;
+`.archive` remains separately protected at about `34.32 MB`.
+
+The implementation gate passed Ruff, Ruff format, compileall, diff hygiene,
+the focused and broad compatibility checks, and the complete repository suite:
+`2457 passed, 16 skipped` in `1:11:47`. The skips are the expected unavailable-
+MPS cases; the only warnings are the existing PyTorch intra-op thread-setting
+warning in dynamic-set execution. A final report-copy reconciliation then
+passed all 12 focused dashboard tests plus Ruff, format, and diff hygiene.
+
 ## Impact-first scale foundation — 2026-09-10
 
 The revised scale plan now begins with capabilities a downstream controller can
