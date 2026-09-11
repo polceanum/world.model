@@ -411,6 +411,15 @@ def _merge_latest_factor_evidence(
                 break
     if planning_by_factor:
         planning = {**planning, "by_factor": planning_by_factor}
+        latest_sequence = latest.planning.get("by_candidate_count")
+        if isinstance(latest_sequence, Mapping) and latest_sequence:
+            planning = {
+                **planning,
+                "latest_specialized": {
+                    **latest.planning,
+                    "source_run": latest.run_id,
+                },
+            }
     measured_planning = set(planning_by_factor) - {"nominal_structured"}
     unsupported = tuple(
         claim
@@ -439,6 +448,23 @@ def _merge_latest_factor_evidence(
             collected: list[dict[str, Any]] = []
             source_runs: list[str] = []
             seen_from_newer: set[tuple[str, str]] = set()
+            reserved_source: str | None = None
+            # Reserve one card for the newest measured forecast so a newly
+            # qualified behavior (for example pose/contact) cannot disappear
+            # behind three older long-horizon cards.
+            for summary in reversed(summaries):
+                values = summary.qualitative.get(field)
+                if not isinstance(values, list) or not values:
+                    continue
+                newest = next((item for item in values if isinstance(item, Mapping)), None)
+                if newest is None:
+                    continue
+                key = (str(newest.get("episode", "")), str(newest.get("label", "")))
+                collected.append({**dict(newest), "source_run": summary.run_id})
+                seen_from_newer.add(key)
+                source_runs.append(summary.run_id)
+                reserved_source = summary.run_id
+                break
             # Prefer a compact gallery of genuine long-horizon forecasts from
             # the newest distinct runs, then fill any remaining card slots
             # with shorter forecasts. Repeated cards inside one source run are
@@ -463,7 +489,7 @@ def _merge_latest_factor_evidence(
                             str(animation.get("episode", "")),
                             str(animation.get("label", "")),
                         )
-                        if key in seen_from_newer:
+                        if key in seen_from_newer and summary.run_id != reserved_source:
                             continue
                         collected.append({**dict(animation), "source_run": summary.run_id})
                         source_keys.add(key)
@@ -676,7 +702,36 @@ def _planning_table(summary: CapabilityRunSummary) -> str:
         "<table><thead><tr><th>Factor</th><th>Count</th><th>Candidates</th><th>Winner accuracy</th>"
         f"<th>Median regret</th><th>Goal success</th></tr></thead><tbody>{''.join(rows)}</tbody></table></details>"
     )
-    return latency_table + aggregate_table + slice_table
+    specialized = summary.planning.get("latest_specialized")
+    specialized_table = ""
+    if isinstance(specialized, Mapping):
+        specialized_by_count = specialized.get("by_candidate_count")
+        if isinstance(specialized_by_count, Mapping) and specialized_by_count:
+            specialized_rows = []
+            for candidate_count, values in sorted(
+                specialized_by_count.items(), key=lambda item: int(item[0])
+            ):
+                if not isinstance(values, Mapping):
+                    continue
+                specialized_rows.append(
+                    "<tr>"
+                    f"<td>K{_escape(candidate_count)}</td>"
+                    f"<td>{_format_number(values.get('winner_accuracy'))}</td>"
+                    f"<td>{_format_number(values.get('median_normalized_regret'))}</td>"
+                    f"<td>{_format_number(values.get('goal_success'))}</td>"
+                    "</tr>"
+                )
+            goal = specialized.get("goal", "specialized downstream task")
+            source = specialized.get("source_run", "latest run")
+            specialized_table = (
+                f"<h3>Latest specialized planning: {_escape(goal)}</h3>"
+                f'<p class="table-note">Source: {_escape(source)}. This bounded task is shown '
+                "separately from the factor-conditioned planning matrix.</p>"
+                "<table><thead><tr><th>Candidates</th><th>Winner accuracy</th>"
+                "<th>Median regret</th><th>Goal success</th></tr></thead>"
+                f"<tbody>{''.join(specialized_rows)}</tbody></table>"
+            )
+    return latency_table + aggregate_table + slice_table + specialized_table
 
 
 def _list(values: Iterable[object]) -> str:
@@ -805,7 +860,7 @@ def _animation_section(
                 if not isinstance(points, list):
                     continue
                 for point in points:
-                    if isinstance(point, list) and len(point) == 3 and isinstance(point[0], int):
+                    if isinstance(point, list) and len(point) >= 3 and isinstance(point[0], int):
                         object_ids.add(point[0])
 
         def point_for_frame(
@@ -822,7 +877,7 @@ def _animation_section(
             if not isinstance(points, list):
                 return None
             for point in points:
-                if not isinstance(point, list) or len(point) != 3 or point[0] != object_id:
+                if not isinstance(point, list) or len(point) < 3 or point[0] != object_id:
                     continue
                 try:
                     x_value, y_value = float(point[1]), float(point[2])
@@ -839,6 +894,24 @@ def _animation_section(
                     - _ANIMATION_PLOT_HEIGHT * (y_value - y_min) / (y_max - y_min)
                 )
                 return x, y
+            return None
+
+        def orientation_for_frame(
+            frame: Mapping[str, Any],
+            role: str,
+            object_id: int,
+        ) -> float | None:
+            points = frame.get(role)
+            if not isinstance(points, list):
+                return None
+            for point in points:
+                if not isinstance(point, list) or len(point) < 4 or point[0] != object_id:
+                    continue
+                try:
+                    angle = float(point[3])
+                except (TypeError, ValueError):
+                    return None
+                return angle if math.isfinite(angle) else None
             return None
 
         first = first_frame
@@ -872,6 +945,17 @@ def _animation_section(
                     f'data-object-id="{object_id}" cx="{x:.2f}" cy="{y:.2f}" '
                     f'r="{radius}" style="--object-color:{color};display:{display}"/>'
                 )
+                angle = orientation_for_frame(first, role, object_id)
+                if angle is not None and coordinates is not None:
+                    marker_length = 13 if role == "truth" else 10
+                    end_x = x + marker_length * math.cos(angle)
+                    end_y = y - marker_length * math.sin(angle)
+                    circles.append(
+                        f'<line class="animation-orientation animation-orientation-{role}" '
+                        f'data-orientation-role="{role}" data-object-id="{object_id}" '
+                        f'x1="{x:.2f}" y1="{y:.2f}" x2="{end_x:.2f}" y2="{end_y:.2f}" '
+                        f'style="--object-color:{color}"/>'
+                    )
         event_kinds = animation.get("events", [])
         event_labels: list[str] = []
         for item in event_kinds:
@@ -956,6 +1040,7 @@ def _animation_section(
             'class="animation-grid-lines"/>'
             f"{''.join(trails)}"
             f"{''.join(circles)}"
+            '<circle class="animation-contact" data-contact-marker cx="0" cy="0" r="6" style="display:none"/>'
             f'<text x="48" y="215" class="animation-tick" text-anchor="start">{_escape(_format_axis_tick(x_low))}</text>'
             f'<text x="316" y="215" class="animation-tick" text-anchor="end">{_escape(_format_axis_tick(x_high))}</text>'
             f'<text x="44" y="25" class="animation-tick" text-anchor="end">{_escape(_format_axis_tick(y_high))}</text>'
@@ -1010,20 +1095,26 @@ def _animation_cards(summary: CapabilityRunSummary) -> str:
     )
     forecast_values = summary.qualitative.get("forecast_animations")
     long_endpoints = []
+    has_pose_markers = False
     if isinstance(forecast_values, list):
         for animation in forecast_values:
             if not isinstance(animation, Mapping):
                 continue
+            has_pose_markers |= animation.get("orientation_markers") is True
             endpoint = animation.get("long_horizon_endpoint_s")
             if isinstance(endpoint, (int, float)) and math.isfinite(float(endpoint)):
                 long_endpoints.append(float(endpoint))
     if long_endpoints and max(long_endpoints) > 2.0:
-        forecast_title = "Four/eight-second causal forecasts"
+        forecast_title = (
+            "Pose-aware and four/eight-second causal forecasts"
+            if has_pose_markers
+            else "Four/eight-second causal forecasts"
+        )
         forecast_introduction = (
             "Long-horizon rollouts apply each declared future impulse exactly once and continue "
             "through analytic pair, floor, and wall contacts. Integrated RGB-D and state-first "
-            "evidence remain labelled by source; compact vector keyframes replace rendered "
-            "frame directories."
+            "evidence remain labelled by source; orientation spokes and contact rings appear "
+            "where measured. Compact vector keyframes replace rendered frame directories."
         )
     else:
         forecast_title = "Two-second open-loop forecasts"
@@ -1160,6 +1251,48 @@ def _ablation_attribution(summary: CapabilityRunSummary) -> str:
     )
 
 
+def _parameter_convergence_section(summary: CapabilityRunSummary) -> str:
+    values = summary.qualitative.get("parameter_convergence")
+    if not isinstance(values, list) or not values:
+        return ""
+    rows: list[str] = []
+    chart_points: list[tuple[str, float]] = []
+    for item in values:
+        if not isinstance(item, Mapping):
+            continue
+        label = str(item.get("stage", "update"))
+        mean_error = item.get("mean_relative_error")
+        if isinstance(mean_error, (int, float)) and math.isfinite(float(mean_error)):
+            chart_points.append((label, float(mean_error)))
+        rows.append(
+            "<tr>"
+            f"<td>{_escape(label)}</td>"
+            f"<td>{_format_number(mean_error)}</td>"
+            f"<td>{_format_number(item.get('mass_relative_error'))}</td>"
+            f"<td>{_format_number(item.get('restitution_relative_error'))}</td>"
+            f"<td>{_format_number(item.get('drag_relative_error'))}</td>"
+            f"<td>{_format_number(item.get('friction_relative_error'))}</td>"
+            "</tr>"
+        )
+    if not rows:
+        return ""
+    return (
+        '<section class="grid two"><article><h2>Online physical identification</h2>'
+        + _svg_line_chart(
+            chart_points,
+            title="Parameter error after public evidence",
+            x_label="Evidence stage",
+            y_label="Mean relative parameter error",
+        )
+        + "</article><article><h2>Parameter error ledger</h2>"
+        '<p class="table-note">Relative errors are measured only after runtime inference; '
+        "private values are never supplied to the estimator.</p>"
+        "<table><thead><tr><th>Evidence stage</th><th>Mean</th><th>Mass</th>"
+        "<th>Restitution</th><th>Drag</th><th>Friction</th></tr></thead>"
+        f"<tbody>{''.join(rows)}</tbody></table></article></section>"
+    )
+
+
 def _summary_section(
     summary: CapabilityRunSummary,
     *,
@@ -1190,6 +1323,22 @@ def _summary_section(
         if velocity_horizon_points
         else ""
     )
+    orientation_horizon = summary.horizon_curves.get("candidate_orientation_rmse_degrees", {})
+    orientation_horizon_points = (
+        [(f"{key}s", float(value)) for key, value in orientation_horizon.items()]
+        if isinstance(orientation_horizon, Mapping)
+        else []
+    )
+    orientation_chart = (
+        _svg_line_chart(
+            orientation_horizon_points,
+            title="Orientation RMSE across horizon",
+            x_label="Prediction horizon (s)",
+            y_label="Orientation RMSE (degrees)",
+        )
+        if orientation_horizon_points
+        else ""
+    )
     resources = summary.resources
     n8_probe = _n8_perceptual_probe(resources) or {}
     coverage = summary.uncertainty.get("coverage_90_range", ())
@@ -1209,7 +1358,8 @@ def _summary_section(
       <article><h2>Uncertainty</h2><p class="metric">{coverage_text}</p><p>Observed nominal-90% coverage range</p></article>
       <article><h2>Planning parity</h2><p class="metric">{_escape(summary.planning.get("serial_vectorized_winner_parity", "—"))}</p><p>Maximum cost difference {_format_number(summary.planning.get("maximum_cost_difference"))}</p></article>
     </section>
-    <section class="grid two"><article><h2>Capability coverage</h2>{_factor_table(summary)}</article><article><h2>Horizon error</h2>{_svg_line_chart(horizon_points, title="Position RMSE across horizon", x_label="Prediction horizon (s)", y_label="Position RMSE (m)")}{velocity_chart}</article></section>
+    <section class="grid two"><article><h2>Capability coverage</h2>{_factor_table(summary)}</article><article><h2>Horizon error</h2>{_svg_line_chart(horizon_points, title="Position RMSE across horizon", x_label="Prediction horizon (s)", y_label="Position RMSE (m)")}{velocity_chart}{orientation_chart}</article></section>
+    {_parameter_convergence_section(summary)}
     <section><h2>Factor performance</h2>{_factor_metric_matrix(summary)}</section>
     <section><h2>Physical behavior</h2>{_heatmap(summary, metric="current_position_rmse_m", title="Current-position RMSE (m) by object count, contact, and membership", lower_is_better=True)}{_heatmap(summary, metric="uncertainty_90_coverage", title="90% uncertainty coverage by object count, contact, and membership", lower_is_better=True, ideal_value=0.90)}</section>
     <section class="grid two"><article><h2>Capability frontier</h2>{_frontier_table(frontier_history)}</article><article><h2>Ablation attribution</h2>{_ablation_attribution(summary)}</article></section>
@@ -1242,7 +1392,7 @@ def _summary_section(
 
 _STYLE = """
 :root{color-scheme:dark;--bg:#0b1017;--panel:#141c27;--muted:#91a0b5;--ink:#f5f7fb;--accent:#69d6c5;--line:#344154}*{box-sizing:border-box}body{margin:0;background:radial-gradient(circle at top right,#172a37,var(--bg) 42%);color:var(--ink);font:14px/1.45 ui-sans-serif,system-ui,sans-serif}main{max-width:1180px;margin:auto;padding:28px}.hero{display:flex;justify-content:space-between;align-items:end;border-top:3px solid var(--accent);padding-top:18px}.hero h1{font-size:clamp(26px,4vw,48px);margin:.1em 0}.hero p,.metric+ p{color:var(--muted)}.eyebrow,.tag{font-size:11px;letter-spacing:.08em;text-transform:uppercase}.score{background:var(--panel);padding:18px 22px;border-radius:12px;display:grid;min-width:240px}.score strong,.metric{font-size:25px;color:var(--accent)}.grid{display:grid;gap:14px;margin:14px 0}.two{grid-template-columns:repeat(2,minmax(0,1fr))}.three{grid-template-columns:repeat(3,minmax(0,1fr))}article,section:not(.hero){background:color-mix(in srgb,var(--panel) 94%,transparent);border:1px solid var(--line);border-radius:12px;padding:16px;margin:14px 0;overflow:auto}section.grid{background:none;border:0;padding:0}section.grid article{margin:0}h2{margin:0 0 12px;font-size:16px}h3{font-size:13px;color:var(--muted)}table{border-collapse:collapse;width:100%}th,td{text-align:left;border-bottom:1px solid var(--line);padding:7px}.tag{padding:3px 6px;border-radius:9px;background:#303947}.tag.measured,.tag.passed{background:#165449}.tag.failed{background:#6b2737}.metric-matrix td{font-variant-numeric:tabular-nums}.metric-pass{background:#123d35}.metric-fail{background:#51232e;color:#ffdce4}.metric-info{background:#1c2d3b}.unmeasured{color:var(--muted)}.empty{color:var(--muted);padding:24px;text-align:center;border:1px dashed var(--line);border-radius:8px}svg{width:100%;min-width:520px}svg line{stroke:var(--line)}svg polyline{fill:none;stroke:var(--accent);stroke-width:3}svg circle{fill:var(--accent)}svg text{fill:var(--muted);font-size:11px}.chart-title{fill:var(--ink);font-size:13px}.axis-label{fill:var(--ink);font-size:11px;font-weight:600}.axis-tick,.heatmap-note{fill:var(--muted);font-size:9px}.chart-grid-line{stroke:#253444;stroke-width:1}.cell-label{fill:white;font-size:8px}.cell-value{fill:white;font-size:11px;font-weight:700}dl{display:grid;grid-template-columns:1fr 1fr;gap:7px}dt{color:var(--muted)}dd{margin:0;text-align:right}.animation-intro,.animation-meta,.animation-events{color:var(--muted)}.evidence-source{display:block;margin-top:4px;color:#c9d3df}.animation-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}.animation-card{margin:0!important;padding:12px!important}.animation-card h3{margin:0;color:var(--ink);text-transform:capitalize}.animation-meta{min-height:54px;font-size:12px}.world-animation{display:block;min-width:0;background:#0a1119;border:1px solid var(--line);border-radius:8px}.animation-stage{fill:#0c1621;stroke:#344154}.animation-grid-lines{fill:none;stroke:#253444;stroke-width:1}.animation-axis{fill:#c9d3df;font-size:10px;font-weight:600}.animation-tick{fill:var(--muted);font-size:8px}.animation-trail{fill:none;stroke:var(--object-color);stroke-width:1.3;opacity:.5}.animation-trail-truth{stroke-dasharray:3 3;opacity:.25}.animation-model{fill:var(--object-color);stroke:#081018;stroke-width:1.5}.animation-truth{fill:none;stroke:var(--object-color);stroke-width:2;stroke-dasharray:2 2}.animation-readout{display:flex;justify-content:space-between;gap:8px;min-height:20px;margin-top:5px;font-size:11px}.animation-clock{color:#c9d3df;font-variant-numeric:tabular-nums}.animation-event{color:#f3bc61;font-weight:700}.animation-legend{display:flex;gap:12px;margin-top:3px;color:var(--muted);font-size:12px}.model-key{color:var(--accent)}.truth-key{color:#f3bc61}.animation-events{min-height:38px;font-size:12px}.animation-controls{display:flex;align-items:center;gap:8px}.animation-controls button{border:1px solid var(--line);border-radius:7px;background:#1c2d3b;color:var(--ink);padding:5px 11px;cursor:pointer}.animation-controls button:hover{border-color:var(--accent)}.animation-controls input{min-width:72px;flex:1;accent-color:var(--accent)}.run-list a{color:var(--accent)}.run-ledger summary{cursor:pointer;color:#c9d3df}.notice{border-left:3px solid #f3bc61;padding-left:10px;color:var(--muted)}footer{color:var(--muted);padding:20px 0}@media(max-width:900px){.animation-grid{grid-template-columns:1fr}}@media(max-width:760px){.two,.three{grid-template-columns:1fr}.hero{display:block}.score{margin-top:12px}}@media(prefers-reduced-motion:reduce){.animation-controls button{outline:1px solid var(--muted)}}
-.table-note{color:var(--muted);font-size:12px}.planning-slices,.run-ledger{margin-top:14px}.planning-slices summary,.run-ledger summary{cursor:pointer;color:#c9d3df;font-weight:600}
+.table-note{color:var(--muted);font-size:12px}.planning-slices,.run-ledger{margin-top:14px}.planning-slices summary,.run-ledger summary{cursor:pointer;color:#c9d3df;font-weight:600}.animation-orientation{stroke:var(--object-color);stroke-width:2.2;stroke-linecap:round}.animation-orientation-truth{stroke-dasharray:2 2;opacity:.8}.animation-contact{fill:none;stroke:#f3bc61;stroke-width:2;opacity:.95}
 """
 
 
@@ -1293,7 +1443,14 @@ _ANIMATION_SCRIPT = r"""
         const a = leftPoints.get(objectId);
         const b = rightPoints.get(objectId);
         const point = a && b
-          ? [a[0], a[1] + mix * (b[1] - a[1]), a[2] + mix * (b[2] - a[2])]
+          ? [
+              a[0],
+              a[1] + mix * (b[1] - a[1]),
+              a[2] + mix * (b[2] - a[2]),
+              a.length >= 4 && b.length >= 4
+                ? a[3] + mix * Math.atan2(Math.sin(b[3] - a[3]), Math.cos(b[3] - a[3]))
+                : undefined
+            ]
           : (mix < 0.5 ? a : b);
         if (!point) {
           circle.style.display = "none";
@@ -1303,6 +1460,43 @@ _ANIMATION_SCRIPT = r"""
         circle.setAttribute("cx", screen.x.toFixed(2));
         circle.setAttribute("cy", screen.y.toFixed(2));
         circle.style.display = "inline";
+      }
+      for (const marker of root.querySelectorAll(`line[data-orientation-role="${role}"]`)) {
+        const objectId = marker.dataset.objectId;
+        const a = leftPoints.get(objectId);
+        const b = rightPoints.get(objectId);
+        const point = a && b && a.length >= 4 && b.length >= 4
+          ? [
+              a[0],
+              a[1] + mix * (b[1] - a[1]),
+              a[2] + mix * (b[2] - a[2]),
+              a[3] + mix * Math.atan2(Math.sin(b[3] - a[3]), Math.cos(b[3] - a[3]))
+            ]
+          : (mix < 0.5 ? a : b);
+        if (!point || point.length < 4 || !Number.isFinite(Number(point[3]))) {
+          marker.style.display = "none";
+          continue;
+        }
+        const screen = position(point, animation);
+        const length = role === "truth" ? 13 : 10;
+        marker.setAttribute("x1", screen.x.toFixed(2));
+        marker.setAttribute("y1", screen.y.toFixed(2));
+        marker.setAttribute("x2", (screen.x + length * Math.cos(point[3])).toFixed(2));
+        marker.setAttribute("y2", (screen.y - length * Math.sin(point[3])).toFixed(2));
+        marker.style.display = "inline";
+      }
+    }
+    const contactMarker = root.querySelector("[data-contact-marker]");
+    if (contactMarker) {
+      const contactFrame = mix < 0.5 ? left : right;
+      const contact = Array.isArray(contactFrame.contacts) ? contactFrame.contacts[0] : null;
+      if (Array.isArray(contact) && contact.length >= 2) {
+        const screen = position([0, Number(contact[0]), Number(contact[1])], animation);
+        contactMarker.setAttribute("cx", screen.x.toFixed(2));
+        contactMarker.setAttribute("cy", screen.y.toFixed(2));
+        contactMarker.style.display = "inline";
+      } else {
+        contactMarker.style.display = "none";
       }
     }
     const actualFrame = left.frame + mix * (right.frame - left.frame);

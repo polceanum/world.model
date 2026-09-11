@@ -1,5 +1,55 @@
 # Project status
 
+## Open-world six-DoF capability completion — 2026-09-11
+
+The next significant behavior scale-up is implemented and qualified in
+`runs/20260911-open-world-six-dof-v2`. Runtime discovery now accepts only
+calibrated RGB, public metric depth, calibration, and timestamps: it segments
+and groups an unordered set from currently observed support, fits sphere/box
+geometry, assigns its own persistent IDs, and uses its online descriptor only
+as a measured association cue. The qualification discovers both unfamiliar
+objects, recovers the box's ID after a one-frame dropout, and estimates current
+position, orientation, and angular velocity with effectively numerical-zero
+error in the deterministic multi-view scene.
+
+An opt-in six-degree-of-freedom contact resolver adds shape-derived inertia,
+public-geometry contact points, angular impulse, Coulomb friction, and
+orientation integration. The historical all-sphere resolver remains the exact
+default and compatibility oracle. A separately implemented simulator does not
+call model contact code. Across the 1.2-second off-centre sphere/box forecast,
+position RMSE peaks at `0.0005104 m`, orientation RMSE peaks at `0.2667
+degrees`, and both contact frames (`8/15`) match exactly.
+
+Neutral mass/restitution/drag/friction priors begin at mean relative error
+`0.9983`. Analytic updates from isolated known impulses, force-free motion, and
+observed contact reduce that error to `3.24e-15`; all eight identifiable scalar
+updates are accepted and slow uncertainty contracts. Terminal world-pose goals
+are now supported downstream. K=8/K=32 action selection reaches the exact
+private winner with zero regret and exact serial/vectorized cost agreement;
+median vectorized latencies are `0.456/0.606 s`. Planning remains absent from
+the training loss.
+
+The v1 development publication is retained because it missed only the K=32
+latency gate (`0.7087 s` versus `0.7000 s`). A contact-free fast path, median
+timing, and a planning-only 50 Hz microstep yield the passing v2 without
+weakening any physical or planning gate. V2 occupies `77,966` bytes, learned
+weights occupy `12,984` bytes, and no source frames or raster/video media are
+retained. The dashboard adds named orientation-error and parameter-convergence
+axes plus lightweight pose spokes and contact rings. Integrated-browser review
+found no console warnings/errors and verified animation pause/replay/advance.
+
+This is a deliberately bounded claim: runtime separation still needs distinct
+online chromatic support when projected objects touch; shapes remain spheres
+and oriented boxes; cameras are calibrated; visibility loss is short; actions
+are known; and candidate rollouts freeze membership. These are the next
+generalization pressures, not capabilities inferred from this result.
+
+The expanded final tree passes Ruff, Ruff format, compileall, diff hygiene,
+the focused capability suites, and the complete repository gate: `2471 passed,
+16 skipped` in `1:26:50`. The skips are the expected unavailable-MPS cases;
+the 13 warnings are the existing PyTorch intra-op thread-setting notice in
+dynamic-set execution.
+
 ## Impact-first capability completion — 2026-09-11
 
 The impact-first scale plan is implemented through its integrated gate. The

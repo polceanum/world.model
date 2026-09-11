@@ -3,6 +3,7 @@
 from world_model.planning.counterfactual import (
     CounterfactualCostWeights,
     CounterfactualPlanResult,
+    TerminalWorldPoseGoal,
     TerminalWorldPositionGoal,
     plan_counterfactual_actions,
     resolve_appearance_handle,
@@ -11,6 +12,7 @@ from world_model.planning.counterfactual import (
 __all__ = [
     "CounterfactualCostWeights",
     "CounterfactualPlanResult",
+    "TerminalWorldPoseGoal",
     "TerminalWorldPositionGoal",
     "plan_counterfactual_actions",
     "resolve_appearance_handle",

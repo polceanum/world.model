@@ -87,6 +87,8 @@ conda run -n orpheus python scripts/run_rigid_capability.py --dry-run
 conda run -n orpheus python scripts/run_rigid_capability.py
 conda run -n orpheus python scripts/run_integrated_capability.py --dry-run
 conda run -n orpheus python scripts/run_integrated_capability.py
+conda run -n orpheus python scripts/run_open_world_six_dof_capability.py --dry-run
+conda run -n orpheus python scripts/run_open_world_six_dof_capability.py
 ```
 
 The first gate spans all N=7/8 separated, action, contact, lifecycle,
@@ -94,11 +96,16 @@ occlusion-recovery, and compositional cells. The second qualifies observable
 held-out oriented boxes and mixed sphere/box contact. The final four-object
 bridge combines moving calibration, changing membership, recovery, mixed
 geometry, repeated contact, three known actions, four-second prediction, and
-required K=8/K=32 planning. These runs retain only compact summaries, portable
-HTML, and bounded vector keyframes.
+required K=8/K=32 planning. The final command removes predeclared object
+prototypes in its runtime path, estimates pose/angular velocity, identifies
+physical parameters from public evidence, predicts off-centre rotational
+contact against an independent simulator, and plans toward terminal world
+pose. These runs retain only compact summaries, portable HTML, and bounded
+vector keyframes.
 
-The current impact-first implementation passes the complete repository gate:
-`2457 passed, 16 skipped` (the skips require unavailable MPS hardware).
+The pre-six-DoF impact-first implementation passed the complete repository
+gate at `2457 passed, 16 skipped` (the skips require unavailable MPS hardware).
+The expanded final-tree gate is reported in `project/STATUS.md`.
 
 Run or reproduce one streamed physical factor without retaining its episodes:
 
@@ -179,6 +186,13 @@ four-object mixed-rigid scenario. This adds no wide learned module and does not
 promote a new checkpoint; it broadens the structured incumbent's demonstrated
 behavior while preserving the unresolved factor-conditioned calibration and
 planning failures above.
+
+The newest bounded path additionally discovers unfamiliar rigid objects from
+public multi-view RGB-D without predeclared prototypes, retains IDs through a
+short dropout, identifies mass/drag/restitution/friction online, predicts
+off-centre angular contact, and supports downstream terminal-pose planning.
+Its claim remains sphere/box, calibrated-camera, short-recovery, and N=2; the
+dashboard names those limits explicitly.
 
 The full `OnlineWorldModel` train/evaluate/demo path remains runnable, but old
 one-shot ladders and multi-day campaigns are audit history rather than the

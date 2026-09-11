@@ -45,6 +45,7 @@ from world_model.dynamics.quaternion import (
     quaternion_geodesic_distance,
     quaternion_multiply,
 )
+from world_model.dynamics.rigid_contacts import RigidContactResolver6D
 from world_model.dynamics.rollout import RolloutEngine, RolloutStep
 from world_model.dynamics.uncertainty import (
     UncertaintyDynamics,
@@ -76,6 +77,7 @@ __all__ = [
     "PairApplicabilityConfig",
     "RolloutEngine",
     "RolloutStep",
+    "RigidContactResolver6D",
     "SphereContactResolver",
     "TypedAttentionInteractionResidual",
     "UncertaintyDynamics",

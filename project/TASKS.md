@@ -1,5 +1,27 @@
 # Tasks
 
+## Open-world six-DoF behavior — completed 2026-09-11
+
+- [x] Remove predeclared appearance prototypes and private instance/identity
+  inputs from the new calibrated multi-view rigid discovery path.
+- [x] Track unfamiliar sphere/box proposals with runtime-owned persistent IDs,
+  box-axis continuity, metric velocity, angular velocity, and bounded short
+  dropout recovery.
+- [x] Convert public tracks to the stable `WorldBelief` interface with explicit
+  neutral physical priors and uncertainty rather than simulator parameters.
+- [x] Identify mass, drag, effective restitution, and sliding friction online
+  from public known-impulse, free-motion, and contact evidence with gated,
+  bounded analytic updates.
+- [x] Add opt-in off-centre angular contact response and an independent
+  six-DoF reference simulator while preserving exact legacy sphere behavior.
+- [x] Add terminal world-pose planning, quaternion-geodesic cost, K=8/K=32
+  exact serial/vectorized parity, and causality/mutation/action-isolation gates.
+- [x] Publish failed timing diagnostic v1 and passing compact v2 evidence;
+  retain no generated frames and keep the passing run below 5 MiB.
+- [x] Add orientation-error and parameter-convergence charts, live pose axes,
+  contact markers, and a newest-forecast dashboard slot; verify the animation
+  in the integrated browser with no console errors.
+
 ## Impact-first scale foundation — active 2026-09-10
 
 - [x] Add an ordered, immutable multi-action schedule while preserving exact

@@ -266,6 +266,49 @@ def test_dashboard_keeps_planning_slices_separate_by_factor(tmp_path: Path) -> N
     assert "camera_motion factor-conditioned planning</li>" not in content
 
 
+def test_dashboard_keeps_latest_specialized_pose_planning_visible(tmp_path: Path) -> None:
+    runs = tmp_path / "runs"
+    factor_directory = runs / "factor"
+    pose_directory = runs / "pose"
+    factor_directory.mkdir(parents=True)
+    pose_directory.mkdir()
+    factor = replace(
+        _summary("factor"),
+        planning={**_summary("factor").planning, "factor": "sensor_noise"},
+    )
+    pose = replace(
+        _summary("pose"),
+        created_at_utc="2026-09-08T02:00:00+00:00",
+        planning={
+            "status": "passed",
+            "goal": "terminal world pose",
+            "serial_vectorized_winner_parity": True,
+            "maximum_cost_difference": 0.0,
+            "by_candidate_count": {
+                "8": {
+                    "winner_accuracy": 1.0,
+                    "median_normalized_regret": 0.0,
+                    "goal_success": 1.0,
+                },
+                "32": {
+                    "winner_accuracy": 1.0,
+                    "median_normalized_regret": 0.0,
+                    "goal_success": 1.0,
+                },
+            },
+        },
+    )
+    write_capability_summary(factor, factor_directory / "capability_summary.json")
+    write_capability_summary(pose, pose_directory / "capability_summary.json")
+
+    content = build_progress_dashboard(runs).read_text(encoding="utf-8")
+
+    assert '"latest_specialized"' in content
+    assert "Latest specialized planning: terminal world pose" in content
+    assert "Source: pose" in content
+    assert "separately from the factor-conditioned planning matrix" in content
+
+
 def test_trends_do_not_mix_physical_and_planning_score_scales() -> None:
     physical = replace(
         _summary("physical"),
@@ -485,6 +528,86 @@ def test_long_horizon_animation_uses_declared_endpoint_and_frame_rate() -> None:
     assert "8 s RMSE 0.1200 m" in content
     assert "known action @ +4.00 s" in content
     assert "state-first or state-only pressure test" in content
+
+
+def test_pose_animation_and_parameter_convergence_are_self_describing() -> None:
+    pose_animation = {
+        "schema": "world_model_compact_pose_forecast_animation_v1",
+        "label": "pose forecast",
+        "episode": "off-centre-contact",
+        "object_count": 2,
+        "contact": True,
+        "dynamic_membership": False,
+        "mode": "forecast",
+        "frame_rate": 20.0,
+        "long_horizon_endpoint_s": 1.2,
+        "endpoint_position_rmse_m": 0.001,
+        "projection": "world_xy",
+        "axis_labels": ["x", "y"],
+        "bounds": {"horizontal": [-1.0, 1.0], "vertical": [-1.0, 1.0]},
+        "frames": [
+            {
+                "frame": 0,
+                "time_s": 0.0,
+                "truth": [[0, -0.5, 0.0, 0.0]],
+                "model": [[0, -0.49, 0.01, 0.02]],
+            },
+            {
+                "frame": 12,
+                "time_s": 0.6,
+                "truth": [[0, 0.0, 0.2, 1.2]],
+                "model": [[0, 0.01, 0.19, 1.18]],
+                "contacts": [[0.0, 0.2]],
+            },
+            {
+                "frame": 24,
+                "time_s": 1.2,
+                "truth": [[0, 0.5, 0.4, 2.4]],
+                "model": [[0, 0.49, 0.39, 2.38]],
+            },
+        ],
+        "events": [{"frame": 12, "time_s": 0.6, "kind": "off-centre contact"}],
+    }
+    summary = replace(
+        _summary("pose"),
+        horizon_curves={
+            **_summary("pose").horizon_curves,
+            "candidate_orientation_rmse_degrees": {"0": 1.0, "1.2": 2.5},
+        },
+        qualitative={
+            **_summary("pose").qualitative,
+            "forecast_animations": [pose_animation],
+            "parameter_convergence": [
+                {
+                    "stage": "neutral priors",
+                    "mean_relative_error": 0.8,
+                    "mass_relative_error": 0.3,
+                    "restitution_relative_error": 0.1,
+                    "drag_relative_error": 2.4,
+                    "friction_relative_error": 0.4,
+                },
+                {
+                    "stage": "observed contact",
+                    "mean_relative_error": 0.01,
+                    "mass_relative_error": 0.0,
+                    "restitution_relative_error": 0.01,
+                    "drag_relative_error": 0.0,
+                    "friction_relative_error": 0.01,
+                },
+            ],
+        },
+    )
+
+    content = render_summary_html(summary)
+
+    assert "Orientation RMSE across horizon" in content
+    assert "Orientation RMSE (degrees)" in content
+    assert "Online physical identification" in content
+    assert "Mean relative parameter error" in content
+    assert "observed contact" in content
+    assert 'data-orientation-role="truth"' in content
+    assert "data-contact-marker" in content
+    assert "Math.atan2" in content
 
 
 def test_compositional_metric_matrix_uses_holdout_gates_only() -> None:

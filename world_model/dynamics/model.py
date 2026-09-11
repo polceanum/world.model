@@ -29,6 +29,7 @@ from world_model.dynamics.event_driven import integrate_event_driven_state_only
 from world_model.dynamics.events import EventModel
 from world_model.dynamics.graph import InteractionGraph, InteractionOutput
 from world_model.dynamics.modal import ModalDynamics
+from world_model.dynamics.rigid_contacts import RigidContactResolver6D
 from world_model.dynamics.rollout import RolloutEngine, RolloutStep
 from world_model.dynamics.uncertainty import UncertaintyDynamics
 
@@ -166,6 +167,10 @@ class DynamicsConfig:
     # active candidate pairs while reconstructing the established dense
     # result. False preserves historical checkpoint/runtime behavior.
     packed_interactions_enabled: bool = False
+    # Opt-in rigid-body impulses with observable contact points, analytic body
+    # inertia, angular velocity, and frictional torque.  False is the exact
+    # historical linear-contact path.
+    rigid_six_dof_contacts_enabled: bool = False
 
     @property
     def fast_state_dim(self) -> int:
@@ -216,6 +221,7 @@ class DynamicsConfig:
                 self.relation_process_uncertainty_enabled,
             ),
             ("packed_interactions_enabled", self.packed_interactions_enabled),
+            ("rigid_six_dof_contacts_enabled", self.rigid_six_dof_contacts_enabled),
         ):
             if not isinstance(value, bool):
                 raise ValueError(f"{name} must be boolean")
@@ -230,6 +236,8 @@ class DynamicsConfig:
                 "event-driven state-only dynamics requires relation-only pair "
                 "impulses and explicit world bounds"
             )
+        if self.event_driven_state_only_enabled and self.rigid_six_dof_contacts_enabled:
+            raise ValueError("six-DoF rigid contacts require fixed-microstep execution")
         for name, value in (
             (
                 "pair_applicability_lookahead_seconds",
@@ -369,7 +377,12 @@ class DynamicsModel(nn.Module):
             if self.config.attention_residual_enabled
             else None
         )
-        resolver = SphereContactResolver(
+        resolver_type = (
+            RigidContactResolver6D
+            if self.config.rigid_six_dof_contacts_enabled
+            else SphereContactResolver
+        )
+        resolver = resolver_type(
             planes=self._environment_planes(),
             contact_margin=self.config.contact_margin,
             boundary_contact_tolerance=self.config.boundary_contact_tolerance,
@@ -493,6 +506,9 @@ class DynamicsModel(nn.Module):
             ),
             packed_interactions_enabled=bool(
                 getattr(dynamics, "packed_interactions_enabled", False)
+            ),
+            rigid_six_dof_contacts_enabled=bool(
+                getattr(dynamics, "rigid_six_dof_contacts_enabled", False)
             ),
             uncertainty_hidden_dim=max(16, int(dynamics.hidden_dim) // 2),
             interaction_radius=float(dynamics.interaction_radius),

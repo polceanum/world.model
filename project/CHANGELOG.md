@@ -2,6 +2,28 @@
 
 ## Unreleased — 2026-07-28
 
+### 2026-09-11 open-world six-DoF behavior
+
+- Added prototype-free calibrated RGB-D rigid discovery and short-horizon
+  tracking with runtime-owned persistent IDs, pose, linear/angular velocity,
+  box-axis continuity, and one-frame dropout recovery.
+- Added gated analytic online identification of mass, drag, effective
+  restitution, and friction from public actions and observed motion/contact.
+- Added an opt-in six-DoF rigid contact resolver and an independent reference
+  simulator with shape-derived inertia, off-centre impulse, frictional torque,
+  and quaternion integration. Legacy all-sphere behavior remains exact.
+- Added terminal world-pose counterfactual goals and quaternion-geodesic costs
+  while preserving position-only planning and exact serial/vectorized parity.
+- Added the compact end-to-end qualification runner and published passing run
+  `20260911-open-world-six-dof-v2` at 77,966 bytes. A narrow v1 K=32 timing
+  failure remains diagnostic evidence.
+- Added orientation and parameter-convergence charts plus animated pose spokes
+  and contact rings. Browser inspection verified rendering, pause/replay, and
+  animation progress with no console errors.
+- The expanded final tree passes Ruff, Ruff format, compileall, diff hygiene,
+  focused capability suites, and the complete `2471 passed, 16 skipped`
+  repository gate in `1:26:50`.
+
 ### 2026-09-11 rigid, N=8, and integrated capability completion
 
 - Added an independent sphere/oriented-box state, exact CPU RGB-D renderer,

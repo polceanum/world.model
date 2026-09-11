@@ -170,17 +170,53 @@ animation. This qualifies the incumbent behavior; it is not a new learned
 checkpoint promotion, so the paired 3% candidate-improvement rule was not
 invoked and no residual was widened.
 
+## Phase F — Open-world discovery, rotational contact, and self-calibration
+
+Status: **implemented and passing** in
+`runs/20260911-open-world-six-dof-v2`.
+
+1. Replace predeclared appearance handles in the new path with discovery from
+   public calibrated RGB-D support. Use appearance measured in the current
+   observation only for cross-view grouping and temporal association; allocate
+   persistent IDs inside the runtime.
+2. Estimate metric pose, linear velocity, and local angular velocity, align
+   equivalent box axes over time, and preserve identity across a short missing
+   observation. Initialize physical parameters from explicit neutral priors.
+3. Identify mass and drag from public isolated intervention/free-motion
+   evidence and identify effective restitution/friction from observed contact.
+   Reject inconsistent evidence and contract uncertainty only on accepted
+   updates.
+4. Add opt-in contact points, analytic inertia, angular impulse, frictional
+   torque, and orientation propagation. Preserve exact all-sphere behavior and
+   compare against an implementation-independent six-DoF simulator.
+5. Add terminal world-pose planning with quaternion-geodesic error. Require
+   K=8/K=32 correct winners, zero/low regret, exactly-once actions, isolation,
+   source immutability, and exact serial/vectorized agreement.
+6. Visualize orientation RMSE and parameter convergence with named axes; show
+   pose spokes and contact rings in a bounded SVG animation without retaining
+   RGB-D frames.
+
+The passing run discovers two unfamiliar objects without a prototype or label
+input, recovers the box ID after one missing frame, reduces mean physical-
+parameter error from `0.9983` to `3.24e-15`, matches both reference contact
+frames, and stays below `0.000511 m` position and `0.267 degrees` orientation
+RMSE through 1.2 seconds. Pose-aware K=8/K=32 planning has the correct winner,
+zero regret, exact cost parity, and `0.456/0.606 s` median vectorized latency.
+The 77,966-byte run retains only JSON, HTML, and its manifest.
+
 ## Completion and next frontier
 
-Phases A--E are implemented in order and remain separate regression tiers. No
+Phases A--F are implemented in order and remain separate regression tiers. No
 learned module was widened because the only integrated development failure was
 owned by public geometry/state estimation: public face-plane and algebraic
 sphere fits removed it directly. The next scale phase should retain these gates
-while extending only genuinely new behavior—rotational contact response,
-less appearance-supervised discovery, or visual qualification beyond N=8—after
-a fresh plan freezes the corresponding observability and efficiency limits.
+while extending only genuinely new behavior. The highest-impact next frontier
+is category/texture-independent instance separation under touching silhouettes
+and longer recovery, followed by multi-contact six-DoF scenes at N=4--8 and
+visual qualification above N=8. A fresh plan must freeze the corresponding
+observability and efficiency limits before that work begins.
 
-The implementation gate passed Ruff, Ruff format, compileall, diff hygiene,
-the focused and broad compatibility checks, and the complete repository suite:
-`2457 passed, 16 skipped` in `1:11:47`. The final report-copy reconciliation
-then passed all 12 focused dashboard tests plus Ruff, format, and diff hygiene.
+The expanded implementation gate passed Ruff, Ruff format, compileall, diff
+hygiene, the focused and broad compatibility checks, and the complete
+repository suite: `2471 passed, 16 skipped` in `1:26:50`. The final dashboard
+reconciliation passed all 14 focused report tests.

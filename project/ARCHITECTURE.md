@@ -42,6 +42,33 @@ Dependency direction is `utils → typed belief/observation contracts →
 dynamics/filter/fusion/identification → runtime → training/evaluation/demo`.
 Simulator labels are never imported as ordinary RGB runtime measurements.
 
+The bounded open-world rigid path is a sibling to the historical
+prior-conditioned RGB detector. It consumes only calibrated RGB, metric depth,
+timestamp, and known actions. Connected public support and online colour/shape
+descriptors form unordered multi-view object hypotheses; metric position and
+orientation come from RGB-D surface geometry, and Hungarian association uses
+only predicted position plus the descriptor measured from the current stream.
+Persistent IDs, short-gap recovery, neutral parameter priors, and all temporal
+history belong to the runtime. No prototype, simulator instance map, semantic
+class, private object ID, or true physical parameter crosses that boundary.
+
+Six-degree-of-freedom contact is opt-in inside `DynamicsModel`. The new resolver
+adds public-geometry contact points, analytic sphere/box inertia, point
+velocities, Coulomb tangential impulse, angular impulse, and quaternion pose
+propagation. The legacy setting is unchanged, and all-sphere scenes delegate
+exactly to the established sphere resolver. Qualification compares mixed-rigid
+rollouts with a separately implemented simulator oracle rather than another
+call into the production resolver.
+
+Online rigid identification remains an evidence gate rather than a hidden
+optimizer: isolated known impulses identify mass, contact-free decay identifies
+drag, and observed pre/post contact motion identifies effective restitution and
+friction. Accepted evidence contracts bounded uncertainty; rejected or
+confounded evidence cannot update a parameter. Terminal pose goals extend
+downstream counterfactual planning with quaternion-geodesic error while keeping
+position-only costs bit-for-bit compatible and keeping planning out of the
+training objective.
+
 RGB discovery has an optional structured image prior for the synthetic disc
 world. It uses RGB pixels only:
 

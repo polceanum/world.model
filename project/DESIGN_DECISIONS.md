@@ -6,6 +6,41 @@ to make every heading unambiguous; the suffixes do not imply precedence, no
 substantive decision or chronology changed, and the one corresponding
 cross-reference was disambiguated.
 
+## ADR-188 — Make discovery, self-calibration, and rotational contact one bounded behavior gate
+
+- **Date:** 2026-09-11
+- **Status:** accepted bounded capability; not a learned-checkpoint promotion
+- **Context:** The impact-first tier could execute mixed sphere/box geometry and
+  long known-action sequences, but the integrated visual path still depended on
+  predeclared appearance handles and central-force contact. That made adding
+  more objects a misleading scale claim: the system had not shown that it could
+  discover unfamiliar instances, infer their physical response, predict
+  off-centre rotation, or use pose predictions to choose an action.
+- **Decision:** Add a prototype-free public RGB-D sibling path that derives
+  geometry from calibrated surface support, associates observations with only
+  predicted metric state and online descriptors, owns persistent IDs, and
+  starts physical parameters from neutral priors. Identify mass/drag from
+  isolated intervention/free-motion evidence and effective
+  restitution/friction from observed contact, with bounded gating and
+  uncertainty contraction. Add opt-in analytic six-DoF contact and compare it
+  with an implementation-independent simulator; preserve the old resolver
+  exactly for the legacy configuration and all-sphere scenes. Extend downstream
+  planning with terminal quaternion-geodesic pose cost, never a planning
+  training loss. Retain only compact JSON/HTML/vector-animation evidence.
+- **Consequences:** `20260911-open-world-six-dof-v1` is retained as a transparent
+  diagnostic because its K=32 latency narrowly missed the declared gate. The
+  fresh v2 run passes after executor fast paths and bounded planning substeps:
+  identity recovers after one missing observation, mean parameter relative
+  error falls from `0.9983` to `3.24e-15`, 1.2-second position/orientation RMSE
+  is `0.0005104 m`/`0.2667 degrees`, both contact frames match, and K=8/K=32
+  terminal-pose planning has the correct winner, zero regret, exact numerical
+  parity, and `0.456/0.606 s` median latency. The run is `77,966` bytes and keeps
+  no raster frames. The accepted claim remains N=2 unfamiliar sphere/box
+  discovery with calibrated cameras and short recovery; it does not establish
+  semantic/category invariance, touching same-appearance separation, long-gap
+  re-identification, multi-contact visual scale, or a promoted learned
+  checkpoint.
+
 ## ADR-187 — Add observable rigid behavior and qualify before widening
 
 - **Date:** 2026-09-11

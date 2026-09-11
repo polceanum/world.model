@@ -14,6 +14,7 @@ from torch import Tensor
 from world_model.belief import BeliefTrajectory, WorldBelief, fast_packing_map
 from world_model.belief._base import TensorDataclassMixin
 from world_model.dynamics import WorldAction, WorldImpulseAction, WorldImpulseSchedule
+from world_model.dynamics.quaternion import quaternion_geodesic_distance
 
 
 class _KnownActionDynamics(Protocol):
@@ -45,12 +46,23 @@ class TerminalWorldPositionGoal(TensorDataclassMixin):
 
 
 @dataclass(frozen=True)
+class TerminalWorldPoseGoal(TensorDataclassMixin):
+    """A terminal world-frame position and orientation target by persistent ID."""
+
+    object_id: Tensor
+    position_world: Tensor
+    orientation_world: Tensor
+    frame: Literal["world"] = "world"
+
+
+@dataclass(frozen=True)
 class CounterfactualCostWeights:
     """Fixed, non-learned weights for counterfactual candidate costs."""
 
     terminal_position: float = 1.0
     terminal_variance: float = 0.0
     impulse_effort: float = 0.0
+    terminal_orientation: float = 0.0
 
     def __post_init__(self) -> None:
         _validate_cost_weights(self)
@@ -68,6 +80,7 @@ class CounterfactualPlanResult:
     impulse_effort: Tensor
     total_cost: Tensor
     selected_index: Tensor
+    terminal_orientation_error: Tensor | None = None
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -119,14 +132,22 @@ def _validate_cost_weights(weights: CounterfactualCostWeights) -> None:
         weights.impulse_effort,
         positive=False,
     )
+    _validate_real_weight(
+        "terminal_orientation",
+        weights.terminal_orientation,
+        positive=False,
+    )
 
 
 _DEFAULT_COST_WEIGHTS = CounterfactualCostWeights()
 
 
-def _validate_goal(goal: TerminalWorldPositionGoal, belief: WorldBelief) -> Tensor:
-    if not isinstance(goal, TerminalWorldPositionGoal):
-        raise TypeError("goal must be a TerminalWorldPositionGoal")
+def _validate_goal(
+    goal: TerminalWorldPositionGoal | TerminalWorldPoseGoal,
+    belief: WorldBelief,
+) -> Tensor:
+    if not isinstance(goal, (TerminalWorldPositionGoal, TerminalWorldPoseGoal)):
+        raise TypeError("goal must be a TerminalWorldPositionGoal or TerminalWorldPoseGoal")
     if goal.frame != "world":
         raise ValueError("goal frame must be 'world'")
     if not isinstance(goal.object_id, Tensor):
@@ -149,6 +170,25 @@ def _validate_goal(goal: TerminalWorldPositionGoal, belief: WorldBelief) -> Tens
         raise ValueError("goal position_world must be on the belief device")
     if not torch.isfinite(goal.position_world).all():
         raise ValueError("goal position_world must be finite")
+    if isinstance(goal, TerminalWorldPoseGoal):
+        if not isinstance(goal.orientation_world, Tensor):
+            raise TypeError("goal orientation_world must be a tensor")
+        if goal.orientation_world.shape != (batch, 4):
+            raise ValueError(f"goal orientation_world must have shape {(batch, 4)}")
+        if goal.orientation_world.dtype != belief.dtype:
+            raise TypeError("goal orientation_world must have the belief dtype")
+        if goal.orientation_world.device != belief.device:
+            raise ValueError("goal orientation_world must be on the belief device")
+        if not torch.isfinite(goal.orientation_world).all():
+            raise ValueError("goal orientation_world must be finite")
+        orientation_norm = torch.linalg.vector_norm(goal.orientation_world, dim=-1)
+        if not torch.allclose(
+            orientation_norm,
+            torch.ones_like(orientation_norm),
+            rtol=1e-5,
+            atol=1e-6,
+        ):
+            raise ValueError("goal orientation_world must contain unit quaternions")
 
     matches = belief.objects.active & (belief.objects.object_id == goal.object_id.unsqueeze(-1))
     if not torch.all(matches.sum(dim=-1) == 1):
@@ -426,7 +466,7 @@ def plan_counterfactual_actions(
     belief: WorldBelief,
     query_times: Tensor | Sequence[float],
     candidates: Sequence[WorldAction | None],
-    goal: TerminalWorldPositionGoal,
+    goal: TerminalWorldPositionGoal | TerminalWorldPoseGoal,
     *,
     weights: CounterfactualCostWeights = _DEFAULT_COST_WEIGHTS,
     candidate_vectorized: bool = True,
@@ -498,6 +538,7 @@ def plan_counterfactual_actions(
         )
     )
     squared_errors: list[Tensor] = []
+    orientation_errors: list[Tensor] = []
     position_variances: list[Tensor] = []
     impulse_efforts: list[Tensor] = []
 
@@ -510,6 +551,16 @@ def plan_counterfactual_actions(
             position_slice,
         ]
         squared_errors.append((terminal_position - goal.position_world).square().sum(dim=-1))
+        if isinstance(goal, TerminalWorldPoseGoal):
+            terminal_orientation = trajectory.orientations[batch_index, -1, target_slot]
+            orientation_errors.append(
+                quaternion_geodesic_distance(
+                    terminal_orientation,
+                    goal.orientation_world,
+                ).square()
+            )
+        else:
+            orientation_errors.append(belief.objects.position.new_zeros(belief.batch_size))
         position_variances.append(terminal_log_variance.exp().sum(dim=-1))
         if action is None:
             impulse_efforts.append(belief.objects.position.new_zeros(belief.batch_size))
@@ -524,10 +575,12 @@ def plan_counterfactual_actions(
             )
 
     terminal_squared_error = torch.stack(squared_errors, dim=-1)
+    terminal_orientation_error = torch.stack(orientation_errors, dim=-1)
     terminal_position_variance = torch.stack(position_variances, dim=-1)
     impulse_effort = torch.stack(impulse_efforts, dim=-1)
     total_cost = (
         weights.terminal_position * terminal_squared_error
+        + weights.terminal_orientation * terminal_orientation_error
         + weights.terminal_variance * terminal_position_variance
         + weights.impulse_effort * impulse_effort
     )
@@ -541,12 +594,14 @@ def plan_counterfactual_actions(
         impulse_effort=impulse_effort,
         total_cost=total_cost,
         selected_index=selected_index,
+        terminal_orientation_error=terminal_orientation_error,
     )
 
 
 __all__ = [
     "CounterfactualCostWeights",
     "CounterfactualPlanResult",
+    "TerminalWorldPoseGoal",
     "TerminalWorldPositionGoal",
     "plan_counterfactual_actions",
     "resolve_appearance_handle",
