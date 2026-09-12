@@ -1,5 +1,29 @@
 # Tasks
 
+## Integrated visual-dynamic N=4--8 scale — completed 2026-09-12
+
+- [x] Initialize N=4/N=6/N=8 alternating sphere/oriented-box scenes from
+  prototype-free public calibrated RGB-D under moving cameras.
+- [x] Add opt-in two-observation birth confirmation, two-miss retirement,
+  multi-sample robust motion estimation, and measurement-resolution speed
+  deadzones while preserving legacy tracker defaults.
+- [x] Carry runtime-owned IDs through partial multi-view visibility, visible
+  removal, and two separately confirmed births without duplicates or switches.
+- [x] Execute three known actions, all adjacent contact pairs, repeated and
+  simultaneous six-DoF contacts for two seconds from the public belief.
+- [x] Require N=8 K=8/K=32 planning from that same visual belief with the
+  private winner, zero regret, exact serial cost parity, and at least 5x
+  candidate-batch speedup.
+- [x] Publish one 484,220-byte run with three lightweight vector animations,
+  explicit runtime identities and model/reference roles, and no retained RGB-D
+  frames, raster images, or video.
+- [x] Pass the exact final-tree gate: Ruff, Ruff format, compileall, diff
+  hygiene, focused capability tests, strict governed execution, and `2479
+  passed, 16 skipped` repository-wide in `1:32:21`.
+- [ ] Add the next adaptive-physics rung: moving pre-anchor tracks and public
+  online identification of varied per-object mass, drag, restitution, and
+  friction before repeating the N=4--8 contact/planning gate.
+
 ## Batched multi-contact six-DoF scale — completed 2026-09-12
 
 - [x] Fast-forward the verified impact/open-world milestone stack onto local
@@ -19,7 +43,7 @@
   inspect the regenerated result in the integrated browser.
 - [x] Pass Ruff, Ruff format, compileall, diff hygiene, focused compatibility,
   the strict governed runner, and `2476 passed, 16 skipped` repository-wide.
-- [ ] Freeze the integrated visual-dynamic N=4--8 gate: public calibrated RGB-D
+- [x] Freeze the integrated visual-dynamic N=4--8 gate: public calibrated RGB-D
   discovery, runtime IDs, visible birth/removal, short partial visibility,
   multi-contact six-DoF known-action prediction, and required planning in the
   same episodes.

@@ -196,6 +196,42 @@ def test_tracker_recovers_id_and_angular_velocity_after_one_missing_frame() -> N
     assert abs(float(recovered[0].angular_velocity[2]) - 1.0) < 0.08
 
 
+def test_tracker_can_require_two_consecutive_observations_before_birth() -> None:
+    tracker = OpenWorldRigidTracker(
+        max_missed_steps=1,
+        birth_confirmation_steps=2,
+    )
+
+    assert tracker.update(OpenWorldRigidFrame(0.0, (_detection((0.0, 0.0, 4.0), 0.0),))) == ()
+    assert tracker.update(OpenWorldRigidFrame(0.05, ())) == ()
+    assert tracker.update(OpenWorldRigidFrame(0.10, (_detection((0.02, 0.0, 4.0), 0.02),))) == ()
+    confirmed = tracker.update(OpenWorldRigidFrame(0.15, (_detection((0.04, 0.0, 4.0), 0.04),)))
+
+    assert len(confirmed) == 1
+    assert confirmed[0].object_id == 0
+    assert confirmed[0].age_steps == 2
+    assert confirmed[0].observed
+    assert float(confirmed[0].velocity[0]) == pytest.approx(0.4)
+
+    first_miss = tracker.update(OpenWorldRigidFrame(0.20, ()))
+    retired = tracker.update(OpenWorldRigidFrame(0.25, ()))
+    assert len(first_miss) == 1 and first_miss[0].missed_steps == 1
+    assert retired == ()
+
+
+def test_tracker_supports_robust_history_and_observable_motion_deadzone() -> None:
+    tracker = OpenWorldRigidTracker(
+        motion_sample_count=4,
+        linear_speed_deadzone=0.01,
+        angular_speed_deadzone=0.10,
+    )
+    tracker.update(OpenWorldRigidFrame(0.0, (_detection((0.0, 0.0, 4.0), 0.0),)))
+    second = tracker.update(OpenWorldRigidFrame(0.05, (_detection((0.0002, 0.0, 4.0), 0.002),)))
+
+    torch.testing.assert_close(second[0].velocity, torch.zeros(3, dtype=DTYPE))
+    torch.testing.assert_close(second[0].angular_velocity, torch.zeros(3, dtype=DTYPE))
+
+
 def test_geometry_only_tracker_recovers_ids_after_eight_missing_frames() -> None:
     tracker = OpenWorldRigidTracker(
         max_missed_steps=8,

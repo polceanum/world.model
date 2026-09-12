@@ -6,6 +6,35 @@ to make every heading unambiguous; the suffixes do not imply precedence, no
 substantive decision or chronology changed, and the one corresponding
 cross-reference was disambiguated.
 
+## ADR-190 — Join public visual state to the scaled contact/planning executor before adding capacity
+
+- **Date:** 2026-09-12
+- **Status:** accepted bounded capability; not a learned-checkpoint promotion
+- **Context:** Phase H proved N=4--8 batched six-DoF contact and planning only
+  from oracle-initialized state. The older integrated benchmark used
+  predeclared colour handles and a hand-written lifecycle proxy, so neither
+  established that runtime discovery and identities could drive the scaled
+  executor. The first composed run further showed that nearly cubic boxes and
+  last-pair velocity estimates made public pose and contact timing unstable.
+- **Decision:** Add a separate manifest-bound N=4/6/8 gate whose runtime accepts
+  only RGB, depth, calibrated moving-camera transforms, intrinsics, timestamps,
+  and a declared shared physical prior. Use prototype-free discovery and
+  runtime-owned IDs, require two consecutive observations for birth and two
+  misses for retirement, and preserve the existing one-frame defaults. Add an
+  opt-in bounded-history median motion estimator with explicit resolution
+  deadzones. Use observably anisotropic boxes instead of treating ambiguous
+  near-cubes as labelled poses. Feed the resulting belief directly into the
+  Phase H action/contact/planning path and keep the serial planner as oracle.
+- **Consequences:** All proposal, count, identity, lifecycle, primitive,
+  contact-pair, action, and planning gates pass at N=4/6/8. Worst two-second
+  position/velocity/orientation errors are `0.013789 m`, `0.090706 m/s`, and
+  `9.4057 degrees`; K=8/K=32 planning is exact with `7.57x/27.86x` speedup. The
+  `484,220`-byte run retains only summaries, HTML, and inline vector evidence.
+  This does not qualify unknown calibration, hidden forces, ambiguous box pose,
+  or heterogeneous online physics at scale. The next rung must identify varied
+  physical parameters from public moving/action/contact evidence before
+  increasing visual count.
+
 ## ADR-189 — Separate identity semantics from role styling and earn touching recovery geometrically
 
 - **Date:** 2026-09-11

@@ -27,6 +27,12 @@ def _escape(value: object) -> str:
     return html.escape(str(value), quote=True)
 
 
+def _display_title(value: object) -> str:
+    """Title-case prose without corrupting the established RGB-D acronym."""
+
+    return str(value).title().replace("Rgb-D", "RGB-D")
+
+
 def _format_number(value: object, *, digits: int = 4) -> str:
     if not isinstance(value, (int, float)) or isinstance(value, bool):
         return "—"
@@ -1057,7 +1063,7 @@ def _animation_section(
             '<article class="animation-card" '
             f'data-animation-collection="{_escape(collection)}" '
             f'data-world-animation="{animation_index}">'
-            f"<h3>{_escape(animation.get('label', 'example')).title()}</h3>"
+            f"<h3>{_escape(_display_title(animation.get('label', 'example')))}</h3>"
             f'<p class="animation-meta">{_escape(animation.get("episode", "unknown episode"))}'
             f" · N={_escape(animation.get('object_count', '?'))}"
             f" · {_escape(contact_label)} · {_escape(membership_label)}"
@@ -1150,12 +1156,21 @@ def _animation_cards(summary: CapabilityRunSummary) -> str:
         )
     elif has_known_actions:
         forecast_title = "Two-second causal multi-contact forecasts"
-        forecast_introduction = (
-            "State-first scale rollouts apply each declared future impulse exactly once and "
-            "continue through chained and simultaneous contacts without later observations. "
-            "Filled and open markers share object colours; box orientation spokes expose pose "
-            "error. Compact vector keyframes replace rendered frame directories."
-        )
+        if summary.configuration.get("public_calibrated_rgbd") is True:
+            forecast_introduction = (
+                "Public RGB-D initialized rollouts apply each declared future impulse exactly "
+                "once and continue through chained and simultaneous contacts without later "
+                "observations. Filled and open markers share object colours; box orientation "
+                "spokes expose pose error. Compact vector keyframes replace rendered frame "
+                "directories."
+            )
+        else:
+            forecast_introduction = (
+                "State-first scale rollouts apply each declared future impulse exactly once and "
+                "continue through chained and simultaneous contacts without later observations. "
+                "Filled and open markers share object colours; box orientation spokes expose "
+                "pose error. Compact vector keyframes replace rendered frame directories."
+            )
     else:
         forecast_title = "Two-second open-loop forecasts"
         forecast_introduction = (

@@ -2,6 +2,31 @@
 
 ## Unreleased — 2026-07-28
 
+### 2026-09-12 integrated visual-dynamic N=4--8 scale
+
+- Added an end-to-end N=4/N=6/N=8 gate from prototype-free calibrated RGB-D
+  discovery and runtime-owned identities to two-second mixed-rigid six-DoF
+  contacts and required downstream planning.
+- Added opt-in two-frame birth confirmation, two-miss retirement, bounded
+  median motion history, and explicit sub-resolution speed deadzones to the
+  open-world tracker while preserving every legacy default.
+- Exposed the public box residual decision threshold and used observably
+  anisotropic boxes after the first diagnostic isolated near-cubic pose
+  ambiguity; no private primitive or pose labels enter runtime.
+- Qualified visible removal/replacement, a separate birth, reduced multi-view
+  visibility and recovery, three known actions, all adjacent contact pairs,
+  repeated/simultaneous contact, and N=8 K=8/K=32 serial/batched parity in the
+  same deterministic gate.
+- Published `runs/20260912-visual-dynamic-scale-v1` at `484,220` bytes. It has
+  three inline runtime-identity forecast animations and no RGB-D frames,
+  rasters, videos, or raw traces.
+- Preserved the `RGB-D` acronym in animation headings; browser inspection
+  verified the score, axes, identity/role legend, pose spokes, action/contact
+  events, planning speedup, and N=4/N=6/N=8 frontier cells.
+- The exact final tree passes Ruff, Ruff format, compileall, diff hygiene,
+  focused capability tests, strict governed execution, and the complete `2479
+  passed, 16 skipped` repository gate in `1:32:21`.
+
 ### 2026-09-12 batched multi-contact six-DoF scale
 
 - Fast-forwarded the verified impact/open-world milestone stack onto local

@@ -1,5 +1,47 @@
 # Project status
 
+## Integrated visual-dynamic N=4--8 scale — 2026-09-12
+
+The state-first Phase H executor is now joined to prototype-free public
+calibrated RGB-D in `runs/20260912-visual-dynamic-scale-v1`. Six moving camera
+views provide the only runtime observations. The tracker allocates its own
+persistent IDs after two consecutive detections, retires after two misses, and
+uses bounded multi-observation motion estimates. Across N=4, N=6, and N=8 it
+recovers every visible proposal, exact count, identity, lifecycle transition,
+and rigid primitive. One object retains identity through reduced multi-view
+support; an existing object is visibly removed; the replacement and final
+object are independently confirmed births.
+
+The resulting public belief—not an oracle state—drives the Phase H six-DoF
+executor. All three counts recover every adjacent contact pair with contact-pair
+F1 `1.0`; maximum two-second position error is `0.013789 m`, maximum velocity
+error is `0.090706 m/s`, and maximum orientation error is `9.4057 degrees`.
+N=8 K=8/K=32 planning selects the private winner with zero regret and exact
+serial cost parity. Fresh-process vectorized latency is `4.0042/4.3377 s`
+versus `30.2994/120.8288 s` serial, a `7.57x/27.86x` speedup.
+
+The first diagnostic run localized failure to public box observability and
+two-frame motion noise, not proposal capacity, identity, dynamics execution, or
+planning. Clearly anisotropic boxes remove the nearly cubic pose ambiguity;
+the opt-in tracker uses median pairwise motion over bounded public history and
+explicit sub-resolution deadzones. Defaults remain unchanged. The dashboard
+now preserves the `RGB-D` acronym and shows three runtime-ID-coloured forecast
+animations with distinct model/reference styling, pose spokes, action/contact
+events, and named world axes. Browser inspection verified the regenerated
+report. The complete run is `484,220` bytes with no retained frames or media.
+
+The exact final tree passes Ruff, Ruff format, compileall, diff hygiene,
+focused capability tests, strict governed execution, and the complete
+repository suite: `2479 passed, 16 skipped` in `1:32:21`. The 13 warnings are
+the existing dynamic-set PyTorch intra-op thread-setting notice.
+
+This first composite rung deliberately uses a known shared neutral physical
+prior. The next higher-impact gap is not raw object count: it is moving
+pre-anchor perception plus public online identification of heterogeneous mass,
+drag, restitution, and friction before the same multi-contact/planning test.
+Unknown calibration, hidden actions, and identity recovery through unobserved
+forces remain unsupported.
+
 ## Batched multi-contact six-DoF scale bridge — 2026-09-12
 
 The verified impact/open-world result stack has been fast-forwarded onto local

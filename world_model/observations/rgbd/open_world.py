@@ -63,6 +63,9 @@ class _Track:
     timestamp: float
     last_observed_geometry: ObservableRigidGeometry
     last_observed_timestamp: float
+    observed_positions: list[Tensor]
+    observed_orientations: list[Tensor]
+    observed_timestamps: list[float]
     age_steps: int = 1
     missed_steps: int = 0
 
@@ -203,6 +206,7 @@ def discover_rigid_objects_from_rgbd(
     segmentation_mode: str = "chromatic",
     minimum_peak_radius_pixels: float = 2.0,
     peak_window_pixels: int = 5,
+    box_decision_ratio: float = 0.72,
 ) -> OpenWorldRigidFrame:
     """Discover an unordered rigid set from simultaneous calibrated views."""
 
@@ -236,6 +240,8 @@ def discover_rigid_objects_from_rgbd(
         raise ValueError("peak_window_pixels must be odd")
     if not 0.0 < appearance_gate <= 1.0 or centroid_gate_m <= 0.0:
         raise ValueError("discovery gates are invalid")
+    if not 0.0 < box_decision_ratio < 1.0:
+        raise ValueError("box_decision_ratio must lie in (0,1)")
 
     groups: list[dict[str, object]] = []
     structure = np.ones((3, 3), dtype=np.int8)
@@ -419,6 +425,7 @@ def discover_rigid_objects_from_rgbd(
             world_from_camera,
             intrinsics,
             minimum_points=minimum_geometry_points,
+            box_decision_ratio=box_decision_ratio,
         )
         if segmentation_mode == "depth_geometry" and support_views > 2:
             active_views = [index for index, mask in enumerate(group_masks) if bool(mask.any())]
@@ -436,6 +443,7 @@ def discover_rigid_objects_from_rgbd(
                     world_from_camera[selected],
                     intrinsics[selected],
                     minimum_points=minimum_geometry_points,
+                    box_decision_ratio=box_decision_ratio,
                 )
                 if not bool(candidate.valid):
                     continue
@@ -562,6 +570,10 @@ class OpenWorldRigidTracker:
         self,
         *,
         max_missed_steps: int = 2,
+        birth_confirmation_steps: int = 1,
+        motion_sample_count: int = 2,
+        linear_speed_deadzone: float = 0.0,
+        angular_speed_deadzone: float = 0.0,
         association_gate: float = 2.0,
         appearance_weight: float = 1.0,
         geometry_weight: float = 0.0,
@@ -569,17 +581,135 @@ class OpenWorldRigidTracker:
     ) -> None:
         if (
             max_missed_steps < 0
+            or birth_confirmation_steps < 1
+            or motion_sample_count < 2
+            or linear_speed_deadzone < 0.0
+            or angular_speed_deadzone < 0.0
             or association_gate <= 0.0
             or min(appearance_weight, geometry_weight, primitive_weight) < 0.0
         ):
             raise ValueError("tracker gates are invalid")
         self.max_missed_steps = max_missed_steps
+        self.birth_confirmation_steps = birth_confirmation_steps
+        self.motion_sample_count = motion_sample_count
+        self.linear_speed_deadzone = linear_speed_deadzone
+        self.angular_speed_deadzone = angular_speed_deadzone
         self.association_gate = association_gate
         self.appearance_weight = appearance_weight
         self.geometry_weight = geometry_weight
         self.primitive_weight = primitive_weight
         self._tracks: list[_Track] = []
+        self._tentative_tracks: list[_Track] = []
         self._next_id = 0
+
+    def _association_cost(
+        self, track: _Track, detection: DiscoveredRigidObject, timestamp: float
+    ) -> float:
+        dt = timestamp - track.timestamp
+        predicted = track.geometry.world_position + track.velocity * dt
+        position_cost = float(
+            torch.linalg.vector_norm(detection.geometry.world_position - predicted)
+        )
+        appearance_dim = min(track.appearance.numel(), detection.appearance.numel())
+        appearance_cost = 1.0 - float(
+            torch.nn.functional.cosine_similarity(
+                track.appearance[:appearance_dim],
+                detection.appearance[:appearance_dim],
+                dim=0,
+            )
+        )
+        primitive_cost = (
+            0.0 if int(track.geometry.primitive) == int(detection.geometry.primitive) else 1.0
+        )
+        track_scale = torch.linalg.vector_norm(track.geometry.half_extents).clamp_min(1.0e-6)
+        detection_scale = torch.linalg.vector_norm(detection.geometry.half_extents).clamp_min(
+            1.0e-6
+        )
+        scale_cost = abs(float(torch.log(detection_scale / track_scale)))
+        track_shape = track.geometry.half_extents / track_scale
+        detection_shape = detection.geometry.half_extents / detection_scale
+        shape_cost = float(
+            torch.linalg.vector_norm(track_shape.sort().values - detection_shape.sort().values)
+        )
+        geometry_cost = scale_cost + shape_cost
+        return (
+            2.5 * position_cost
+            + self.appearance_weight * appearance_cost
+            + self.geometry_weight * geometry_cost
+            + self.primitive_weight * primitive_cost
+        )
+
+    def _advance_track(
+        self,
+        track: _Track,
+        detection: DiscoveredRigidObject,
+        timestamp: float,
+    ) -> None:
+        geometry = _align_box_geometry(
+            detection.geometry,
+            track.last_observed_geometry.orientation,
+        )
+        track.observed_positions.append(geometry.world_position.clone())
+        track.observed_orientations.append(geometry.orientation.clone())
+        track.observed_timestamps.append(timestamp)
+        track.observed_positions = track.observed_positions[-self.motion_sample_count :]
+        track.observed_orientations = track.observed_orientations[-self.motion_sample_count :]
+        track.observed_timestamps = track.observed_timestamps[-self.motion_sample_count :]
+        linear_slopes = []
+        angular_slopes = []
+        for first in range(len(track.observed_timestamps)):
+            for second in range(first + 1, len(track.observed_timestamps)):
+                pair_dt = track.observed_timestamps[second] - track.observed_timestamps[first]
+                linear_slopes.append(
+                    (track.observed_positions[second] - track.observed_positions[first]) / pair_dt
+                )
+                if int(geometry.primitive) == int(RigidPrimitive.BOX):
+                    angular_slopes.append(
+                        _angular_velocity(
+                            track.observed_orientations[first],
+                            track.observed_orientations[second],
+                            pair_dt,
+                        )
+                    )
+        velocity = torch.stack(linear_slopes).median(dim=0).values
+        angular = (
+            torch.stack(angular_slopes).median(dim=0).values
+            if angular_slopes
+            else torch.zeros_like(velocity)
+        )
+        if float(torch.linalg.vector_norm(velocity)) <= self.linear_speed_deadzone:
+            velocity = torch.zeros_like(velocity)
+        if float(torch.linalg.vector_norm(angular)) <= self.angular_speed_deadzone:
+            angular = torch.zeros_like(angular)
+        track.geometry = geometry
+        track.appearance = torch.nn.functional.normalize(
+            0.7 * track.appearance + 0.3 * detection.appearance,
+            dim=0,
+        )
+        track.velocity = velocity
+        track.angular_velocity = angular
+        track.timestamp = timestamp
+        track.last_observed_geometry = geometry
+        track.last_observed_timestamp = timestamp
+        track.age_steps += 1
+        track.missed_steps = 0
+
+    def _new_track(self, detection: DiscoveredRigidObject, timestamp: float) -> _Track:
+        reference = detection.geometry.orientation.new_tensor([0.0, 0.0, 0.0, 1.0])
+        geometry = _align_box_geometry(detection.geometry, reference)
+        return _Track(
+            object_id=-1,
+            geometry=geometry,
+            appearance=detection.appearance.clone(),
+            velocity=torch.zeros_like(geometry.world_position),
+            angular_velocity=torch.zeros_like(geometry.world_position),
+            timestamp=timestamp,
+            last_observed_geometry=geometry,
+            last_observed_timestamp=timestamp,
+            observed_positions=[geometry.world_position.clone()],
+            observed_orientations=[geometry.orientation.clone()],
+            observed_timestamps=[timestamp],
+        )
 
     def update(self, frame: OpenWorldRigidFrame) -> tuple[TrackedRigidObject, ...]:
         if not math.isfinite(frame.timestamp):
@@ -593,45 +723,11 @@ class OpenWorldRigidTracker:
         if self._tracks and detections:
             costs = np.full((len(self._tracks), len(detections)), 1.0e6, dtype=np.float64)
             for track_index, track in enumerate(self._tracks):
-                dt = frame.timestamp - track.timestamp
-                predicted = track.geometry.world_position + track.velocity * dt
                 for detection_index, detection in enumerate(detections):
-                    position_cost = float(
-                        torch.linalg.vector_norm(detection.geometry.world_position - predicted)
-                    )
-                    appearance_dim = min(track.appearance.numel(), detection.appearance.numel())
-                    appearance_cost = 1.0 - float(
-                        torch.nn.functional.cosine_similarity(
-                            track.appearance[:appearance_dim],
-                            detection.appearance[:appearance_dim],
-                            dim=0,
-                        )
-                    )
-                    primitive_cost = (
-                        0.0
-                        if int(track.geometry.primitive) == int(detection.geometry.primitive)
-                        else 1.0
-                    )
-                    track_scale = torch.linalg.vector_norm(track.geometry.half_extents).clamp_min(
-                        1.0e-6
-                    )
-                    detection_scale = torch.linalg.vector_norm(
-                        detection.geometry.half_extents
-                    ).clamp_min(1.0e-6)
-                    scale_cost = abs(float(torch.log(detection_scale / track_scale)))
-                    track_shape = track.geometry.half_extents / track_scale
-                    detection_shape = detection.geometry.half_extents / detection_scale
-                    shape_cost = float(
-                        torch.linalg.vector_norm(
-                            track_shape.sort().values - detection_shape.sort().values
-                        )
-                    )
-                    geometry_cost = scale_cost + shape_cost
-                    costs[track_index, detection_index] = (
-                        2.5 * position_cost
-                        + self.appearance_weight * appearance_cost
-                        + self.geometry_weight * geometry_cost
-                        + self.primitive_weight * primitive_cost
+                    costs[track_index, detection_index] = self._association_cost(
+                        track,
+                        detection,
+                        frame.timestamp,
                     )
             rows, columns = linear_sum_assignment(costs)
             for row, column in zip(rows, columns, strict=True):
@@ -644,54 +740,58 @@ class OpenWorldRigidTracker:
         for track_index, detection_index in pairs:
             track = self._tracks[track_index]
             detection = detections[detection_index]
-            dt = frame.timestamp - track.last_observed_timestamp
-            geometry = _align_box_geometry(
-                detection.geometry,
-                track.last_observed_geometry.orientation,
-            )
-            velocity = (geometry.world_position - track.last_observed_geometry.world_position) / dt
-            angular = (
-                _angular_velocity(
-                    track.last_observed_geometry.orientation,
-                    geometry.orientation,
-                    dt,
-                )
-                if int(geometry.primitive) == int(RigidPrimitive.BOX)
-                else torch.zeros_like(velocity)
-            )
-            track.geometry = geometry
-            track.appearance = torch.nn.functional.normalize(
-                0.7 * track.appearance + 0.3 * detection.appearance,
-                dim=0,
-            )
-            track.velocity = velocity
-            track.angular_velocity = angular
-            track.timestamp = frame.timestamp
-            track.last_observed_geometry = geometry
-            track.last_observed_timestamp = frame.timestamp
-            track.age_steps += 1
-            track.missed_steps = 0
+            self._advance_track(track, detection, frame.timestamp)
             observed_ids.add(track.object_id)
 
-        for detection_index, detection in enumerate(detections):
-            if detection_index in matched_detections:
-                continue
-            reference = detection.geometry.orientation.new_tensor([0.0, 0.0, 0.0, 1.0])
-            geometry = _align_box_geometry(detection.geometry, reference)
-            self._tracks.append(
-                _Track(
-                    object_id=self._next_id,
-                    geometry=geometry,
-                    appearance=detection.appearance.clone(),
-                    velocity=torch.zeros_like(geometry.world_position),
-                    angular_velocity=torch.zeros_like(geometry.world_position),
-                    timestamp=frame.timestamp,
-                    last_observed_geometry=geometry,
-                    last_observed_timestamp=frame.timestamp,
+        unmatched_detection_indices = [
+            index for index in range(len(detections)) if index not in matched_detections
+        ]
+        if self.birth_confirmation_steps == 1:
+            for detection_index in unmatched_detection_indices:
+                track = self._new_track(detections[detection_index], frame.timestamp)
+                track.object_id = self._next_id
+                self._tracks.append(track)
+                observed_ids.add(self._next_id)
+                self._next_id += 1
+        else:
+            unmatched_detections = [detections[index] for index in unmatched_detection_indices]
+            tentative_pairs: list[tuple[int, int]] = []
+            if self._tentative_tracks and unmatched_detections:
+                costs = np.full(
+                    (len(self._tentative_tracks), len(unmatched_detections)),
+                    1.0e6,
+                    dtype=np.float64,
                 )
-            )
-            observed_ids.add(self._next_id)
-            self._next_id += 1
+                for track_index, track in enumerate(self._tentative_tracks):
+                    for detection_index, detection in enumerate(unmatched_detections):
+                        costs[track_index, detection_index] = self._association_cost(
+                            track,
+                            detection,
+                            frame.timestamp,
+                        )
+                rows, columns = linear_sum_assignment(costs)
+                tentative_pairs = [
+                    (int(row), int(column))
+                    for row, column in zip(rows, columns, strict=True)
+                    if costs[row, column] <= self.association_gate
+                ]
+            retained_tentatives: list[_Track] = []
+            matched_new_detections: set[int] = set()
+            for track_index, detection_index in tentative_pairs:
+                track = self._tentative_tracks[track_index]
+                self._advance_track(track, unmatched_detections[detection_index], frame.timestamp)
+                matched_new_detections.add(detection_index)
+                if track.age_steps >= self.birth_confirmation_steps:
+                    track.object_id = self._next_id
+                    self._tracks.append(track)
+                    observed_ids.add(self._next_id)
+                    self._next_id += 1
+                else:
+                    retained_tentatives.append(track)
+            for detection_index, detection in enumerate(unmatched_detections):
+                if detection_index not in matched_new_detections:
+                    retained_tentatives.append(self._new_track(detection, frame.timestamp))
+            self._tentative_tracks = retained_tentatives
 
         retained: list[_Track] = []
         for track_index, track in enumerate(self._tracks):

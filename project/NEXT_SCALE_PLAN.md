@@ -266,32 +266,63 @@ cost difference. Candidate-row batching is `7.61x`/`28.12x` faster than the
 serial oracle. The final run is `450,359` bytes and retains only JSON, HTML, and
 manifest data.
 
+## Phase I — Integrated public visual-dynamic scale
+
+Status: **implemented and passing** in
+`runs/20260912-visual-dynamic-scale-v1`.
+
+1. Discover N=4, N=6, and N=8 alternating spheres and observably oriented boxes
+   from six moving calibrated RGB-D views without runtime prototypes, instance
+   maps, private IDs, or primitive labels.
+2. Require two consecutive public detections before allocating an ID, retire
+   after two misses, and carry runtime-owned identity through reduced multi-view
+   visibility, visible removal, replacement, and a separate birth.
+3. Estimate anchor motion from bounded public history, retaining legacy
+   two-sample behavior by default. Use explicit measurement-resolution
+   deadzones only in this declared profile.
+4. Feed the public belief directly into the Phase H batched six-DoF path for
+   three known impulses, every adjacent pair, repeated and simultaneous
+   contacts, and a two-second forecast.
+5. Require N=8 K=8/K=32 planning from the same belief with correct private
+   winner, zero regret, exact serial cost parity, at least 5x speedup, and source
+   immutability.
+6. Retain three inline vector forecasts with runtime-ID colours, separate
+   model/reference roles, pose spokes, action/contact events, and named world
+   axes. Keep all generated RGB-D and frame media transient.
+
+Every count achieves proposal F1, identity accuracy, lifecycle F1, primitive
+accuracy, and contact-pair F1 of `1.0`. Worst two-second position, velocity, and
+orientation errors are `0.013789 m`, `0.090706 m/s`, and `9.4057 degrees`.
+K=8/K=32 planning selects the private winner with zero regret and exact cost
+parity; candidate batching is `7.57x`/`27.86x` faster than serial. The passing
+run is `484,220` bytes and contains no raster, video, or per-frame artifacts.
+
 ## Completion and next frontier
 
-Phases A--H are implemented in order and remain separate regression tiers. No
+Phases A--I are implemented in order and remain separate regression tiers. No
 learned module was widened because the only integrated development failure was
 owned by public geometry/state estimation: public face-plane and algebraic
 sphere fits removed it directly, while Phase G's failure owner was public
-support partitioning and metric association. Phase H establishes that the
-six-DoF executor and required planner scale across N=4--8 contact chains, but it
-does not upgrade that state-first result into visual evidence.
+support partitioning and metric association. Phase I now upgrades the N=4--8
+contact/planning bridge from state-first to public RGB-D evidence. Its first
+diagnostic likewise attributed error to near-cubic pose observability and
+short-window motion noise; both were corrected in the owning public-state seam
+without learned capacity.
 
-The next highest-impact frontier is therefore one integrated visual-dynamic
-gate: initialize N=4--8 mixed rigid scenes from public calibrated RGB-D, carry
-runtime-owned identities through short partial visibility and visible
-birth/removal, and then execute known-action chained/simultaneous contact plus
-required planning through the Phase H batched path. The first implementation
-should reuse existing discovery, lifecycle, parameter identification, and
-contact modules without widening them. Owner ablations must decide whether any
-failure belongs to proposal separation, association/recovery, parameter
-uncertainty, or dynamics. Only then may the smallest owning component change.
-Visual qualification above N=8 follows only after this composite gate passes.
-Flush featureless unions and identity recovery through unobserved impulses or
-collisions remain explicit observability limits.
+The next highest-impact frontier is adaptive physical generalization at this
+same visual scale. Add moving pre-anchor trajectories and varied per-object
+mass, drag, restitution, and friction. Derive parameter evidence only from
+accepted public observations, known impulses, free-motion intervals, and
+observed contacts; contract uncertainty only on accepted updates. Repeat the
+N=4--8 contact and required planning gates from the identified belief and add
+truth-parameter/state/association ablations to localize failures. Only after
+that passes should full visual qualification rise above N=8. Flush featureless
+unions, unknown calibration, and identity recovery through unobserved impulses
+or collisions remain explicit observability limits.
 
 The expanded implementation gate passed Ruff, Ruff format, compileall, diff
 hygiene, the focused and broad compatibility checks, and the complete
-repository suite: `2476 passed, 16 skipped` in `1:16:47`. The 13 warnings are
+repository suite: `2479 passed, 16 skipped` in `1:32:21`. The 13 warnings are
 the existing dynamic-set PyTorch thread-setting notice. Absolute planning
 latency is separately adjudicated by the strict fresh-process runner bound into
 the Phase H manifest.
