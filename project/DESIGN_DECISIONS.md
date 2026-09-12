@@ -6,6 +6,30 @@ to make every heading unambiguous; the suffixes do not imply precedence, no
 substantive decision or chronology changed, and the one corresponding
 cross-reference was disambiguated.
 
+## ADR-189 — Separate identity semantics from role styling and earn touching recovery geometrically
+
+- **Date:** 2026-09-11
+- **Status:** accepted bounded capability; not a learned-checkpoint promotion
+- **Context:** Existing animation data already paired model and private
+  reference points by persistent ID, but the legend assigned green to “model”
+  and orange to “reference” even though the plotted colours varied by object.
+  The open-world runtime also required chromatic separation when silhouettes
+  touched and had only demonstrated one missing frame.
+- **Decision:** Make plot colour exclusively an identity encoding and use
+  filled/solid versus open/dashed marks for model/reference role. Add an opt-in
+  public depth-geometry partition based on separable silhouette medial peaks,
+  per-view Hungarian grouping, and residual-ranked calibrated fits. Expose
+  temporal cue weights and run the qualification with appearance and primitive
+  cues disabled. Retain IDs for eight force-free missing frames, then require
+  post-recovery K=8/K=32 downstream planning with exact serial parity. Preserve
+  the chromatic default and do not split a one-peak featureless union.
+- **Consequences:** The compact N=3 run recovers three same-albedo objects from
+  front-view support containing only two connected components, preserves every
+  ID through the gap, and returns to `0.003109 m` position RMSE. K=8/K=32
+  planning is exact at `0.364/0.542 s`; retained evidence is `62,806` bytes.
+  This qualifies observable geometric separation, not semantic segmentation or
+  recovery through hidden forces. Multi-contact visual N=4--8 is next.
+
 ## ADR-188 — Make discovery, self-calibration, and rotational contact one bounded behavior gate
 
 - **Date:** 2026-09-11

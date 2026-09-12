@@ -204,19 +204,57 @@ RMSE through 1.2 seconds. Pose-aware K=8/K=32 planning has the correct winner,
 zero regret, exact cost parity, and `0.456/0.606 s` median vectorized latency.
 The 77,966-byte run retains only JSON, HTML, and its manifest.
 
+## Phase G — Appearance-independent touching separation and longer recovery
+
+Status: **implemented and passing** in
+`runs/20260911-open-world-touching-recovery-v1`.
+
+1. Add an opt-in `depth_geometry` discovery mode that partitions connected
+   public depth support from silhouette medial peaks rather than chromatic
+   components. Merge nearby raster fragments before partitioning and use
+   calibrated metric fits to group the unordered proposals across views.
+2. Make temporal association cues explicitly configurable. Qualify with both
+   appearance and primitive-label weights set to zero, so identity follows
+   predicted metric position and public shape scale rather than colour or a
+   private category.
+3. Retain tracks through an eight-frame complete RGB-D gap, then reassociate
+   recovered observations to the original runtime-owned persistent IDs.
+4. Require post-recovery K=8/K=32 counterfactual action selection, exact
+   serial/vectorized agreement, source-belief immutability, and bounded CPU
+   latency. Planning remains an evaluation only.
+5. Retain one compact vector animation and a named recovery-error curve. Encode
+   object identity by colour and distinguish model/reference by filled-solid
+   versus open-dashed marks, rather than assigning role colours that can imply
+   false correspondence.
+
+The deterministic N=3 qualification uses identical RGB albedo for two oriented
+boxes and one sphere. Its front depth support has two connected components but
+geometry discovery yields three instances. All three IDs survive eight missing
+frames with no duplicates; maximum force-free gap error is `0.034052 m`,
+post-recovery position/velocity RMSE is `0.003109 m`/`0.026675 m/s`, and
+K=8/K=32 planning selects the private oracle winner with zero regret and exact
+cost parity in `0.364/0.542 s`. The run occupies `62,806` bytes and retains no
+RGB-D frame, raster image, or video.
+
 ## Completion and next frontier
 
-Phases A--F are implemented in order and remain separate regression tiers. No
+Phases A--G are implemented in order and remain separate regression tiers. No
 learned module was widened because the only integrated development failure was
 owned by public geometry/state estimation: public face-plane and algebraic
-sphere fits removed it directly. The next scale phase should retain these gates
-while extending only genuinely new behavior. The highest-impact next frontier
-is category/texture-independent instance separation under touching silhouettes
-and longer recovery, followed by multi-contact six-DoF scenes at N=4--8 and
-visual qualification above N=8. A fresh plan must freeze the corresponding
-observability and efficiency limits before that work begins.
+sphere fits removed it directly, while Phase G's failure owner was public
+support partitioning and metric association. The next highest-impact frontier
+is multi-contact six-DoF behavior at N=4--8: simultaneous and chained contacts,
+known action sequences, changing membership, and partial visibility in the
+same visual episode. After that passes, visual qualification can move above
+N=8. Flush featureless unions with no separable depth evidence and identity
+recovery through unobserved impulses/collisions remain explicit observability
+limits, not promises for a larger model. A fresh gate must freeze scene
+complexity, contact attribution, planning tasks, and CPU latency before
+implementation.
 
 The expanded implementation gate passed Ruff, Ruff format, compileall, diff
 hygiene, the focused and broad compatibility checks, and the complete
-repository suite: `2471 passed, 16 skipped` in `1:26:50`. The final dashboard
-reconciliation passed all 14 focused report tests.
+repository suite: `2475 passed, 16 skipped` in `1:51:40`. The 13 warnings are
+the existing dynamic-set PyTorch thread-setting notice. Absolute planning
+latency is separately adjudicated by the strict fresh-process runner bound into
+the Phase G manifest.

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Run compact prototype-free six-DoF world-model qualification."""
+"""Run compact geometry-only touching-instance and long-recovery qualification."""
 
 from __future__ import annotations
 
@@ -8,11 +8,11 @@ import json
 from datetime import datetime, timezone
 from pathlib import Path
 
-from world_model.evaluation.open_world_six_dof import (
-    OPEN_WORLD_SIX_DOF_SCHEMA,
+from world_model.evaluation.open_world_touching_recovery import (
+    OPEN_WORLD_TOUCHING_RECOVERY_SCHEMA,
     capability_manifest_sha256,
-    publish_open_world_six_dof_capability,
-    run_open_world_six_dof_capability,
+    publish_open_world_touching_recovery_capability,
+    run_open_world_touching_recovery_capability,
 )
 
 
@@ -29,12 +29,20 @@ def main(argv: list[str] | None = None) -> int:
         print(
             json.dumps(
                 {
-                    "schema": OPEN_WORLD_SIX_DOF_SCHEMA,
+                    "schema": OPEN_WORLD_TOUCHING_RECOVERY_SCHEMA,
                     "scenario_manifest_sha256": capability_manifest_sha256(),
                     "runtime_object_prototypes": False,
-                    "six_dof_contact": True,
-                    "online_parameter_identification": True,
-                    "pose_planning_candidate_counts": [8, 32],
+                    "identical_object_appearance": True,
+                    "appearance_association_weight": 0.0,
+                    "primitive_association_weight": 0.0,
+                    "dropout_frames": 8,
+                    "planning_candidate_counts": [8, 32],
+                    "planning_latency_protocol": {
+                        "adjudication": "fresh_process_governed_runner",
+                        "statistic": "median",
+                        "repeats": 3,
+                        "limits_seconds": {"K8": 0.50, "K32": 0.65},
+                    },
                     "generated_frames_retained": False,
                     "planning_used_as_training_loss": False,
                 },
@@ -43,10 +51,13 @@ def main(argv: list[str] | None = None) -> int:
             )
         )
         return 0
-    result = run_open_world_six_dof_capability(enforce_latency=True)
-    default_name = f"{datetime.now(timezone.utc):%Y%m%d}-open-world-six-dof-v1"
+    result = run_open_world_touching_recovery_capability(enforce_latency=True)
+    default_name = f"{datetime.now(timezone.utc):%Y%m%d}-open-world-touching-recovery-v1"
     run_directory = Path(parsed.run_directory or Path("runs") / default_name)
-    summary = publish_open_world_six_dof_capability(result, run_directory=run_directory)
+    summary = publish_open_world_touching_recovery_capability(
+        result,
+        run_directory=run_directory,
+    )
     print(
         json.dumps(
             {

@@ -15,7 +15,7 @@ from dataclasses import dataclass, replace
 
 import numpy as np
 import torch
-from scipy.ndimage import label
+from scipy.ndimage import distance_transform_edt, label, maximum_filter
 from scipy.optimize import linear_sum_assignment
 from torch import Tensor
 
@@ -84,6 +84,103 @@ def _component_centroid(
     return camera_to_world(points, world_from_camera).mean(dim=0)
 
 
+def _depth_geometry_components(
+    valid: Tensor,
+    *,
+    minimum_component_pixels: int,
+    minimum_peak_radius_pixels: float,
+    peak_window_pixels: int,
+) -> tuple[Tensor, ...]:
+    """Split public depth support at silhouette-interior distance peaks.
+
+    A single convex sphere or box produces one connected peak plateau. Two
+    silhouettes that touch at a narrow neck retain separate interiors and are
+    partitioned into nearest-peak basins. This operation uses neither colour
+    nor a primitive/category label. Flush, featureless unions with one peak
+    remain intentionally unresolved because the observation does not support
+    a defensible split.
+    """
+
+    valid_array = valid.detach().numpy()
+    components, component_count = label(
+        valid_array,
+        structure=np.ones((3, 3), dtype=np.int8),
+    )
+    masks: list[Tensor] = []
+    for component_index in range(1, component_count + 1):
+        component = components == component_index
+        pixel_y, pixel_x = np.nonzero(component)
+        if pixel_x.size < minimum_component_pixels:
+            continue
+        distance = distance_transform_edt(component)
+        peaks = (
+            component
+            & (distance >= minimum_peak_radius_pixels)
+            & (distance == maximum_filter(distance, size=peak_window_pixels, mode="constant"))
+        )
+        peak_components, peak_count = label(
+            peaks,
+            structure=np.ones((3, 3), dtype=np.int8),
+        )
+        peak_entries: list[tuple[float, float, float]] = []
+        for peak_index in range(1, peak_count + 1):
+            peak_y, peak_x = np.nonzero(peak_components == peak_index)
+            if peak_x.size:
+                peak_entries.append(
+                    (
+                        float(peak_y.mean()),
+                        float(peak_x.mean()),
+                        float(distance[peak_components == peak_index].max()),
+                    )
+                )
+        # Rasterized rotated boxes can break one medial-axis plateau into a
+        # few nearby maxima. Merge maxima whose separation is no greater than
+        # their shared interior scale; genuinely touching lobes remain apart.
+        peak_clusters: list[list[tuple[float, float, float]]] = []
+        for entry in sorted(peak_entries, key=lambda value: value[2], reverse=True):
+            for cluster in peak_clusters:
+                center_y = sum(value[0] for value in cluster) / len(cluster)
+                center_x = sum(value[1] for value in cluster) / len(cluster)
+                cluster_radius = max(value[2] for value in cluster)
+                separation = math.hypot(entry[0] - center_y, entry[1] - center_x)
+                if separation <= 1.2 * min(entry[2], cluster_radius):
+                    cluster.append(entry)
+                    break
+            else:
+                peak_clusters.append([entry])
+        peak_centres = [
+            (
+                sum(value[0] for value in cluster) / len(cluster),
+                sum(value[1] for value in cluster) / len(cluster),
+            )
+            for cluster in peak_clusters
+        ]
+        if len(peak_centres) <= 1:
+            masks.append(torch.from_numpy(component).to(device=valid.device))
+            continue
+        peak_array = np.asarray(peak_centres, dtype=np.float64)
+        pixels = np.stack((pixel_y, pixel_x), axis=-1).astype(np.float64)
+        basin = np.square(pixels[:, None] - peak_array[None]).sum(axis=-1).argmin(axis=1)
+        accepted_peak_indices = [
+            basin_index
+            for basin_index in range(len(peak_centres))
+            if int((basin == basin_index).sum()) >= minimum_component_pixels
+        ]
+        if len(accepted_peak_indices) <= 1:
+            masks.append(torch.from_numpy(component).to(device=valid.device))
+            continue
+        accepted_peaks = peak_array[accepted_peak_indices]
+        accepted_basin = (
+            np.square(pixels[:, None] - accepted_peaks[None]).sum(axis=-1).argmin(axis=1)
+        )
+        for basin_index in range(len(accepted_peaks)):
+            selected = accepted_basin == basin_index
+            basin_mask = np.zeros_like(component)
+            basin_mask[pixel_y[selected], pixel_x[selected]] = True
+            masks.append(torch.from_numpy(basin_mask).to(device=valid.device))
+    return tuple(masks)
+
+
 def _appearance_embedding(colour: Tensor, geometry: ObservableRigidGeometry) -> Tensor:
     extent = geometry.half_extents.sort().values
     extent = extent / torch.linalg.vector_norm(extent).clamp_min(1.0e-8)
@@ -103,6 +200,9 @@ def discover_rigid_objects_from_rgbd(
     appearance_gate: float = 0.95,
     centroid_gate_m: float = 1.25,
     chromatic_bins: int = 32,
+    segmentation_mode: str = "chromatic",
+    minimum_peak_radius_pixels: float = 2.0,
+    peak_window_pixels: int = 5,
 ) -> OpenWorldRigidFrame:
     """Discover an unordered rigid set from simultaneous calibrated views."""
 
@@ -128,6 +228,12 @@ def discover_rigid_objects_from_rgbd(
         raise ValueError("component and geometry support limits are too small")
     if chromatic_bins < 4 or chromatic_bins > 256:
         raise ValueError("chromatic_bins must lie in [4,256]")
+    if segmentation_mode not in {"chromatic", "depth_geometry"}:
+        raise ValueError("segmentation_mode must be chromatic or depth_geometry")
+    if minimum_peak_radius_pixels <= 0.0 or peak_window_pixels < 3:
+        raise ValueError("depth-geometry peak controls are invalid")
+    if peak_window_pixels % 2 == 0:
+        raise ValueError("peak_window_pixels must be odd")
     if not 0.0 < appearance_gate <= 1.0 or centroid_gate_m <= 0.0:
         raise ValueError("discovery gates are invalid")
 
@@ -145,47 +251,127 @@ def discover_rigid_objects_from_rgbd(
             + quantized[..., 1] * chromatic_bins
             + quantized[..., 2]
         )
-        for colour_code in torch.unique(code[valid]).tolist():
-            colour_region = valid & (code == int(colour_code))
-            components, count = label(colour_region.detach().numpy(), structure=structure)
-            for component_index in range(1, count + 1):
-                mask = torch.from_numpy(components == component_index).to(device=rgb.device)
-                if int(mask.sum()) < minimum_component_pixels:
-                    continue
-                candidates.append(
-                    (
+        if segmentation_mode == "depth_geometry":
+            candidate_masks = _depth_geometry_components(
+                valid,
+                minimum_component_pixels=minimum_component_pixels,
+                minimum_peak_radius_pixels=minimum_peak_radius_pixels,
+                peak_window_pixels=peak_window_pixels,
+            )
+        else:
+            candidate_masks = []
+            for colour_code in torch.unique(code[valid]).tolist():
+                colour_region = valid & (code == int(colour_code))
+                components, count = label(colour_region.detach().numpy(), structure=structure)
+                for component_index in range(1, count + 1):
+                    mask = torch.from_numpy(components == component_index).to(device=rgb.device)
+                    if int(mask.sum()) >= minimum_component_pixels:
+                        candidate_masks.append(mask)
+        for mask in candidate_masks:
+            candidates.append(
+                (
+                    mask,
+                    _component_descriptor(rgb[view], mask),
+                    _component_centroid(
+                        depth[view],
                         mask,
-                        _component_descriptor(rgb[view], mask),
-                        _component_centroid(
-                            depth[view],
-                            mask,
-                            world_from_camera[view],
-                            intrinsics[view],
-                        ),
-                    )
+                        world_from_camera[view],
+                        intrinsics[view],
+                    ),
                 )
-        assigned: set[int] = set()
-        for mask, descriptor, centroid in candidates:
-            best_group = None
-            best_cost = math.inf
-            for group_index, group in enumerate(groups):
+            )
+        if segmentation_mode == "chromatic":
+            # Preserve the historical default exactly. Geometry mode below
+            # uses global assignment because appearance is intentionally not
+            # available to disambiguate proposals.
+            assigned: set[int] = set()
+            for mask, descriptor, centroid in candidates:
+                best_group = None
+                best_cost = math.inf
+                for group_index, group in enumerate(groups):
+                    group_views = group["views"]
+                    assert isinstance(group_views, list)
+                    if group_index in assigned or bool(group_views[view]):
+                        continue
+                    group_descriptor = group["descriptor"]
+                    group_centroid = group["centroid"]
+                    assert isinstance(group_descriptor, Tensor)
+                    assert isinstance(group_centroid, Tensor)
+                    similarity = float(descriptor.dot(group_descriptor))
+                    distance = float(torch.linalg.vector_norm(centroid - group_centroid))
+                    if similarity < appearance_gate or distance > centroid_gate_m:
+                        continue
+                    cost = (1.0 - similarity) + 0.05 * distance
+                    if cost < best_cost:
+                        best_cost = cost
+                        best_group = group_index
+                if best_group is None:
+                    view_masks = [torch.zeros_like(valid) for _ in range(views)]
+                    view_masks[view] = mask
+                    groups.append(
+                        {
+                            "views": [index == view for index in range(views)],
+                            "masks": view_masks,
+                            "descriptor": descriptor,
+                            "centroid": centroid,
+                            "count": 1,
+                        }
+                    )
+                    assigned.add(len(groups) - 1)
+                    continue
+                group = groups[best_group]
                 group_views = group["views"]
+                group_masks = group["masks"]
                 assert isinstance(group_views, list)
-                if group_index in assigned or bool(group_views[view]):
-                    continue
-                group_descriptor = group["descriptor"]
+                assert isinstance(group_masks, list)
+                group_views[view] = True
+                group_masks[view] = mask
+                old_count = int(group["count"])
+                old_descriptor = group["descriptor"]
+                old_centroid = group["centroid"]
+                assert isinstance(old_descriptor, Tensor)
+                assert isinstance(old_centroid, Tensor)
+                averaged_descriptor = (old_descriptor * old_count + descriptor) / (old_count + 1)
+                group["descriptor"] = averaged_descriptor / torch.linalg.vector_norm(
+                    averaged_descriptor
+                ).clamp_min(1.0e-8)
+                group["centroid"] = (old_centroid * old_count + centroid) / (old_count + 1)
+                group["count"] = old_count + 1
+                assigned.add(best_group)
+            continue
+        # A view with fewer geometric basins than the established set contains
+        # an unresolved occlusion/flush union. It is safer to omit that view
+        # than to contaminate one object's multi-view surface fit with the
+        # merged support. Chromatic mode keeps its historical birth behavior.
+        if segmentation_mode == "depth_geometry" and groups and len(candidates) < len(groups):
+            continue
+        existing_group_count = len(groups)
+        assignments: dict[int, int] = {}
+        if groups and candidates:
+            costs = np.full((len(groups), len(candidates)), 1.0e6, dtype=np.float64)
+            distance_gate = min(centroid_gate_m, 0.5)
+            for group_index, group in enumerate(groups):
                 group_centroid = group["centroid"]
-                assert isinstance(group_descriptor, Tensor)
                 assert isinstance(group_centroid, Tensor)
-                similarity = float(descriptor.dot(group_descriptor))
-                distance = float(torch.linalg.vector_norm(centroid - group_centroid))
-                if similarity < appearance_gate or distance > centroid_gate_m:
+                for candidate_index, (_, _, centroid) in enumerate(candidates):
+                    distance = float(torch.linalg.vector_norm(centroid - group_centroid))
+                    if distance > distance_gate:
+                        continue
+                    costs[group_index, candidate_index] = 0.05 * distance
+            rows, columns = linear_sum_assignment(costs)
+            assignments = {
+                int(column): int(row)
+                for row, column in zip(rows, columns, strict=True)
+                if costs[row, column] < 1.0e5
+            }
+        for candidate_index, (mask, descriptor, centroid) in enumerate(candidates):
+            matched_group = assignments.get(candidate_index)
+            if matched_group is None:
+                allow_new_group = (
+                    existing_group_count == 0 or len(candidates) > existing_group_count
+                )
+                if not allow_new_group:
                     continue
-                cost = (1.0 - similarity) + 0.05 * distance
-                if cost < best_cost:
-                    best_cost = cost
-                    best_group = group_index
-            if best_group is None:
                 view_masks = [torch.zeros_like(valid) for _ in range(views)]
                 view_masks[view] = mask
                 groups.append(
@@ -197,9 +383,8 @@ def discover_rigid_objects_from_rgbd(
                         "count": 1,
                     }
                 )
-                assigned.add(len(groups) - 1)
                 continue
-            group = groups[best_group]
+            group = groups[matched_group]
             group_views = group["views"]
             group_masks = group["masks"]
             assert isinstance(group_views, list)
@@ -217,7 +402,6 @@ def discover_rigid_objects_from_rgbd(
             ).clamp_min(1.0e-8)
             group["centroid"] = (old_centroid * old_count + centroid) / (old_count + 1)
             group["count"] = old_count + 1
-            assigned.add(best_group)
 
     discovered: list[DiscoveredRigidObject] = []
     for group in groups:
@@ -236,6 +420,35 @@ def discover_rigid_objects_from_rgbd(
             intrinsics,
             minimum_points=minimum_geometry_points,
         )
+        if segmentation_mode == "depth_geometry" and support_views > 2:
+            active_views = [index for index, mask in enumerate(group_masks) if bool(mask.any())]
+            best_geometry = geometry
+            best_score = math.inf
+            for first_view, second_view in itertools.combinations(active_views, 2):
+                selected = torch.tensor(
+                    [first_view, second_view],
+                    dtype=torch.int64,
+                    device=depth.device,
+                )
+                candidate = fit_rigid_geometry_from_rgbd(
+                    depth[selected],
+                    masks[selected],
+                    world_from_camera[selected],
+                    intrinsics[selected],
+                    minimum_points=minimum_geometry_points,
+                )
+                if not bool(candidate.valid):
+                    continue
+                scale = torch.linalg.vector_norm(candidate.half_extents).clamp_min(1.0e-6)
+                residual = torch.minimum(candidate.sphere_residual, candidate.box_residual)
+                camera_baseline = torch.linalg.vector_norm(
+                    world_from_camera[first_view, :3, 3] - world_from_camera[second_view, :3, 3]
+                )
+                score = float(residual / scale - 1.0e-7 * camera_baseline)
+                if score < best_score:
+                    best_score = score
+                    best_geometry = candidate
+            geometry = best_geometry
         if not bool(geometry.valid):
             continue
         discovered.append(
@@ -345,11 +558,26 @@ def _angular_velocity(previous: Tensor, current: Tensor, dt: float) -> Tensor:
 class OpenWorldRigidTracker:
     """Small-set persistent tracker with bounded short occlusion recovery."""
 
-    def __init__(self, *, max_missed_steps: int = 2, association_gate: float = 2.0) -> None:
-        if max_missed_steps < 0 or association_gate <= 0.0:
+    def __init__(
+        self,
+        *,
+        max_missed_steps: int = 2,
+        association_gate: float = 2.0,
+        appearance_weight: float = 1.0,
+        geometry_weight: float = 0.0,
+        primitive_weight: float = 1.0,
+    ) -> None:
+        if (
+            max_missed_steps < 0
+            or association_gate <= 0.0
+            or min(appearance_weight, geometry_weight, primitive_weight) < 0.0
+        ):
             raise ValueError("tracker gates are invalid")
         self.max_missed_steps = max_missed_steps
         self.association_gate = association_gate
+        self.appearance_weight = appearance_weight
+        self.geometry_weight = geometry_weight
+        self.primitive_weight = primitive_weight
         self._tracks: list[_Track] = []
         self._next_id = 0
 
@@ -384,8 +612,26 @@ class OpenWorldRigidTracker:
                         if int(track.geometry.primitive) == int(detection.geometry.primitive)
                         else 1.0
                     )
+                    track_scale = torch.linalg.vector_norm(track.geometry.half_extents).clamp_min(
+                        1.0e-6
+                    )
+                    detection_scale = torch.linalg.vector_norm(
+                        detection.geometry.half_extents
+                    ).clamp_min(1.0e-6)
+                    scale_cost = abs(float(torch.log(detection_scale / track_scale)))
+                    track_shape = track.geometry.half_extents / track_scale
+                    detection_shape = detection.geometry.half_extents / detection_scale
+                    shape_cost = float(
+                        torch.linalg.vector_norm(
+                            track_shape.sort().values - detection_shape.sort().values
+                        )
+                    )
+                    geometry_cost = scale_cost + shape_cost
                     costs[track_index, detection_index] = (
-                        2.5 * position_cost + appearance_cost + primitive_cost
+                        2.5 * position_cost
+                        + self.appearance_weight * appearance_cost
+                        + self.geometry_weight * geometry_cost
+                        + self.primitive_weight * primitive_cost
                     )
             rows, columns = linear_sum_assignment(costs)
             for row, column in zip(rows, columns, strict=True):

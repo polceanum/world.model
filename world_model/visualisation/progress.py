@@ -1051,8 +1051,9 @@ def _animation_section(
             '<div class="animation-readout"><span class="animation-clock" '
             f'data-animation-clock>{_escape(initial_clock)}</span><span class="animation-event" '
             "data-animation-event></span></div>"
-            '<div class="animation-legend"><span class="model-key">● model estimate</span>'
-            '<span class="truth-key">○ private reference</span></div>'
+            '<div class="animation-legend"><span class="identity-key">Colour = object identity</span>'
+            '<span class="model-key">● filled / solid = model</span>'
+            '<span class="truth-key">○ open / dashed = private reference</span></div>'
             f'<p class="animation-events">Events: {_escape(" · ".join(event_labels) or "none")}</p>'
             '<div class="animation-controls">'
             f'<button type="button" data-animation-toggle aria-label="Pause {_escape(animation.get("label", "example"))} animation">Pause</button>'
@@ -1307,6 +1308,27 @@ def _summary_section(
         if isinstance(horizon, Mapping)
         else []
     )
+    recovery_horizon = summary.horizon_curves.get("recovery_position_rmse_m", {})
+    recovery_horizon_points = (
+        [(f"{key}s", float(value)) for key, value in recovery_horizon.items()]
+        if isinstance(recovery_horizon, Mapping)
+        else []
+    )
+    position_chart = (
+        _svg_line_chart(
+            recovery_horizon_points,
+            title="Position RMSE through observation gap and recovery",
+            x_label="Elapsed sequence time (s)",
+            y_label="Position RMSE (m)",
+        )
+        if recovery_horizon_points
+        else _svg_line_chart(
+            horizon_points,
+            title="Position RMSE across horizon",
+            x_label="Prediction horizon (s)",
+            y_label="Position RMSE (m)",
+        )
+    )
     velocity_horizon = summary.horizon_curves.get("candidate_velocity_rmse_mps", {})
     velocity_horizon_points = (
         [(f"{key}s", float(value)) for key, value in velocity_horizon.items()]
@@ -1358,7 +1380,7 @@ def _summary_section(
       <article><h2>Uncertainty</h2><p class="metric">{coverage_text}</p><p>Observed nominal-90% coverage range</p></article>
       <article><h2>Planning parity</h2><p class="metric">{_escape(summary.planning.get("serial_vectorized_winner_parity", "—"))}</p><p>Maximum cost difference {_format_number(summary.planning.get("maximum_cost_difference"))}</p></article>
     </section>
-    <section class="grid two"><article><h2>Capability coverage</h2>{_factor_table(summary)}</article><article><h2>Horizon error</h2>{_svg_line_chart(horizon_points, title="Position RMSE across horizon", x_label="Prediction horizon (s)", y_label="Position RMSE (m)")}{velocity_chart}{orientation_chart}</article></section>
+    <section class="grid two"><article><h2>Capability coverage</h2>{_factor_table(summary)}</article><article><h2>Horizon error</h2>{position_chart}{velocity_chart}{orientation_chart}</article></section>
     {_parameter_convergence_section(summary)}
     <section><h2>Factor performance</h2>{_factor_metric_matrix(summary)}</section>
     <section><h2>Physical behavior</h2>{_heatmap(summary, metric="current_position_rmse_m", title="Current-position RMSE (m) by object count, contact, and membership", lower_is_better=True)}{_heatmap(summary, metric="uncertainty_90_coverage", title="90% uncertainty coverage by object count, contact, and membership", lower_is_better=True, ideal_value=0.90)}</section>
@@ -1392,7 +1414,7 @@ def _summary_section(
 
 _STYLE = """
 :root{color-scheme:dark;--bg:#0b1017;--panel:#141c27;--muted:#91a0b5;--ink:#f5f7fb;--accent:#69d6c5;--line:#344154}*{box-sizing:border-box}body{margin:0;background:radial-gradient(circle at top right,#172a37,var(--bg) 42%);color:var(--ink);font:14px/1.45 ui-sans-serif,system-ui,sans-serif}main{max-width:1180px;margin:auto;padding:28px}.hero{display:flex;justify-content:space-between;align-items:end;border-top:3px solid var(--accent);padding-top:18px}.hero h1{font-size:clamp(26px,4vw,48px);margin:.1em 0}.hero p,.metric+ p{color:var(--muted)}.eyebrow,.tag{font-size:11px;letter-spacing:.08em;text-transform:uppercase}.score{background:var(--panel);padding:18px 22px;border-radius:12px;display:grid;min-width:240px}.score strong,.metric{font-size:25px;color:var(--accent)}.grid{display:grid;gap:14px;margin:14px 0}.two{grid-template-columns:repeat(2,minmax(0,1fr))}.three{grid-template-columns:repeat(3,minmax(0,1fr))}article,section:not(.hero){background:color-mix(in srgb,var(--panel) 94%,transparent);border:1px solid var(--line);border-radius:12px;padding:16px;margin:14px 0;overflow:auto}section.grid{background:none;border:0;padding:0}section.grid article{margin:0}h2{margin:0 0 12px;font-size:16px}h3{font-size:13px;color:var(--muted)}table{border-collapse:collapse;width:100%}th,td{text-align:left;border-bottom:1px solid var(--line);padding:7px}.tag{padding:3px 6px;border-radius:9px;background:#303947}.tag.measured,.tag.passed{background:#165449}.tag.failed{background:#6b2737}.metric-matrix td{font-variant-numeric:tabular-nums}.metric-pass{background:#123d35}.metric-fail{background:#51232e;color:#ffdce4}.metric-info{background:#1c2d3b}.unmeasured{color:var(--muted)}.empty{color:var(--muted);padding:24px;text-align:center;border:1px dashed var(--line);border-radius:8px}svg{width:100%;min-width:520px}svg line{stroke:var(--line)}svg polyline{fill:none;stroke:var(--accent);stroke-width:3}svg circle{fill:var(--accent)}svg text{fill:var(--muted);font-size:11px}.chart-title{fill:var(--ink);font-size:13px}.axis-label{fill:var(--ink);font-size:11px;font-weight:600}.axis-tick,.heatmap-note{fill:var(--muted);font-size:9px}.chart-grid-line{stroke:#253444;stroke-width:1}.cell-label{fill:white;font-size:8px}.cell-value{fill:white;font-size:11px;font-weight:700}dl{display:grid;grid-template-columns:1fr 1fr;gap:7px}dt{color:var(--muted)}dd{margin:0;text-align:right}.animation-intro,.animation-meta,.animation-events{color:var(--muted)}.evidence-source{display:block;margin-top:4px;color:#c9d3df}.animation-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}.animation-card{margin:0!important;padding:12px!important}.animation-card h3{margin:0;color:var(--ink);text-transform:capitalize}.animation-meta{min-height:54px;font-size:12px}.world-animation{display:block;min-width:0;background:#0a1119;border:1px solid var(--line);border-radius:8px}.animation-stage{fill:#0c1621;stroke:#344154}.animation-grid-lines{fill:none;stroke:#253444;stroke-width:1}.animation-axis{fill:#c9d3df;font-size:10px;font-weight:600}.animation-tick{fill:var(--muted);font-size:8px}.animation-trail{fill:none;stroke:var(--object-color);stroke-width:1.3;opacity:.5}.animation-trail-truth{stroke-dasharray:3 3;opacity:.25}.animation-model{fill:var(--object-color);stroke:#081018;stroke-width:1.5}.animation-truth{fill:none;stroke:var(--object-color);stroke-width:2;stroke-dasharray:2 2}.animation-readout{display:flex;justify-content:space-between;gap:8px;min-height:20px;margin-top:5px;font-size:11px}.animation-clock{color:#c9d3df;font-variant-numeric:tabular-nums}.animation-event{color:#f3bc61;font-weight:700}.animation-legend{display:flex;gap:12px;margin-top:3px;color:var(--muted);font-size:12px}.model-key{color:var(--accent)}.truth-key{color:#f3bc61}.animation-events{min-height:38px;font-size:12px}.animation-controls{display:flex;align-items:center;gap:8px}.animation-controls button{border:1px solid var(--line);border-radius:7px;background:#1c2d3b;color:var(--ink);padding:5px 11px;cursor:pointer}.animation-controls button:hover{border-color:var(--accent)}.animation-controls input{min-width:72px;flex:1;accent-color:var(--accent)}.run-list a{color:var(--accent)}.run-ledger summary{cursor:pointer;color:#c9d3df}.notice{border-left:3px solid #f3bc61;padding-left:10px;color:var(--muted)}footer{color:var(--muted);padding:20px 0}@media(max-width:900px){.animation-grid{grid-template-columns:1fr}}@media(max-width:760px){.two,.three{grid-template-columns:1fr}.hero{display:block}.score{margin-top:12px}}@media(prefers-reduced-motion:reduce){.animation-controls button{outline:1px solid var(--muted)}}
-.table-note{color:var(--muted);font-size:12px}.planning-slices,.run-ledger{margin-top:14px}.planning-slices summary,.run-ledger summary{cursor:pointer;color:#c9d3df;font-weight:600}.animation-orientation{stroke:var(--object-color);stroke-width:2.2;stroke-linecap:round}.animation-orientation-truth{stroke-dasharray:2 2;opacity:.8}.animation-contact{fill:none;stroke:#f3bc61;stroke-width:2;opacity:.95}
+.table-note{color:var(--muted);font-size:12px}.planning-slices,.run-ledger{margin-top:14px}.planning-slices summary,.run-ledger summary{cursor:pointer;color:#c9d3df;font-weight:600}.identity-key,.model-key,.truth-key{color:var(--muted)}.animation-orientation{stroke:var(--object-color);stroke-width:2.2;stroke-linecap:round}.animation-orientation-truth{stroke-dasharray:2 2;opacity:.8}.animation-contact{fill:none;stroke:#f3bc61;stroke-width:2;opacity:.95}
 """
 
 

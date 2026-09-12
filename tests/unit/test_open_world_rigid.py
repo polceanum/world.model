@@ -4,6 +4,7 @@ import inspect
 import math
 from dataclasses import replace
 
+import pytest
 import torch
 
 from world_model.belief import RigidPrimitive
@@ -102,7 +103,12 @@ def _cameras() -> tuple[CameraFrame, ...]:
     return tuple(frames)
 
 
-def _discovery(state: RigidBodyState, timestamp: float = 0.0) -> OpenWorldRigidFrame:
+def _discovery(
+    state: RigidBodyState,
+    timestamp: float = 0.0,
+    *,
+    segmentation_mode: str = "chromatic",
+) -> OpenWorldRigidFrame:
     cameras = _cameras()
     rendered = [render_rigid_bodies(state, camera, IMAGE_SIZE) for camera in cameras]
     return discover_rigid_objects_from_rgbd(
@@ -111,6 +117,7 @@ def _discovery(state: RigidBodyState, timestamp: float = 0.0) -> OpenWorldRigidF
         torch.stack([item.world_from_camera for item in cameras]),
         torch.stack([item.intrinsics for item in cameras]),
         timestamp=timestamp,
+        segmentation_mode=segmentation_mode,
     )
 
 
@@ -160,6 +167,23 @@ def test_public_discovery_has_no_prototype_or_private_identity_input() -> None:
     assert torch.all(distances.min(dim=1).values < 0.04)
 
 
+def test_depth_geometry_splits_same_appearance_touching_silhouettes() -> None:
+    state = _state()
+    positions = state.position.clone()
+    positions[0] = positions.new_tensor([-0.31, -0.46, 4.0])
+    positions[1] = positions.new_tensor([0.31, -0.46, 4.0])
+    shared_albedo = torch.full_like(state.albedo, 0.54)
+    touching = replace(state, position=positions, albedo=shared_albedo)
+
+    discovered = _discovery(touching, segmentation_mode="depth_geometry")
+
+    assert len(discovered.objects) == 3
+    observed = torch.stack([item.geometry.world_position for item in discovered.objects])
+    distances = torch.cdist(observed, touching.position)
+    assert len(torch.unique(distances.argmin(dim=1))) == 3
+    assert torch.all(distances.min(dim=1).values < 0.06)
+
+
 def test_tracker_recovers_id_and_angular_velocity_after_one_missing_frame() -> None:
     tracker = OpenWorldRigidTracker(max_missed_steps=2)
     first = tracker.update(OpenWorldRigidFrame(0.0, (_detection((0.0, 0.0, 4.0), 0.0),)))
@@ -170,6 +194,52 @@ def test_tracker_recovers_id_and_angular_velocity_after_one_missing_frame() -> N
     assert not missing[0].observed and missing[0].missed_steps == 1
     assert recovered[0].observed and recovered[0].missed_steps == 0
     assert abs(float(recovered[0].angular_velocity[2]) - 1.0) < 0.08
+
+
+def test_geometry_only_tracker_recovers_ids_after_eight_missing_frames() -> None:
+    tracker = OpenWorldRigidTracker(
+        max_missed_steps=8,
+        appearance_weight=0.0,
+        geometry_weight=0.75,
+        primitive_weight=0.0,
+    )
+    first = tracker.update(
+        OpenWorldRigidFrame(
+            0.0,
+            (
+                _detection((-0.60, 0.0, 4.0), 0.0),
+                _detection((0.60, 0.0, 4.0), 0.0),
+            ),
+        )
+    )
+    second = tracker.update(
+        OpenWorldRigidFrame(
+            0.05,
+            (
+                _detection((-0.55, 0.0, 4.0), 0.02),
+                _detection((0.60, 0.0, 4.0), -0.01),
+            ),
+        )
+    )
+    expected_ids = tuple(item.object_id for item in second)
+    hidden = ()
+    for step in range(2, 10):
+        hidden = tracker.update(OpenWorldRigidFrame(0.05 * step, ()))
+    recovered = tracker.update(
+        OpenWorldRigidFrame(
+            0.50,
+            (
+                _detection((-0.10, 0.0, 4.0), 0.20),
+                _detection((0.60, 0.0, 4.0), -0.10),
+            ),
+        )
+    )
+
+    assert tuple(item.object_id for item in first) == expected_ids
+    assert all(item.missed_steps == 8 and not item.observed for item in hidden)
+    assert tuple(item.object_id for item in recovered) == expected_ids
+    assert all(item.observed and item.missed_steps == 0 for item in recovered)
+    assert float(recovered[0].velocity[0]) == pytest.approx(1.0)
 
 
 def test_belief_uses_explicit_neutral_parameter_priors() -> None:

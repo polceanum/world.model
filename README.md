@@ -65,6 +65,11 @@ plane containing the most motion, provides play, replay, and scrubbing controls,
 and remains inline SVG. No GIF, video, image directory, RGB-D frames, or
 external asset is retained.
 
+Animation colour denotes persistent object identity. Filled points and solid
+paths denote model estimates; open points and dashed paths denote the private
+reference opened after inference. This deliberately avoids using role colours
+that could falsely imply correspondence or accuracy.
+
 Reproduce the compact impact-first pilot or inspect its deterministic manifest:
 
 ```bash
@@ -89,6 +94,8 @@ conda run -n orpheus python scripts/run_integrated_capability.py --dry-run
 conda run -n orpheus python scripts/run_integrated_capability.py
 conda run -n orpheus python scripts/run_open_world_six_dof_capability.py --dry-run
 conda run -n orpheus python scripts/run_open_world_six_dof_capability.py
+conda run -n orpheus python scripts/run_open_world_touching_recovery.py --dry-run
+conda run -n orpheus python scripts/run_open_world_touching_recovery.py
 ```
 
 The first gate spans all N=7/8 separated, action, contact, lifecycle,
@@ -102,6 +109,12 @@ physical parameters from public evidence, predicts off-centre rotational
 contact against an independent simulator, and plans toward terminal world
 pose. These runs retain only compact summaries, portable HTML, and bounded
 vector keyframes.
+
+The final command adds a geometry-only N=3 gate with identical object albedo,
+touching silhouette support, an eight-frame complete RGB-D gap, persistent-ID
+recovery, and required post-recovery K=8/K=32 planning. It does not claim that
+featureless flush unions are observable or that IDs survive hidden forces
+during a gap.
 
 The pre-six-DoF impact-first implementation passed the complete repository
 gate at `2457 passed, 16 skipped` (the skips require unavailable MPS hardware).
@@ -162,7 +175,9 @@ The next scale-up sequence is documented in
 4/8-second behavior, action-sequence replanning, a backward-compatible rigid-
 geometry behavior, complete N=7/8 RGB-D qualification, and the integrated
 mixed-rigid bridge are now implemented. N=12/16 remain explicitly state-only;
-the next visual expansion must earn its own observability and efficiency gates.
+appearance-independent touching separation and eight-frame recovery are also
+implemented. The next visual expansion is multi-contact six-DoF N=4--8 and
+must earn its own observability and efficiency gates.
 
 The first vertical slice uses a deterministic synthetic RGB sphere world with
 collisions, occlusion, camera motion, and variable drag/restitution. Simulator

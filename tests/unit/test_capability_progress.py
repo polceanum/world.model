@@ -474,7 +474,9 @@ def test_dashboard_keeps_three_lightweight_vector_animations_from_latest_evidenc
     assert "Observed tracking examples" in content
     assert "Two-second open-loop forecasts" in content
     assert content.count('class="animation-card"') == 6
-    assert "● model estimate" in content and "○ private reference" in content
+    assert "Colour = object identity" in content
+    assert "● filled / solid = model" in content
+    assert "○ open / dashed = private reference" in content
     assert "World X (m)" in content and "World Y (m)" in content
     assert "no contact" in content and "static membership" in content
     assert "known action @ 1.40 s" in content
@@ -489,6 +491,25 @@ def test_dashboard_keeps_three_lightweight_vector_animations_from_latest_evidenc
     assert "<video" not in content and "<img" not in content
     assert "data:image" not in content
     assert len(content.encode("utf-8")) < 250_000
+
+
+def test_recovery_curve_names_observation_gap_axes() -> None:
+    summary = replace(
+        _summary("long-recovery"),
+        horizon_curves={
+            "recovery_position_rmse_m": {
+                "0.00": 0.002,
+                "0.40": 0.032,
+                "0.45": 0.004,
+            }
+        },
+    )
+
+    content = render_summary_html(summary)
+
+    assert "Position RMSE through observation gap and recovery" in content
+    assert "Elapsed sequence time (s)" in content
+    assert "Prediction horizon (s)" not in content
 
 
 def test_long_horizon_animation_uses_declared_endpoint_and_frame_rate() -> None:

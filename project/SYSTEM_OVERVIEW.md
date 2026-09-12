@@ -25,10 +25,18 @@ derive metric pose and angular velocity. Known isolated interventions,
 contact-free motion, and observed collisions update bounded mass, drag,
 restitution, and friction estimates from neutral priors.
 
+An opt-in appearance-independent extension partitions separable touching depth
+silhouettes from public geometry, groups them across views, and tracks them by
+predicted metric state and shape scale. Its N=3 gate uses identical albedo,
+disables appearance and primitive-label association cues, and retains all IDs
+through eight missing RGB-D frames before requiring successful downstream
+planning. Colour in the dashboard consequently represents identity; model
+versus reference is represented by fill and line style.
+
 An opt-in six-DoF executor adds off-centre contact, angular impulse, frictional
 torque, and orientation propagation while preserving exact legacy sphere
 behavior. The resulting belief supports downstream terminal world-pose
-planning with exact serial/vectorized winner parity. This is currently an N=2,
-calibrated-camera, short-recovery sphere/box claim; category-independent
-touching-instance separation, longer recovery, and multi-contact visual scale
-remain explicit next steps.
+planning with exact serial/vectorized winner parity. The newest extension adds
+a bounded N=3, calibrated-camera, same-appearance touching and eight-frame
+force-free recovery claim. Flush unobservable unions, gaps containing hidden
+forces, and multi-contact visual scale at N=4--8 remain explicit next steps.

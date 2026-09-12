@@ -52,6 +52,18 @@ Persistent IDs, short-gap recovery, neutral parameter priors, and all temporal
 history belong to the runtime. No prototype, simulator instance map, semantic
 class, private object ID, or true physical parameter crosses that boundary.
 
+Open-world discovery now has two explicit segmentation modes. The legacy
+`chromatic` default preserves existing behavior. The opt-in `depth_geometry`
+mode finds medial peaks in connected valid-depth silhouettes, merges nearby
+raster fragments, partitions separable lobes, and groups each view's unordered
+supports with rectangular Hungarian assignment. It skips unresolved merged
+views rather than contaminating an established multi-view object fit and ranks
+public support subsets by normalized geometry residual. Temporal tracking
+weights appearance, metric shape/scale, and primitive agreement separately;
+zero appearance/primitive weights provide a tested geometry-only path. A
+featureless one-peak union remains one observed object because the runtime has
+no evidence for a hidden split.
+
 Six-degree-of-freedom contact is opt-in inside `DynamicsModel`. The new resolver
 adds public-geometry contact points, analytic sphere/box inertia, point
 velocities, Coulomb tangential impulse, angular impulse, and quaternion pose

@@ -1,5 +1,30 @@
 # Tasks
 
+## Appearance-independent touching/recovery — completed 2026-09-11
+
+- [x] Correct plot semantics so colour denotes persistent identity while
+  fill/line style distinguishes model estimates from private references.
+- [x] Add opt-in geometry-only public RGB-D support partitioning that can split
+  touching same-colour silhouette lobes without prototypes or semantic labels.
+- [x] Replace greedy cross-view grouping with bounded Hungarian association and
+  select public multi-view metric fits by normalized residual.
+- [x] Make appearance, metric-geometry, and primitive association weights
+  explicit; qualify with appearance and primitive cues disabled.
+- [x] Preserve all three runtime-owned IDs through an eight-frame complete
+  RGB-D gap and recover metric position and velocity without duplicate IDs.
+- [x] Require post-recovery K=8/K=32 action selection with exact private winner,
+  zero regret, serial/vectorized parity, and source-belief immutability.
+- [x] Publish a 62,806-byte summary/report/vector-animation run with no retained
+  input frames, raster media, video, or raw trace.
+- [x] Separate fresh-process governed latency adjudication from long-lived
+  functional tests; retain median-of-three measurements and strict CLI gates.
+- [x] Pass the exact final-tree gate: Ruff, format, compileall, diff hygiene,
+  focused capability tests, strict governed execution, and `2475 passed, 16
+  skipped` repository-wide.
+- [ ] Freeze and implement the next gate: visual N=4--8 simultaneous/chained
+  six-DoF contacts with changing membership, partial visibility, known action
+  sequences, and downstream planning.
+
 ## Open-world six-DoF behavior — completed 2026-09-11
 
 - [x] Remove predeclared appearance prototypes and private instance/identity

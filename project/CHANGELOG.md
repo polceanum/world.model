@@ -2,6 +2,27 @@
 
 ## Unreleased — 2026-07-28
 
+### 2026-09-11 appearance-independent touching and recovery
+
+- Corrected the dashboard's trajectory legend: colour now explicitly denotes
+  persistent object identity, while filled/solid and open/dashed marks denote
+  model and private reference respectively.
+- Added opt-in geometry-only RGB-D discovery using public depth-support medial
+  peaks, calibrated metric fitting, per-view Hungarian grouping, and residual-
+  ranked multi-view support. The legacy chromatic path remains unchanged.
+- Made appearance, metric-geometry, and primitive temporal-association weights
+  configurable and added geometry-only eight-frame recovery coverage.
+- Added a compact N=3 same-albedo touching/recovery qualification with required
+  post-recovery K=8/K=32 planning and a purpose-labelled recovery-error chart.
+- Published passing run `20260911-open-world-touching-recovery-v1` at 62,806
+  bytes with no retained input frames or raster/video media.
+- Made fresh-process CLI execution authoritative for absolute planning latency
+  and median-of-three timings. In-process tests retain full numerical planning
+  assertions without order-dependent wall-clock rejection.
+- The exact final tree passes Ruff, Ruff format, compileall, diff hygiene,
+  focused capability tests, strict governed execution, and the complete `2475
+  passed, 16 skipped` repository gate in `1:51:40`.
+
 ### 2026-09-11 open-world six-DoF behavior
 
 - Added prototype-free calibrated RGB-D rigid discovery and short-horizon

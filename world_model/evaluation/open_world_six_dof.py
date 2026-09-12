@@ -611,7 +611,10 @@ def _animation(
 
 
 def _gate_failures(
-    values: dict[str, Any], planning: tuple[PosePlanningResult, ...]
+    values: dict[str, Any],
+    planning: tuple[PosePlanningResult, ...],
+    *,
+    enforce_latency: bool,
 ) -> tuple[str, ...]:
     failures: list[str] = []
     limits = {
@@ -664,14 +667,19 @@ def _gate_failures(
             and item.pre_action_invariant
             and item.action_target_isolated
             and item.source_unchanged
-            and item.latency_seconds <= latency_limit
+            and (not enforce_latency or item.latency_seconds <= latency_limit)
         ):
             failures.append(f"pose_planning_k{item.candidate_count}")
     return tuple(failures)
 
 
-def run_open_world_six_dof_capability() -> OpenWorldSixDofResult:
-    """Run the prototype-free perception-to-pose-planning qualification."""
+def run_open_world_six_dof_capability(*, enforce_latency: bool = True) -> OpenWorldSixDofResult:
+    """Run the prototype-free perception-to-pose-planning qualification.
+
+    Disable latency adjudication only for in-process functional tests whose
+    inherited PyTorch thread-pool and thermal state are not a controlled timing
+    environment. Governed runners always leave it enabled.
+    """
 
     started = time.perf_counter()
     tracker = OpenWorldRigidTracker(max_missed_steps=2)
@@ -850,7 +858,7 @@ def run_open_world_six_dof_capability() -> OpenWorldSixDofResult:
         and torch.equal(source.objects.orientation, belief.objects.orientation),
         "finite": finite,
     }
-    failures = _gate_failures(values, planning)
+    failures = _gate_failures(values, planning, enforce_latency=enforce_latency)
     return OpenWorldSixDofResult(
         schema=OPEN_WORLD_SIX_DOF_SCHEMA,
         manifest_sha256=capability_manifest_sha256(),

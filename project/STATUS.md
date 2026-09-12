@@ -1,5 +1,60 @@
 # Project status
 
+## Appearance-independent touching/recovery completion — 2026-09-11
+
+The first open-world generalization frontier is implemented and qualified in
+`runs/20260911-open-world-touching-recovery-v1`. An opt-in public
+`depth_geometry` path now separates touching depth support from silhouette
+medial structure, reconciles proposals across calibrated views with Hungarian
+assignment, and fits metric sphere/box geometry without a prototype, semantic
+label, instance map, or private ID. The legacy chromatic discovery path and its
+outputs remain the default compatibility behavior.
+
+The governed N=3 scene gives two oriented boxes and one sphere exactly the same
+RGB albedo. The front-view depth image contains only two connected components,
+while geometry-only discovery recovers three objects. Temporal association runs
+with appearance and primitive-label weights both zero. All runtime-owned IDs
+survive an eight-frame complete RGB-D gap without duplication; maximum
+force-free gap position RMSE is `0.034052 m`, and recovered position/velocity
+RMSE is `0.003109 m`/`0.026675 m/s`.
+
+Required post-recovery K=8/K=32 planning selects the private oracle winner with
+zero regret and exact serial/vectorized cost agreement. Measured vectorized
+median latencies are `0.364/0.542 s` against `0.50/0.65 s` ceilings; maximum
+discovery latency is `0.0666 s` and learned weights remain `12,984` bytes. The
+complete run is `62,806` bytes and
+retains only JSON, HTML, and inline vector evidence—no RGB-D frames, raster
+images, or video.
+
+Absolute planning latency is adjudicated only by the fresh-process governed
+runner. In-process functional tests still execute and validate both planners,
+but do not promote or reject on wall time because inherited PyTorch thread-pool
+and thermal state made the two-hour repository suite order-dependent. The
+governed runner uses median-of-three timing and keeps the strict gate enabled.
+Those controls are bound into manifest
+`27af27fcbca0739c8fe1a1c98a194824f1e56bb686774291d096af780f1ab9ea`.
+
+The dashboard legend is also corrected to match the actual plots: colour means
+persistent object identity, filled/solid marks mean model state, and
+open/dashed marks mean the post-inference private reference. A dedicated curve
+now names elapsed sequence time and position RMSE through the gap and recovery.
+
+This remains a bounded claim. The new partition requires separable silhouette
+lobes or metric depth structure; a flush featureless union is intentionally not
+invented into multiple objects. The gap is force-free, cameras are calibrated,
+and full multi-contact six-DoF visual qualification at N=4--8 remains the next
+major scale milestone.
+
+The first complete repository run exposed only order-dependent wall-clock
+failures in the existing and new planning qualifications after 2,473 other
+tests passed. Reproducing the initialized eight-thread state confirmed that
+planner outputs were still exact while timing changed materially. After making
+fresh governed execution authoritative for latency, the exact final tree
+passes Ruff, Ruff format, compileall, diff hygiene, focused capability tests,
+the strict milestone runner, and the complete suite: `2475 passed, 16 skipped`
+in `1:51:40`. The 13 warnings are the existing PyTorch intra-op thread-setting
+notice in dynamic-set execution.
+
 ## Open-world six-DoF capability completion — 2026-09-11
 
 The next significant behavior scale-up is implemented and qualified in
