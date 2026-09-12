@@ -36,7 +36,14 @@ versus reference is represented by fill and line style.
 An opt-in six-DoF executor adds off-centre contact, angular impulse, frictional
 torque, and orientation propagation while preserving exact legacy sphere
 behavior. The resulting belief supports downstream terminal world-pose
-planning with exact serial/vectorized winner parity. The newest extension adds
-a bounded N=3, calibrated-camera, same-appearance touching and eight-frame
-force-free recovery claim. Flush unobservable unions, gaps containing hidden
-forces, and multi-contact visual scale at N=4--8 remain explicit next steps.
+planning with exact serial/vectorized winner parity. Independent candidate rows
+now share one batched mixed-rigid contact pass while every scene keeps its
+deterministic pair order. A state-first N=4/N=6/N=8 gate qualifies chained,
+repeated, and simultaneous contact plus required K=8/K=32 planning; it does not
+claim that the initial state came from perception.
+
+The visual path separately adds a bounded N=3, calibrated-camera,
+same-appearance touching and eight-frame force-free recovery claim. The next
+gate must combine public RGB-D discovery, changing membership, partial
+visibility, and the batched multi-contact executor at N=4--8. Flush
+unobservable unions and gaps containing hidden forces remain explicit limits.

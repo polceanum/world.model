@@ -2,6 +2,30 @@
 
 ## Unreleased — 2026-07-28
 
+### 2026-09-12 batched multi-contact six-DoF scale
+
+- Fast-forwarded the verified impact/open-world milestone stack onto local
+  `main` and continued the next scale milestone there.
+- Vectorized six-DoF mixed-rigid contact resolution across independent batch
+  and planning-candidate rows while preserving lexicographic pair order within
+  each scene and exact legacy all-sphere behavior.
+- Added a deterministic state-first N=4/N=6/N=8 qualification with three known
+  actions, chained/repeated/simultaneous contacts, independent reference
+  physics, and strict position/velocity/orientation/contact/latency gates.
+- Added required N=8 K=8/K=32 downstream planning with exact serial winner and
+  cost parity. The final strict run measures `7.61x`/`28.12x` candidate-batch
+  speedup and retains planning outside the training loss.
+- Corrected dashboard action timing and causal captions; added projected box
+  pose spokes, specialized planning latency/speedup, N=8 rollout latency, and
+  explicit state-first provenance. Candidate/incumbent accuracy is reported as
+  equal because this is an execution optimization, not a checkpoint promotion.
+- Published `runs/20260912-multicontact-six-dof-v1` at `450,359` bytes with
+  three inline N=4/N=6/N=8 vector animations and no retained raster, video, or
+  per-frame artifacts. Integrated-browser inspection verified the result.
+- The exact final tree passes Ruff, Ruff format, compileall, diff hygiene,
+  focused compatibility tests, the strict governed runner, and the complete
+  `2476 passed, 16 skipped` repository gate in `1:16:47`.
+
 ### 2026-09-11 appearance-independent touching and recovery
 
 - Corrected the dashboard's trajectory legend: colour now explicitly denotes

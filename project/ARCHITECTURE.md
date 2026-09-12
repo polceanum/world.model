@@ -72,6 +72,15 @@ exactly to the established sphere resolver. Qualification compares mixed-rigid
 rollouts with a separately implemented simulator oracle rather than another
 call into the production resolver.
 
+Multi-contact six-DoF execution preserves deterministic lexicographic pair
+order inside each scene but batches the same pair across independent belief or
+planning-candidate rows. This retains sequential impulse semantics for contact
+chains while removing the outer Python batch loop. The serial counterfactual
+planner remains the exact action/winner oracle, and the all-sphere path still
+dispatches unchanged. The N=4/N=6/N=8 bridge is state-first by design: a
+controlled oracle supplies only the initial belief, then production dynamics
+receives known actions and no later simulator state.
+
 Online rigid identification remains an evidence gate rather than a hidden
 optimizer: isolated known impulses identify mass, contact-free decay identifies
 drag, and observed pre/post contact motion identifies effective restitution and

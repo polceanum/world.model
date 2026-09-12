@@ -445,6 +445,29 @@ def _merge_latest_factor_evidence(
         ("forecast_animations", "forecast_animation_source_run"),
     ):
         if field == "forecast_animations":
+            latest_values = latest.qualitative.get(field)
+            if latest.qualitative.get("forecast_gallery_mode") == "latest_run" and isinstance(
+                latest_values, list
+            ):
+                latest_gallery: list[dict[str, Any]] = []
+                latest_keys: set[tuple[str, str]] = set()
+                for animation in latest_values:
+                    if not isinstance(animation, Mapping):
+                        continue
+                    key = (
+                        str(animation.get("episode", "")),
+                        str(animation.get("label", "")),
+                    )
+                    if key in latest_keys:
+                        continue
+                    latest_gallery.append({**dict(animation), "source_run": latest.run_id})
+                    latest_keys.add(key)
+                    if len(latest_gallery) == 3:
+                        break
+                if latest_gallery:
+                    qualitative[field] = latest_gallery
+                    animation_sources[source_field] = latest.run_id
+                    continue
             collected: list[dict[str, Any]] = []
             source_runs: list[str] = []
             seen_from_newer: set[tuple[str, str]] = set()
@@ -586,6 +609,8 @@ def _planning_table(summary: CapabilityRunSummary) -> str:
                 f"<td>{_format_number(values.get('median_normalized_regret'))}</td>"
                 f"<td>{_format_number(values.get('goal_success'))}</td>"
                 f"{replan_cell}"
+                f"<td>{_format_number(values.get('vectorized_latency_seconds'))}</td>"
+                f"<td>{_format_number(values.get('vectorization_speedup'))}</td>"
                 "</tr>"
             )
         task_rows = []
@@ -626,7 +651,8 @@ def _planning_table(summary: CapabilityRunSummary) -> str:
             f"<h3>{heading}</h3>"
             '<p class="table-note">Planning is evaluated downstream only; no winner, ranking, regret, or task-success loss is optimized.</p>'
             "<table><thead><tr><th>Candidates</th><th>Winner accuracy</th>"
-            f"<th>Median regret</th><th>Goal success</th>{aggregate_replan_heading}</tr></thead>"
+            f"<th>Median regret</th><th>Goal success</th>{aggregate_replan_heading}"
+            "<th>Vector latency (s)</th><th>Speedup</th></tr></thead>"
             f"<tbody>{''.join(aggregate_rows)}</tbody></table>{task_table}"
         )
     if not groups:
@@ -719,6 +745,8 @@ def _planning_table(summary: CapabilityRunSummary) -> str:
                     f"<td>{_format_number(values.get('winner_accuracy'))}</td>"
                     f"<td>{_format_number(values.get('median_normalized_regret'))}</td>"
                     f"<td>{_format_number(values.get('goal_success'))}</td>"
+                    f"<td>{_format_number(values.get('vectorized_latency_seconds'))}</td>"
+                    f"<td>{_format_number(values.get('vectorization_speedup'))}</td>"
                     "</tr>"
                 )
             goal = specialized.get("goal", "specialized downstream task")
@@ -728,7 +756,8 @@ def _planning_table(summary: CapabilityRunSummary) -> str:
                 f'<p class="table-note">Source: {_escape(source)}. This bounded task is shown '
                 "separately from the factor-conditioned planning matrix.</p>"
                 "<table><thead><tr><th>Candidates</th><th>Winner accuracy</th>"
-                "<th>Median regret</th><th>Goal success</th></tr></thead>"
+                "<th>Median regret</th><th>Goal success</th><th>Vector latency (s)</th>"
+                "<th>Speedup</th></tr></thead>"
                 f"<tbody>{''.join(specialized_rows)}</tbody></table>"
             )
     return latency_table + aggregate_table + slice_table + specialized_table
@@ -1097,11 +1126,13 @@ def _animation_cards(summary: CapabilityRunSummary) -> str:
     forecast_values = summary.qualitative.get("forecast_animations")
     long_endpoints = []
     has_pose_markers = False
+    has_known_actions = False
     if isinstance(forecast_values, list):
         for animation in forecast_values:
             if not isinstance(animation, Mapping):
                 continue
             has_pose_markers |= animation.get("orientation_markers") is True
+            has_known_actions |= animation.get("known_actions_in_rollout") is True
             endpoint = animation.get("long_horizon_endpoint_s")
             if isinstance(endpoint, (int, float)) and math.isfinite(float(endpoint)):
                 long_endpoints.append(float(endpoint))
@@ -1116,6 +1147,14 @@ def _animation_cards(summary: CapabilityRunSummary) -> str:
             "through analytic pair, floor, and wall contacts. Integrated RGB-D and state-first "
             "evidence remain labelled by source; orientation spokes and contact rings appear "
             "where measured. Compact vector keyframes replace rendered frame directories."
+        )
+    elif has_known_actions:
+        forecast_title = "Two-second causal multi-contact forecasts"
+        forecast_introduction = (
+            "State-first scale rollouts apply each declared future impulse exactly once and "
+            "continue through chained and simultaneous contacts without later observations. "
+            "Filled and open markers share object colours; box orientation spokes expose pose "
+            "error. Compact vector keyframes replace rendered frame directories."
         )
     else:
         forecast_title = "Two-second open-loop forecasts"
@@ -1390,6 +1429,8 @@ def _summary_section(
       <dt>Perception latency</dt><dd>{_format_number(resources.get("perception_latency_seconds"))} s</dd>
       <dt>Six-horizon rollout</dt><dd>{_format_number(resources.get("six_horizon_rollout_seconds"))} s</dd>
       <dt>State-only N=16</dt><dd>{_format_number(_n16_latency(resources))} s</dd>
+      <dt>N=8 multi-contact rollout</dt><dd>{_format_number(resources.get("n8_rollout_latency_seconds"))} s</dd>
+      <dt>K=32 planning speedup</dt><dd>{_format_number(resources.get("k32_vectorization_speedup"))}×</dd>
       <dt>N=8 RGB-D development</dt><dd>{_format_number(n8_probe.get("inference_latency_seconds"))} s</dd>
       <dt>N=8 observed objects</dt><dd>{_format_number(n8_probe.get("observed_active_count"))} / {_format_number(n8_probe.get("object_count"))}</dd>
       <dt>N=8 position RMSE</dt><dd>{_format_number(n8_probe.get("position_rmse_m"))} m</dd>

@@ -51,8 +51,9 @@ Then open `runs/progress/index.html` in any browser (or double-click it).
 The dashboard shows incumbent/candidate score, run trends, physical-cell and
 factor coverage, horizon and uncertainty behavior, K=8/K=32 planning,
 action-sequence replanning, N=8 RGB-D development evidence, N=8/12/16
-state-only scaling, latency/memory/weights/disk usage, bottlenecks, and explicit
-unsupported claims. Current historical reports are adapted read-only. The
+state-only scaling, N=4/6/8 multi-contact six-DoF evidence,
+latency/memory/weights/disk usage, bottlenecks, and explicit unsupported claims.
+Current historical reports are adapted read-only. The
 dashboard merges each family's newest evidence and labels the source run, while
 keeping nominal, factor-conditioned, and state-first evidence distinct.
 Its best, representative, and worst observed trajectories animate the public
@@ -96,6 +97,8 @@ conda run -n orpheus python scripts/run_open_world_six_dof_capability.py --dry-r
 conda run -n orpheus python scripts/run_open_world_six_dof_capability.py
 conda run -n orpheus python scripts/run_open_world_touching_recovery.py --dry-run
 conda run -n orpheus python scripts/run_open_world_touching_recovery.py
+conda run -n orpheus python scripts/run_multicontact_six_dof_scale.py --dry-run
+conda run -n orpheus python scripts/run_multicontact_six_dof_scale.py
 ```
 
 The first gate spans all N=7/8 separated, action, contact, lifecycle,
@@ -110,15 +113,20 @@ contact against an independent simulator, and plans toward terminal world
 pose. These runs retain only compact summaries, portable HTML, and bounded
 vector keyframes.
 
-The final command adds a geometry-only N=3 gate with identical object albedo,
+The touching-recovery command adds a geometry-only N=3 gate with identical object albedo,
 touching silhouette support, an eight-frame complete RGB-D gap, persistent-ID
 recovery, and required post-recovery K=8/K=32 planning. It does not claim that
 featureless flush unions are observable or that IDs survive hidden forces
-during a gap.
+during a gap. The multi-contact command is a separate state-first N=4/N=6/N=8
+scale gate with mixed rigid shapes, three known actions, chained and
+simultaneous contacts, and required N=8 planning. It accelerates independent
+candidate rows while preserving an exact serial oracle; it is not an RGB-D
+qualification.
 
 The pre-six-DoF impact-first implementation passed the complete repository
 gate at `2457 passed, 16 skipped` (the skips require unavailable MPS hardware).
-The expanded final-tree gate is reported in `project/STATUS.md`.
+The expanded multi-contact final tree passes at `2476 passed, 16 skipped`; full
+details are reported in `project/STATUS.md`.
 
 Run or reproduce one streamed physical factor without retaining its episodes:
 
@@ -176,8 +184,10 @@ The next scale-up sequence is documented in
 geometry behavior, complete N=7/8 RGB-D qualification, and the integrated
 mixed-rigid bridge are now implemented. N=12/16 remain explicitly state-only;
 appearance-independent touching separation and eight-frame recovery are also
-implemented. The next visual expansion is multi-contact six-DoF N=4--8 and
-must earn its own observability and efficiency gates.
+implemented. The state-first multi-contact six-DoF N=4--8 executor and planning
+bridge are now qualified. The next visual expansion must combine that executor
+with public RGB-D discovery, changing membership, and partial visibility in the
+same N=4--8 episodes.
 
 The first vertical slice uses a deterministic synthetic RGB sphere world with
 collisions, occlusion, camera motion, and variable drag/restitution. Simulator
@@ -208,6 +218,12 @@ short dropout, identifies mass/drag/restitution/friction online, predicts
 off-centre angular contact, and supports downstream terminal-pose planning.
 Its claim remains sphere/box, calibrated-camera, short-recovery, and N=2; the
 dashboard names those limits explicitly.
+
+The newest state-first bridge scales the mixed-rigid executor to N=4/N=6/N=8
+chained and simultaneous contacts and batches independent planning candidates.
+It preserves exact action selection and costs while measuring `7.61x`/`28.12x`
+K=8/K=32 speedups. This is not a checkpoint promotion or an N=8 perception
+claim; the next milestone joins the already qualified visual and dynamics paths.
 
 The full `OnlineWorldModel` train/evaluate/demo path remains runnable, but old
 one-shot ladders and multi-day campaigns are audit history rather than the

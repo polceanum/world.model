@@ -1,5 +1,44 @@
 # Project status
 
+## Batched multi-contact six-DoF scale bridge — 2026-09-12
+
+The verified impact/open-world result stack has been fast-forwarded onto local
+`main`, and the next dynamics/planning scale bridge is implemented and qualified
+in `runs/20260912-multicontact-six-dof-v1`. Within-scene contact pairs retain
+their established lexicographic resolution order, while independent batch and
+counterfactual-candidate rows execute together. The historical serial planner
+remains the exact oracle.
+
+The deterministic state-first gate covers alternating spheres and oriented
+boxes at N=4, N=6, and N=8 for two seconds. Three known impulses generate every
+adjacent contact pair, repeated impacts, and simultaneous contacts. All three
+counts achieve contact-pair F1 `1.0` with exact first-contact timing. Across the
+gate, maximum position, velocity, and orientation error are `0.005234 m`,
+`0.043886 m/s`, and `3.2282 degrees`. N=8 K=8/K=32 planning selects the private
+oracle winner with zero regret and zero serial/vectorized cost difference.
+Measured vectorized latency is `4.2305/4.5752 s` versus
+`32.2104/128.6381 s` serial, a `7.61x/28.12x` speedup.
+
+This is a dynamics and planning claim, not an N=8 perceptual upgrade. The
+initial belief is explicitly supplied by a controlled state oracle, and
+simulator truth is withheld after initialization. The dashboard shows equal
+candidate/incumbent physical score rather than a false checkpoint promotion;
+it exposes the speedup separately. Its three N=4/N=6/N=8 vector animations use
+object colour only for identity, role fill/line style for model versus private
+reference, box-orientation spokes, corrected action-frame timing, and contact
+markers. Browser inspection confirmed the labels, axes, planning table, and
+gallery. The run is `450,359` bytes and retains no raster, video, or frame tree.
+
+The next capability gate must join this executor to public calibrated RGB-D,
+runtime discovery/identity, visible lifecycle change, and short partial
+visibility at N=4--8 in the same episodes. Existing modules are reused first;
+owner-specific ablations, not an unconditional larger model, decide any change.
+
+The exact final tree passes Ruff, Ruff format, compileall, diff hygiene, focused
+compatibility tests, the strict governed runner, and the complete repository
+suite: `2476 passed, 16 skipped` in `1:16:47`. The 13 warnings are the existing
+dynamic-set PyTorch intra-op thread-setting notice.
+
 ## Appearance-independent touching/recovery completion — 2026-09-11
 
 The first open-world generalization frontier is implemented and qualified in

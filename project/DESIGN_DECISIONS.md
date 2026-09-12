@@ -5775,3 +5775,30 @@ cross-reference was disambiguated.
   rung; the composite RGB-D public `OnlineWorldModel` bridge is next, with no
   capacity scaling. The existing full gate remains
   `1130 passed, 16 skipped in 414.82 s`; no newer full-test claim is made.
+
+## ADR-163 — Batch independent contact rows before integrating the next visual scale gate
+
+- **Date:** 2026-09-12
+- **Status:** accepted and qualified as a state-first scale bridge
+- **Context:** The open-world path demonstrated RGB-D discovery, short recovery,
+  online parameter identification, and six-DoF contact at small cardinality.
+  Scaling that exact contact loop directly into N=8 K=32 planning repeated a
+  Python loop over every independent candidate, making the next integrated
+  visual gate unnecessarily expensive. Fully parallel pair resolution would
+  change sequential impulse semantics within a contact chain.
+- **Decision:** Keep lexicographic pair iteration inside each scene and batch
+  only the independent belief/candidate rows for each pair and plane contact.
+  Preserve exact all-sphere dispatch and retain serial planning as the
+  numerical and winner oracle. Freeze a state-first N=4/N=6/N=8 bridge with
+  alternating spheres/boxes, three known actions, adjacent/repeated/simultaneous
+  contact, two-second pose prediction, and required N=8 K=8/K=32 planning.
+  Label the controlled initial-state oracle explicitly and make no perceptual
+  or checkpoint-promotion claim.
+- **Consequences:** The final gate recovers every adjacent contact pair with F1
+  `1.0`, exact first-contact timing, maximum `0.005234 m` position and `3.2282
+  degree` orientation error. K=8/K=32 action choice and costs exactly match the
+  serial oracle while candidate batching is `7.61x`/`28.12x` faster. The
+  450,359-byte run contains only compact JSON/HTML/manifest evidence. The next
+  milestone must connect public RGB-D discovery, runtime identity/lifecycle,
+  and partial visibility to this executor at N=4--8 before claiming integrated
+  visual scale or moving perception above N=8.

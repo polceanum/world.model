@@ -1,5 +1,29 @@
 # Tasks
 
+## Batched multi-contact six-DoF scale — completed 2026-09-12
+
+- [x] Fast-forward the verified impact/open-world milestone stack onto local
+  `main` without rewriting its history.
+- [x] Vectorize independent mixed-rigid batch/candidate rows while preserving
+  pair order inside every scene and exact legacy all-sphere dispatch.
+- [x] Freeze and pass N=4/N=6/N=8 two-second state-first chains with three
+  known actions, all adjacent pairs, repeated contacts, and simultaneous
+  contacts against an independent six-DoF simulator.
+- [x] Require N=8 K=8/K=32 planning with correct private winner, zero regret,
+  exact serial/vectorized cost parity, source immutability, and at least 5x
+  speedup.
+- [x] Publish one 450,359-byte manifest-scoped run with three compact SVG
+  animation payloads and no raster/video/frame artifacts.
+- [x] Correct dashboard provenance, action-frame timing, candidate/incumbent
+  semantics, pose markers, efficiency fields, and the causal forecast caption;
+  inspect the regenerated result in the integrated browser.
+- [x] Pass Ruff, Ruff format, compileall, diff hygiene, focused compatibility,
+  the strict governed runner, and `2476 passed, 16 skipped` repository-wide.
+- [ ] Freeze the integrated visual-dynamic N=4--8 gate: public calibrated RGB-D
+  discovery, runtime IDs, visible birth/removal, short partial visibility,
+  multi-contact six-DoF known-action prediction, and required planning in the
+  same episodes.
+
 ## Appearance-independent touching/recovery — completed 2026-09-11
 
 - [x] Correct plot semantics so colour denotes persistent identity while
@@ -21,9 +45,8 @@
 - [x] Pass the exact final-tree gate: Ruff, format, compileall, diff hygiene,
   focused capability tests, strict governed execution, and `2475 passed, 16
   skipped` repository-wide.
-- [ ] Freeze and implement the next gate: visual N=4--8 simultaneous/chained
-  six-DoF contacts with changing membership, partial visibility, known action
-  sequences, and downstream planning.
+- [x] Establish the state-first N=4--8 simultaneous/chained six-DoF executor
+  and planning bridge before the integrated visual-dynamic gate.
 
 ## Open-world six-DoF behavior — completed 2026-09-11
 

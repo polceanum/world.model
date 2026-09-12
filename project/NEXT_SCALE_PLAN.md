@@ -236,25 +236,62 @@ K=8/K=32 planning selects the private oracle winner with zero regret and exact
 cost parity in `0.364/0.542 s`. The run occupies `62,806` bytes and retains no
 RGB-D frame, raster image, or video.
 
+## Phase H — Batched multi-contact six-DoF scale bridge
+
+Status: **implemented and passing** in
+`runs/20260912-multicontact-six-dof-v1`.
+
+1. Preserve lexicographic pair resolution inside each scene while vectorizing
+   independent batch and planning-candidate rows. Keep the dense/serial path as
+   the exact numerical and action-selection oracle.
+2. Exercise alternating spheres and oriented boxes at N=4, N=6, and N=8 over
+   two seconds with three known impulses, all adjacent contact pairs, repeated
+   contacts, and simultaneous contacts.
+3. Require bounded position, velocity, orientation, contact attribution and
+   contact-timing error at every cardinality. Keep this explicitly state-first;
+   the initial belief comes from a controlled oracle and truth is withheld
+   after initialization.
+4. Require downstream N=8 K=8/K=32 planning, exact winner and numerical parity,
+   at least 5x vectorization speedup, source-belief immutability, and fresh-
+   process CPU latency gates.
+5. Publish one compact N=4/N=6/N=8 vector gallery with object-identity colours,
+   role fill/line styles, projected box-orientation spokes, action times, and
+   contact markers. Retain no image frames or video.
+
+Every count recovers all adjacent reference pairs with contact-pair F1 `1.0`
+and exact first-contact timing. Maximum position error is `0.005234 m`, maximum
+velocity error is `0.043886 m/s`, and maximum orientation error is `3.2282
+degrees`. K=8/K=32 planning selects the private winner with zero regret and zero
+cost difference. Candidate-row batching is `7.61x`/`28.12x` faster than the
+serial oracle. The final run is `450,359` bytes and retains only JSON, HTML, and
+manifest data.
+
 ## Completion and next frontier
 
-Phases A--G are implemented in order and remain separate regression tiers. No
+Phases A--H are implemented in order and remain separate regression tiers. No
 learned module was widened because the only integrated development failure was
 owned by public geometry/state estimation: public face-plane and algebraic
 sphere fits removed it directly, while Phase G's failure owner was public
-support partitioning and metric association. The next highest-impact frontier
-is multi-contact six-DoF behavior at N=4--8: simultaneous and chained contacts,
-known action sequences, changing membership, and partial visibility in the
-same visual episode. After that passes, visual qualification can move above
-N=8. Flush featureless unions with no separable depth evidence and identity
-recovery through unobserved impulses/collisions remain explicit observability
-limits, not promises for a larger model. A fresh gate must freeze scene
-complexity, contact attribution, planning tasks, and CPU latency before
-implementation.
+support partitioning and metric association. Phase H establishes that the
+six-DoF executor and required planner scale across N=4--8 contact chains, but it
+does not upgrade that state-first result into visual evidence.
+
+The next highest-impact frontier is therefore one integrated visual-dynamic
+gate: initialize N=4--8 mixed rigid scenes from public calibrated RGB-D, carry
+runtime-owned identities through short partial visibility and visible
+birth/removal, and then execute known-action chained/simultaneous contact plus
+required planning through the Phase H batched path. The first implementation
+should reuse existing discovery, lifecycle, parameter identification, and
+contact modules without widening them. Owner ablations must decide whether any
+failure belongs to proposal separation, association/recovery, parameter
+uncertainty, or dynamics. Only then may the smallest owning component change.
+Visual qualification above N=8 follows only after this composite gate passes.
+Flush featureless unions and identity recovery through unobserved impulses or
+collisions remain explicit observability limits.
 
 The expanded implementation gate passed Ruff, Ruff format, compileall, diff
 hygiene, the focused and broad compatibility checks, and the complete
-repository suite: `2475 passed, 16 skipped` in `1:51:40`. The 13 warnings are
+repository suite: `2476 passed, 16 skipped` in `1:16:47`. The 13 warnings are
 the existing dynamic-set PyTorch thread-setting notice. Absolute planning
 latency is separately adjudicated by the strict fresh-process runner bound into
-the Phase G manifest.
+the Phase H manifest.
