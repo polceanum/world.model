@@ -40,6 +40,18 @@ def test_hardening_manifest_and_compact_report_are_versioned(tmp_path: Path) -> 
             }
         },
         forecast_animations=(),
+        visual_accuracy_frontier=(
+            {
+                "object_count": 8,
+                "objects": {
+                    "7": {
+                        "position_m": 0.004,
+                        "velocity_mps": 0.02,
+                        "orientation_degrees": 2.0,
+                    }
+                },
+            },
+        ),
         learned_weight_bytes=12_984,
         evaluation_seconds=1.0,
         gate_failures=(),
@@ -59,6 +71,7 @@ def test_hardening_manifest_and_compact_report_are_versioned(tmp_path: Path) -> 
     assert summary.scores["candidate"]["value"] < summary.scores["incumbent"]["value"]
     assert summary.provenance["paired_accepted_baselines"] is True
     assert summary.selection["promotion_evaluated"] is False
+    assert summary.qualitative["accuracy_frontier"] == list(result.visual_accuracy_frontier)
     report = (run / "report.html").read_text(encoding="utf-8")
     assert "Cross-capability regression envelope" in report
     assert "Protected long-horizon position RMSE" in report
@@ -104,6 +117,7 @@ def test_near_zero_unchanged_baseline_has_neutral_family_score(tmp_path: Path) -
             }
         },
         forecast_animations=(),
+        visual_accuracy_frontier=(),
         learned_weight_bytes=12_984,
         evaluation_seconds=1.0,
         gate_failures=(),

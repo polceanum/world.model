@@ -5864,3 +5864,37 @@ cross-reference was disambiguated.
   not regress. Isolated N=8 rollout time falls roughly in half with identical
   metrics. Historical failures remain visible, trends no longer imply false
   comparability, and the 477,609-byte audit retains no frame media.
+
+## ADR-192 — Treat every runtime object as an accuracy acceptance unit
+
+- **Date:** 2026-09-13
+- **Status:** accepted and accuracy-qualified
+- **Context:** Aggregate N=4/N=6/N=8 RMSE improved while a small number of
+  objects could still carry visibly wrong trajectories. Diagnosis found three
+  cross-cutting causes: an extra independent-oracle substep from adjacent
+  timestamp roundoff, stale pair geometry during sequential mixed-shape
+  resolution, and a low-support final RGB-D fit replacing a stronger public
+  multi-view fit at the causal anchor. None required a broader learned model.
+- **Decision:** Require zero regression for each cardinality's aggregate
+  position, velocity, box orientation, and repeated-contact F1, plus absolute
+  maximum-error gates for every runtime object. Stabilize only near-integral
+  substep ratios using an ulp-scaled tolerance. For public rows with at most
+  `1 mm` position standard deviation, refresh contact geometry and positional
+  projection in the independent solver's lexicographic order; retain the
+  existing simultaneous correction on uncertain rows and choose the policy per
+  batch row. Add opt-in geometry-history reuse only when an earlier same-
+  primitive observation has greater calibrated-view support and a dominating
+  normalized fit, or an equivalent fit whose projected correction is at most
+  `1 mm`. Use public inferred velocity/angular velocity for projection and
+  keep the new path disabled by default.
+- **Consequences:** All 18 visual runtime objects pass maximum `0.015 m`
+  position, `0.075 m/s` velocity, and `6 degree` box-orientation errors. The
+  paired aggregate macro ratio is `0.7835`; every protected capability family
+  and K=8/K=32 planning check passes with exact serial/vectorized agreement.
+  No learned parameters or runtime truth inputs are added. The final strict
+  visual process remains failed on warmed-host latency alone, and its
+  per-object evidence is carried into the dashboard with that provenance
+  instead of being promoted. A manifest-bound `1e-6` relative/`1e-9` absolute
+  comparison tolerance prevents PyTorch execution-order noise from masquerading
+  as an accuracy regression while a twice-tolerance negative control still
+  fails. The compact v3 aggregate result is 476,527 bytes.

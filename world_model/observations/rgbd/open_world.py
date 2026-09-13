@@ -66,6 +66,11 @@ class _Track:
     last_observed_timestamp: float
     observed_positions: list[Tensor]
     observed_orientations: list[Tensor]
+    observed_half_extents: list[Tensor]
+    observed_radii: list[Tensor]
+    observed_primitives: list[int]
+    observed_fit_scores: list[Tensor]
+    observed_support_views: list[int]
     observed_timestamps: list[float]
     age_steps: int = 1
     missed_steps: int = 0
@@ -564,6 +569,18 @@ def _angular_velocity(previous: Tensor, current: Tensor, dt: float) -> Tensor:
     return vector * scale / dt
 
 
+def _geometry_fit_score(geometry: ObservableRigidGeometry) -> Tensor:
+    """Return the observable surface residual normalized by object scale."""
+
+    if int(geometry.primitive) == int(RigidPrimitive.BOX):
+        residual = geometry.box_residual
+        scale = torch.linalg.vector_norm(geometry.half_extents)
+    else:
+        residual = geometry.sphere_residual
+        scale = geometry.radius
+    return residual / scale.clamp_min(1.0e-6)
+
+
 class OpenWorldRigidTracker:
     """Small-set persistent tracker with bounded short occlusion recovery."""
 
@@ -574,6 +591,8 @@ class OpenWorldRigidTracker:
         birth_confirmation_steps: int = 1,
         motion_sample_count: int = 2,
         orientation_outlier_gate_degrees: float | None = None,
+        robust_geometry_aggregation: bool = False,
+        robust_geometry_equal_fit_gate_m: float = 1.0e-3,
         linear_speed_deadzone: float = 0.0,
         angular_speed_deadzone: float = 0.0,
         association_gate: float = 2.0,
@@ -585,6 +604,9 @@ class OpenWorldRigidTracker:
             max_missed_steps < 0
             or birth_confirmation_steps < 1
             or motion_sample_count < 2
+            or not isinstance(robust_geometry_aggregation, bool)
+            or robust_geometry_equal_fit_gate_m < 0.0
+            or not math.isfinite(robust_geometry_equal_fit_gate_m)
             or (
                 orientation_outlier_gate_degrees is not None
                 and orientation_outlier_gate_degrees <= 0.0
@@ -599,6 +621,8 @@ class OpenWorldRigidTracker:
         self.birth_confirmation_steps = birth_confirmation_steps
         self.motion_sample_count = motion_sample_count
         self.orientation_outlier_gate_degrees = orientation_outlier_gate_degrees
+        self.robust_geometry_aggregation = robust_geometry_aggregation
+        self.robust_geometry_equal_fit_gate_m = robust_geometry_equal_fit_gate_m
         self.linear_speed_deadzone = linear_speed_deadzone
         self.angular_speed_deadzone = angular_speed_deadzone
         self.association_gate = association_gate
@@ -658,9 +682,19 @@ class OpenWorldRigidTracker:
         )
         track.observed_positions.append(geometry.world_position.clone())
         track.observed_orientations.append(geometry.orientation.clone())
+        track.observed_half_extents.append(geometry.half_extents.clone())
+        track.observed_radii.append(geometry.radius.clone())
+        track.observed_primitives.append(int(geometry.primitive))
+        track.observed_fit_scores.append(_geometry_fit_score(geometry).clone())
+        track.observed_support_views.append(detection.support_views)
         track.observed_timestamps.append(timestamp)
         track.observed_positions = track.observed_positions[-self.motion_sample_count :]
         track.observed_orientations = track.observed_orientations[-self.motion_sample_count :]
+        track.observed_half_extents = track.observed_half_extents[-self.motion_sample_count :]
+        track.observed_radii = track.observed_radii[-self.motion_sample_count :]
+        track.observed_primitives = track.observed_primitives[-self.motion_sample_count :]
+        track.observed_fit_scores = track.observed_fit_scores[-self.motion_sample_count :]
+        track.observed_support_views = track.observed_support_views[-self.motion_sample_count :]
         track.observed_timestamps = track.observed_timestamps[-self.motion_sample_count :]
         linear_slopes = []
         angular_slopes = []
@@ -719,6 +753,93 @@ class OpenWorldRigidTracker:
             )
             if disagreement_degrees > self.orientation_outlier_gate_degrees:
                 geometry = replace(geometry, orientation=robust_orientation)
+        if self.robust_geometry_aggregation:
+            same_primitive = [
+                index
+                for index, primitive in enumerate(track.observed_primitives)
+                if primitive == int(geometry.primitive)
+            ]
+            maximum_support = max(track.observed_support_views[index] for index in same_primitive)
+            current_index = len(track.observed_positions) - 1
+            selected = [current_index]
+            if maximum_support > detection.support_views:
+                supported = [
+                    index
+                    for index in same_primitive
+                    if track.observed_support_views[index] == maximum_support
+                ]
+                scores = torch.stack([track.observed_fit_scores[index] for index in supported])
+                minimum_score = scores.min()
+                score_tolerance = torch.maximum(
+                    minimum_score,
+                    minimum_score.new_tensor(1.0e-8),
+                )
+                best_supported = [
+                    index
+                    for index in supported
+                    if bool(track.observed_fit_scores[index] <= minimum_score + score_tolerance)
+                ]
+                best_position = torch.stack(
+                    [
+                        track.observed_positions[index]
+                        + velocity * (timestamp - track.observed_timestamps[index])
+                        for index in best_supported
+                    ]
+                ).mean(dim=0)
+                current_score = track.observed_fit_scores[current_index]
+                fit_dominates = bool(minimum_score + score_tolerance < current_score)
+                fit_equivalent = bool((minimum_score - current_score).abs() <= score_tolerance)
+                bounded_shift = bool(
+                    torch.linalg.vector_norm(best_position - geometry.world_position)
+                    <= self.robust_geometry_equal_fit_gate_m
+                )
+                if fit_dominates or (fit_equivalent and bounded_shift):
+                    selected = best_supported
+            projected_positions = torch.stack(
+                [
+                    track.observed_positions[index]
+                    + velocity * (timestamp - track.observed_timestamps[index])
+                    for index in selected
+                ]
+            )
+            robust_position = projected_positions.mean(dim=0)
+            if int(geometry.primitive) == int(RigidPrimitive.BOX):
+                robust_half_extents = torch.stack(
+                    [track.observed_half_extents[index] for index in selected]
+                ).mean(dim=0)
+                robust_radius = torch.linalg.vector_norm(robust_half_extents)
+            else:
+                robust_radius = torch.stack(
+                    [track.observed_radii[index] for index in selected]
+                ).mean()
+                robust_half_extents = robust_radius.expand(3).clone()
+            robust_orientation = geometry.orientation
+            if selected != [current_index] and int(geometry.primitive) == int(RigidPrimitive.BOX):
+                projected_orientations = torch.stack(
+                    [
+                        integrate_quaternion(
+                            track.observed_orientations[index],
+                            angular,
+                            timestamp - track.observed_timestamps[index],
+                        )
+                        for index in selected
+                    ]
+                )
+                signs = torch.where(
+                    (projected_orientations * geometry.orientation).sum(dim=-1, keepdim=True) < 0.0,
+                    -torch.ones_like(projected_orientations[..., :1]),
+                    torch.ones_like(projected_orientations[..., :1]),
+                )
+                robust_orientation = normalize_quaternion(
+                    (projected_orientations * signs).mean(dim=0)
+                )
+            geometry = replace(
+                geometry,
+                world_position=robust_position,
+                orientation=robust_orientation,
+                half_extents=robust_half_extents,
+                radius=robust_radius,
+            )
         track.geometry = geometry
         track.appearance = torch.nn.functional.normalize(
             0.7 * track.appearance + 0.3 * detection.appearance,
@@ -746,6 +867,11 @@ class OpenWorldRigidTracker:
             last_observed_timestamp=timestamp,
             observed_positions=[geometry.world_position.clone()],
             observed_orientations=[geometry.orientation.clone()],
+            observed_half_extents=[geometry.half_extents.clone()],
+            observed_radii=[geometry.radius.clone()],
+            observed_primitives=[int(geometry.primitive)],
+            observed_fit_scores=[_geometry_fit_score(geometry).clone()],
+            observed_support_views=[detection.support_views],
             observed_timestamps=[timestamp],
         )
 

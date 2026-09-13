@@ -24,12 +24,15 @@ from world_model.evaluation.open_world_six_dof import run_open_world_six_dof_cap
 from world_model.evaluation.open_world_touching_recovery import (
     run_open_world_touching_recovery_capability,
 )
-from world_model.evaluation.visual_dynamic_scale import run_visual_dynamic_scale
+from world_model.evaluation.visual_dynamic_scale import (
+    run_visual_dynamic_scale,
+    visual_dynamic_manifest_sha256,
+)
 from world_model.utils.io import atomic_write_text
 from world_model.utils.run_artifacts import inventory_runs, write_run_manifest
 from world_model.visualisation.progress import build_progress_dashboard, write_run_report
 
-CAPABILITY_HARDENING_SCHEMA = "world_model_capability_hardening_v1"
+CAPABILITY_HARDENING_SCHEMA = "world_model_capability_hardening_v3"
 
 _BASELINES = {
     "long_horizon/worst_position_rmse_m": 0.0010364428162574768,
@@ -88,6 +91,7 @@ class CapabilityHardeningResult:
     protected_long_horizon_curve: dict[str, float]
     planning_by_candidate_count: dict[str, dict[str, float]]
     forecast_animations: tuple[dict[str, Any], ...]
+    visual_accuracy_frontier: tuple[dict[str, Any], ...]
     learned_weight_bytes: int
     evaluation_seconds: float
     gate_failures: tuple[str, ...]
@@ -115,6 +119,8 @@ def capability_hardening_manifest_sha256() -> str:
             "multicontact",
             "visual_dynamic",
         ],
+        "visual_dynamic_manifest_sha256": visual_dynamic_manifest_sha256(),
+        "visual_per_object_absolute_gates": True,
         "planning_used_as_training_loss": False,
         "absolute_latency_adjudication": "separate fresh-process source runners",
         "retained_media": False,
@@ -391,6 +397,13 @@ def run_capability_hardening(
         protected_long_horizon_curve=long_curve,
         planning_by_candidate_count=planning,
         forecast_animations=tuple(item.animation for item in visual.scenarios),
+        visual_accuracy_frontier=tuple(
+            {
+                "object_count": item.object_count,
+                "objects": item.per_object_maximum_errors,
+            }
+            for item in visual.scenarios
+        ),
         learned_weight_bytes=learned_bytes,
         evaluation_seconds=time.perf_counter() - started,
         gate_failures=tuple(failures),
@@ -428,15 +441,19 @@ def _summary(
         outcome="qualified_convergence" if result.qualified else "capability_gate_failed",
         source_format=CAPABILITY_HARDENING_SCHEMA,
         configuration={
-            "comparison_protocol": "accepted_behavioral_tiers_v1",
+            "comparison_protocol": "accepted_behavioral_tiers_v3",
             "accuracy_regression_limit": 0.02,
             "visual_n8_worst_slice_improvement_required": True,
             "planning_used_as_training_loss": False,
             "generated_frames_retained": False,
             "absolute_latency_adjudication": "separate fresh-process source runners",
+            "maximum_per_object_position_error_m": 0.015,
+            "maximum_per_object_velocity_error_mps": 0.075,
+            "maximum_per_box_orientation_error_degrees": 6.0,
         },
         provenance={
             "hardening_manifest_sha256": result.manifest_sha256,
+            "visual_dynamic_manifest_sha256": visual_dynamic_manifest_sha256(),
             "paired_accepted_baselines": True,
             "public_visual_runtime_truth_inputs": False,
             "private_references_opened_after_inference": True,
@@ -502,6 +519,7 @@ def _summary(
             "forecast_gallery_mode": "latest_run",
             "animations": [],
             "forecast_animations": list(result.forecast_animations),
+            "accuracy_frontier": list(result.visual_accuracy_frontier),
             "regression_checks": [asdict(item) for item in result.checks],
             "diagnostic_contact_sheets": [],
         },

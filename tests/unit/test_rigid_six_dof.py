@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from dataclasses import replace
+import math
+from dataclasses import fields, replace
 
 import torch
 
@@ -12,6 +13,7 @@ from world_model.simulator import (
     SphereState,
     advance_rigid_bodies_6dof,
 )
+from world_model.simulator.rigid_six_dof import _stable_substep_count
 
 DTYPE = torch.float64
 
@@ -99,6 +101,36 @@ def _model(belief, *, six_dof: bool) -> DynamicsModel:
     return model.eval()
 
 
+def _repeat_belief(belief, count: int):
+    objects = belief.objects.replace(
+        **{
+            field.name: getattr(belief.objects, field.name).repeat(
+                count, *([1] * (getattr(belief.objects, field.name).ndim - 1))
+            )
+            for field in fields(belief.objects)
+        }
+    )
+    camera = belief.camera.replace(
+        **{
+            field.name: getattr(belief.camera, field.name).repeat(
+                count, *([1] * (getattr(belief.camera, field.name).ndim - 1))
+            )
+            for field in fields(belief.camera)
+        }
+    )
+    repeated = {
+        name: getattr(belief, name).repeat(count, *([1] * (getattr(belief, name).ndim - 1)))
+        for name in (
+            "timestamp",
+            "gravity",
+            "global_code",
+            "global_log_variance",
+            "next_object_id",
+        )
+    }
+    return belief.replace(objects=objects, camera=camera, **repeated).validate()
+
+
 def test_six_dof_opt_in_preserves_exact_all_sphere_path() -> None:
     belief = _belief(_rigid_state(box=False))
     ordinary = _model(belief, six_dof=False).rollout(belief, [0.6])
@@ -136,6 +168,23 @@ def test_off_centre_contact_generates_rotation_and_matches_independent_oracle() 
     )
 
 
+def test_uncertain_batch_row_does_not_change_confident_six_dof_row() -> None:
+    belief = _belief(_rigid_state())
+    mixed = _repeat_belief(belief, 2)
+    mixed.objects.fast_log_variance[1, :, :3] = -2.0
+    model = _model(belief, six_dof=True)
+
+    with torch.no_grad():
+        independent = model.rollout(belief, [0.6])
+        batched = model.rollout(mixed, [0.6])
+
+    torch.testing.assert_close(batched.positions[:1], independent.positions, rtol=0.0, atol=0.0)
+    torch.testing.assert_close(batched.velocities[:1], independent.velocities, rtol=0.0, atol=0.0)
+    torch.testing.assert_close(
+        batched.orientations[:1], independent.orientations, rtol=0.0, atol=0.0
+    )
+
+
 def test_six_dof_config_rejects_event_driven_shortcut() -> None:
     belief = _belief(_rigid_state())
     try:
@@ -152,3 +201,25 @@ def test_six_dof_config_rejects_event_driven_shortcut() -> None:
         assert "six-DoF" in str(error)
     else:  # pragma: no cover - defensive assertion
         raise AssertionError("incompatible six-DoF shortcut was accepted")
+
+
+def test_independent_oracle_does_not_add_a_substep_for_clock_roundoff() -> None:
+    state = _rigid_state()
+    config = PhysicsConfig(
+        gravity=(0.0, 0.0, 0.0),
+        bounds=((-4.0, 4.0), (-4.0, 4.0), (-4.0, 4.0)),
+        max_substep=1.0 / 120.0,
+        solver_iterations=2,
+    )
+    exact, exact_events = advance_rigid_bodies_6dof(state, 0.05, config)
+    rounded, rounded_events = advance_rigid_bodies_6dof(
+        state,
+        math.nextafter(0.05, math.inf),
+        config,
+    )
+
+    torch.testing.assert_close(rounded.position, exact.position, rtol=0.0, atol=1.0e-15)
+    torch.testing.assert_close(rounded.velocity, exact.velocity, rtol=0.0, atol=1.0e-15)
+    torch.testing.assert_close(rounded.orientation, exact.orientation, rtol=0.0, atol=1.0e-15)
+    assert torch.equal(rounded_events.pair_collision, exact_events.pair_collision)
+    assert _stable_substep_count(0.05 + 1.0e-8, config.max_substep) == 7

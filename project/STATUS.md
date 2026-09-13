@@ -1,5 +1,62 @@
 # Project status
 
+## Per-object accuracy-frontier hardening — 2026-09-13
+
+The focused accuracy pass is implemented in
+`runs/20260913-worst-slice-hardening-v3`. The manifest-bound aggregate audit
+passes every protected long-horizon, integrated, open-world, recovery,
+multi-contact, public visual, and planning family. Its paired lower-is-better
+macro ratio is `0.7835` against the `1.0000` frozen incumbents, a `21.65%`
+reduction, and all K=8/K=32 planning winners, costs, regrets, and successful
+goals remain exact.
+
+The pass addresses three errors that averages concealed. First, adjacent 20 Hz
+oracle timestamps could round just above six 120 Hz ticks and add a seventh
+reference substep. Second, the mixed six-DoF resolver discovered every contact
+from one stale geometry matrix and applied all positional projections at the
+end, unlike the independent lexicographic solver. Third, a low-support final
+RGB-D view could replace a stronger earlier observable metric fit at the causal
+anchor. The oracle now uses an ulp-aware stable substep count. Confident public
+rows refresh geometry and position in pair order, while uncertain rows retain
+the established simultaneous correction and are isolated per batch row. The
+tracker has an opt-in, support- and residual-gated geometry-history reuse path
+that projects only public observations to the current timestamp. Legacy
+defaults and the exact sphere-only path are preserved; no learned capacity or
+private runtime input was added.
+
+The final public visual measurements are N=4/N=6/N=8 two-second position RMSE
+`0.002199/0.003089/0.002890 m`, velocity RMSE
+`0.002075/0.021918/0.019080 m/s`, box-orientation RMSE
+`0.8655/1.8140/2.8440 degrees`, and repeated-contact F1
+`1.0000/0.9565/0.9268`. More importantly, every one of the 18 runtime objects
+passes its own hard envelope. Worst per-object position is
+`0.00519/0.00968/0.01048 m`, velocity is
+`0.00470/0.06678/0.06740 m/s`, and box orientation is
+`0.9229/3.1143/5.4101 degrees`, below the `0.015 m`, `0.075 m/s`, and `6 degree`
+ceilings at every cardinality.
+
+The strict standalone visual rerun reports all accuracy, lifecycle, contact,
+per-object, and planning checks as passing, but remains correctly labelled
+`capability_gate_failed` because the thermally warmed process exceeded the
+absolute rollout and planning latency ceilings. The aggregate audit is the
+qualified accuracy/invariance result; it does not relabel that timing failure.
+The dashboard carries the per-object frontier with its failed-run provenance,
+uses card metadata to label the embedded forecasts as public RGB-D initialized,
+and preserves identity colours versus filled/open model/reference roles.
+
+The aggregate run is `476,527` bytes; the complete managed run tree is
+`20,271,874` bytes, `7.73%` of the 250 MiB cap, with no retained image tensors,
+frame directories, raster animations, or videos. Browser inspection verified
+the rebuilt dashboard and all three compact N=4/N=6/N=8 forecast cards. The
+focused final-tree suite passes `36` tests in `935.23 s`; Ruff, Ruff format
+across 380 files, compileall, and dashboard generation also pass. A first full
+suite reached `2489 passed, 16 skipped` before exposing an order-dependent
+bit-exact N=8 orientation comparison. The v3 protocol now binds a `1e-6`
+relative/`1e-9` absolute numerical comparison tolerance while preserving every
+physical per-object ceiling; a regression twice that tolerance is rejected.
+The exact final tree passes `2490` tests with `16` expected platform skips and
+13 existing PyTorch thread-setting warnings in `6329.05 s` (`1:45:29`).
+
 ## Cross-capability prediction hardening — 2026-09-13
 
 The prediction stack is hardened in

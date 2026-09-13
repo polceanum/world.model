@@ -46,6 +46,7 @@ def main(argv: list[str] | None = None) -> int:
                         "visual_dynamic",
                     ],
                     "maximum_accuracy_regression": 0.02,
+                    "visual_per_object_absolute_gates": True,
                     "planning_used_as_training_loss": False,
                     "generated_frames_retained": False,
                     "absolute_latency_adjudication": "separate fresh-process source runners",
@@ -60,7 +61,7 @@ def main(argv: list[str] | None = None) -> int:
         checkpoint_path=parsed.checkpoint,
         enforce_latency=parsed.enforce_in_process_latency,
     )
-    default_name = f"{datetime.now(timezone.utc):%Y%m%d}-capability-hardening-v1"
+    default_name = f"{datetime.now(timezone.utc):%Y%m%d}-capability-hardening-v3"
     run_directory = Path(parsed.run_directory or Path("runs") / default_name)
     summary = publish_capability_hardening(result, run_directory=run_directory)
     print(

@@ -48,7 +48,7 @@ from world_model.utils.io import atomic_write_text
 from world_model.utils.run_artifacts import inventory_runs, write_run_manifest
 from world_model.visualisation.progress import build_progress_dashboard, write_run_report
 
-VISUAL_DYNAMIC_SCALE_SCHEMA = "world_model_visual_dynamic_scale_v1"
+VISUAL_DYNAMIC_SCALE_SCHEMA = "world_model_visual_dynamic_scale_v3"
 _COUNTS = (4, 6, 8)
 _DTYPE = torch.float64
 _IMAGE_SIZE = (96, 96)
@@ -56,24 +56,26 @@ _OBSERVATION_DT = 0.05
 _OBSERVATION_FRAMES = 8
 _FORECAST_DT = 0.05
 _FORECAST_SECONDS = 2.0
-_ACCEPTED_VISUAL_BASELINE = {
+_REGRESSION_RELATIVE_NUMERIC_TOLERANCE = 1.0e-6
+_REGRESSION_ABSOLUTE_NUMERIC_TOLERANCE = 1.0e-9
+_CORRECTED_VISUAL_INCUMBENT = {
     4: {
-        "position": 0.0063384447408479745,
-        "velocity": 0.028042441735440335,
-        "orientation": 5.177510973549666,
+        "position": 0.018565059830790497,
+        "velocity": 0.029462298255479635,
+        "orientation": 9.345717344529156,
         "repeated_contact_f1": 0.875,
     },
     6: {
-        "position": 0.009352914348502018,
-        "velocity": 0.09070518811208458,
-        "orientation": 9.278944513978788,
-        "repeated_contact_f1": 0.7560975609756098,
+        "position": 0.012644101811210846,
+        "velocity": 0.0904144513037133,
+        "orientation": 7.498702625732032,
+        "repeated_contact_f1": 0.6987951807228916,
     },
     8: {
-        "position": 0.01378871975459622,
-        "velocity": 0.0555040703509804,
-        "orientation": 9.40562622288037,
-        "repeated_contact_f1": 0.6133333333333333,
+        "position": 0.002889615631152226,
+        "velocity": 0.01907964829955217,
+        "orientation": 2.8440149505784893,
+        "repeated_contact_f1": 0.926829268292683,
     },
 }
 _PALETTE = torch.tensor(
@@ -125,6 +127,9 @@ class VisualDynamicScenarioResult:
     proposal_count_trace: tuple[int, ...]
     belief_count_trace: tuple[int, ...]
     position_curve: dict[str, float]
+    velocity_curve: dict[str, float]
+    orientation_curve_degrees: dict[str, float]
+    per_object_maximum_errors: dict[str, dict[str, float]]
     animation: dict[str, Any]
 
 
@@ -162,6 +167,9 @@ def visual_dynamic_manifest_sha256() -> str:
             "replacement_slot1_frames": [4, 5],
             "moving_calibrated_cameras": 6,
             "orientation_outlier_gate_degrees": 0.5,
+            "robust_geometry_aggregation": True,
+            "robust_geometry_equal_fit_gate_m": 0.001,
+            "linear_speed_deadzone_mps": 0.015,
         },
         "forecast": {
             "horizon_seconds": _FORECAST_SECONDS,
@@ -190,10 +198,15 @@ def visual_dynamic_manifest_sha256() -> str:
         },
         "retained_media": False,
         "hardening": {
-            "maximum_n4_n6_regression": 0.02,
-            "n8_position_ratio": 0.50,
-            "n8_velocity_ratio": 0.50,
-            "n8_orientation_ratio": 0.60,
+            "corrected_oracle_incumbent_regression": 0.0,
+            "relative_numeric_comparison_tolerance": (_REGRESSION_RELATIVE_NUMERIC_TOLERANCE),
+            "absolute_numeric_comparison_tolerance": (_REGRESSION_ABSOLUTE_NUMERIC_TOLERANCE),
+            "per_cardinality_gate": True,
+            "per_object_frontier_reported": True,
+            "maximum_per_object_position_error_m": 0.015,
+            "maximum_per_object_velocity_error_mps": 0.075,
+            "maximum_per_box_orientation_error_degrees": 6.0,
+            "ordered_contact_position_std_max_m": 0.001,
         },
     }
     return hashlib.sha256(
@@ -461,7 +474,8 @@ def _evaluate_scenario(
         birth_confirmation_steps=2,
         motion_sample_count=8,
         orientation_outlier_gate_degrees=0.5,
-        linear_speed_deadzone=0.01,
+        robust_geometry_aggregation=True,
+        linear_speed_deadzone=0.015,
         angular_speed_deadzone=0.5,
         geometry_weight=0.25,
     )
@@ -621,9 +635,10 @@ def _evaluate_scenario(
     model_velocity = prediction.velocities[0]
     position_error = (model_position - truth_position).square().mean(dim=(-2, -1)).sqrt()
     velocity_error = (model_velocity - truth_velocity).square().mean(dim=(-2, -1)).sqrt()
-    orientation_error = quaternion_geodesic_distance(
+    orientation_error_by_object = quaternion_geodesic_distance(
         prediction.orientations[0], truth_orientation
-    ).square().mean(dim=-1).sqrt() * (180.0 / math.pi)
+    ) * (180.0 / math.pi)
+    orientation_error = orientation_error_by_object[:, box_slots].square().mean(dim=-1).sqrt()
     predicted_collision = prediction.auxiliary["pair_collision"][0]
     (
         reference_pairs,
@@ -647,6 +662,35 @@ def _evaluate_scenario(
     position_curve = {
         f"{float(timestamp):.2f}": float(position_error[index])
         for index, timestamp in enumerate(query_times)
+    }
+    velocity_curve = {
+        f"{float(timestamp):.2f}": float(velocity_error[index])
+        for index, timestamp in enumerate(query_times)
+    }
+    orientation_curve = {
+        f"{float(timestamp):.2f}": float(orientation_error[index])
+        for index, timestamp in enumerate(query_times)
+    }
+    position_error_by_object = torch.linalg.vector_norm(
+        model_position - truth_position,
+        dim=-1,
+    )
+    velocity_error_by_object = torch.linalg.vector_norm(
+        model_velocity - truth_velocity,
+        dim=-1,
+    )
+    runtime_ids = belief.objects.object_id[0]
+    per_object_maximum_errors = {
+        str(int(runtime_ids[slot])): {
+            "position_m": float(position_error_by_object[:, slot].max()),
+            "velocity_mps": float(velocity_error_by_object[:, slot].max()),
+            **(
+                {"orientation_degrees": float(orientation_error_by_object[:, slot].max())}
+                if bool((box_slots == slot).any())
+                else {}
+            ),
+        }
+        for slot in range(object_count)
     }
     return (
         VisualDynamicScenarioResult(
@@ -690,6 +734,9 @@ def _evaluate_scenario(
             proposal_count_trace=tuple(proposal_count_trace),
             belief_count_trace=tuple(belief_count_trace),
             position_curve=position_curve,
+            velocity_curve=velocity_curve,
+            orientation_curve_degrees=orientation_curve,
+            per_object_maximum_errors=per_object_maximum_errors,
             animation=_animation(
                 object_count,
                 belief,
@@ -816,8 +863,30 @@ def _gate_failures(
     failures = []
     for item in scenarios:
         prefix = f"n{item.object_count}"
-        baseline = _ACCEPTED_VISUAL_BASELINE[item.object_count]
-        hardening_ratio = 0.50 if item.object_count == 8 else 1.02
+        baseline = _CORRECTED_VISUAL_INCUMBENT[item.object_count]
+        maximum_object_position = max(
+            metrics["position_m"] for metrics in item.per_object_maximum_errors.values()
+        )
+        maximum_object_velocity = max(
+            metrics["velocity_mps"] for metrics in item.per_object_maximum_errors.values()
+        )
+        box_orientation_errors = [
+            metrics["orientation_degrees"]
+            for metrics in item.per_object_maximum_errors.values()
+            if "orientation_degrees" in metrics
+        ]
+        position_tolerance = max(
+            _REGRESSION_ABSOLUTE_NUMERIC_TOLERANCE,
+            baseline["position"] * _REGRESSION_RELATIVE_NUMERIC_TOLERANCE,
+        )
+        velocity_tolerance = max(
+            _REGRESSION_ABSOLUTE_NUMERIC_TOLERANCE,
+            baseline["velocity"] * _REGRESSION_RELATIVE_NUMERIC_TOLERANCE,
+        )
+        orientation_tolerance = max(
+            _REGRESSION_ABSOLUTE_NUMERIC_TOLERANCE,
+            baseline["orientation"] * _REGRESSION_RELATIVE_NUMERIC_TOLERANCE,
+        )
         checks = {
             "proposal_f1": item.proposal_f1 >= 0.95,
             "exact_visible_count": item.exact_visible_count_accuracy >= 0.95,
@@ -838,16 +907,20 @@ def _gate_failures(
             "position": item.maximum_position_rmse_m <= 0.030,
             "velocity": item.maximum_velocity_rmse_mps <= 0.100,
             "orientation": item.maximum_orientation_rmse_degrees <= 10.0,
+            "worst_object_position": maximum_object_position <= 0.015,
+            "worst_object_velocity": maximum_object_velocity <= 0.075,
+            "worst_box_orientation": bool(box_orientation_errors)
+            and max(box_orientation_errors) <= 6.0,
             "source_unchanged": item.source_unchanged,
             "finite": item.finite,
             "accepted_position_envelope": item.maximum_position_rmse_m
-            <= baseline["position"] * hardening_ratio + 1.0e-12,
+            <= baseline["position"] + position_tolerance,
             "accepted_velocity_envelope": item.maximum_velocity_rmse_mps
-            <= baseline["velocity"] * hardening_ratio + 1.0e-12,
+            <= baseline["velocity"] + velocity_tolerance,
             "accepted_orientation_envelope": item.maximum_orientation_rmse_degrees
-            <= baseline["orientation"] * (0.60 if item.object_count == 8 else 1.02) + 1.0e-12,
+            <= baseline["orientation"] + orientation_tolerance,
             "accepted_repeated_contact_envelope": item.repeated_contact_frame_f1
-            >= baseline["repeated_contact_f1"] - 0.02,
+            >= baseline["repeated_contact_f1"] - 1.0e-12,
         }
         if enforce_latency:
             checks["latency"] = (
@@ -936,6 +1009,13 @@ def _summary(
     aggregate_curve = {
         key: max(item.position_curve[key] for item in result.scenarios) for key in horizon_keys
     }
+    aggregate_velocity_curve = {
+        key: max(item.velocity_curve[key] for item in result.scenarios) for key in horizon_keys
+    }
+    aggregate_orientation_curve = {
+        key: max(item.orientation_curve_degrees[key] for item in result.scenarios)
+        for key in horizon_keys
+    }
     return CapabilityRunSummary(
         schema=CAPABILITY_SUMMARY_SCHEMA,
         run_id=run_id,
@@ -954,6 +1034,11 @@ def _summary(
             "mixed_rigid_primitives": True,
             "planning_used_as_training_loss": False,
             "generated_frames_retained": False,
+            "maximum_per_object_position_error_m": 0.015,
+            "maximum_per_object_velocity_error_mps": 0.075,
+            "maximum_per_box_orientation_error_degrees": 6.0,
+            "regression_relative_numeric_tolerance": (_REGRESSION_RELATIVE_NUMERIC_TOLERANCE),
+            "regression_absolute_numeric_tolerance": (_REGRESSION_ABSOLUTE_NUMERIC_TOLERANCE),
         },
         provenance={
             "scenario_manifest_sha256": result.manifest_sha256,
@@ -962,7 +1047,8 @@ def _summary(
             "runtime_truth_inputs": False,
             "private_reference_opened_after_belief_construction": True,
             "dense_serial_planning_oracle": True,
-            "accepted_visual_baseline_run": "20260912-visual-dynamic-scale-v1",
+            "accepted_visual_baseline_run": "20260913-visual-dynamic-hardening-v3",
+            "incumbent_remeasured_after_reference_clock_fix": True,
         },
         scores={
             "candidate": {
@@ -970,7 +1056,7 @@ def _summary(
                 "supported_weight": 1.0,
             },
             "incumbent": {
-                "value": _ACCEPTED_VISUAL_BASELINE[8]["position"],
+                "value": max(item["position"] for item in _CORRECTED_VISUAL_INCUMBENT.values()),
                 "supported_weight": 1.0,
             },
             "selected": "hardened_visual_dynamic" if result.qualified else "incumbent",
@@ -1009,7 +1095,11 @@ def _summary(
             }
             for count, item in by_count.items()
         },
-        horizon_curves={"candidate_position_rmse_m": aggregate_curve},
+        horizon_curves={
+            "candidate_position_rmse_m": aggregate_curve,
+            "candidate_velocity_rmse_mps": aggregate_velocity_curve,
+            "candidate_orientation_rmse_degrees": aggregate_orientation_curve,
+        },
         uncertainty={"status": "carried from explicit public-observation confidence"},
         planning={
             "status": "passed"
@@ -1048,6 +1138,59 @@ def _summary(
             "representative_episode": "visual-dynamic-n6",
             "worst_episode": "visual-dynamic-n8",
             "forecast_gallery_mode": "latest_run",
+            "accuracy_frontier": [
+                {
+                    "object_count": item.object_count,
+                    "objects": item.per_object_maximum_errors,
+                }
+                for item in result.scenarios
+            ],
+            "regression_checks": [
+                {
+                    "family": f"visual_dynamic_n{item.object_count}",
+                    "metric": metric,
+                    "baseline": _CORRECTED_VISUAL_INCUMBENT[item.object_count][metric],
+                    "candidate": candidate,
+                    "direction": direction,
+                    "limit": (
+                        _CORRECTED_VISUAL_INCUMBENT[item.object_count][metric]
+                        + max(
+                            _REGRESSION_ABSOLUTE_NUMERIC_TOLERANCE,
+                            _CORRECTED_VISUAL_INCUMBENT[item.object_count][metric]
+                            * _REGRESSION_RELATIVE_NUMERIC_TOLERANCE,
+                        )
+                        if direction == "lower"
+                        else _CORRECTED_VISUAL_INCUMBENT[item.object_count][metric]
+                    ),
+                    "passed": (
+                        candidate
+                        <= _CORRECTED_VISUAL_INCUMBENT[item.object_count][metric]
+                        + max(
+                            _REGRESSION_ABSOLUTE_NUMERIC_TOLERANCE,
+                            _CORRECTED_VISUAL_INCUMBENT[item.object_count][metric]
+                            * _REGRESSION_RELATIVE_NUMERIC_TOLERANCE,
+                        )
+                        if direction == "lower"
+                        else candidate
+                        >= _CORRECTED_VISUAL_INCUMBENT[item.object_count][metric] - 1.0e-12
+                    ),
+                }
+                for item in result.scenarios
+                for metric, candidate, direction in (
+                    ("position", item.maximum_position_rmse_m, "lower"),
+                    ("velocity", item.maximum_velocity_rmse_mps, "lower"),
+                    (
+                        "orientation",
+                        item.maximum_orientation_rmse_degrees,
+                        "lower",
+                    ),
+                    (
+                        "repeated_contact_f1",
+                        item.repeated_contact_frame_f1,
+                        "higher",
+                    ),
+                )
+            ],
             "animations": [],
             "forecast_animations": [item.animation for item in result.scenarios],
             "diagnostic_contact_sheets": [],

@@ -17,8 +17,10 @@ from torch import Tensor
 from world_model.belief import ObjectBeliefTensor, RigidPrimitive
 from world_model.dynamics.contacts import (
     SphereContactResolver,
+    _oriented_box_axis,
     _quaternion_rotation_matrix,
     _safe_tangent_direction,
+    _sphere_box_axis,
 )
 from world_model.dynamics.graph import InteractionOutput
 
@@ -145,6 +147,72 @@ def _batched_contact_point(
     )
 
 
+def _batched_pair_geometry(
+    objects: ObjectBeliefTensor,
+    rotations: Tensor,
+    first: int,
+    second: int,
+) -> tuple[Tensor, Tensor, Tensor]:
+    """Return current geometry for one lexicographically ordered pair.
+
+    Multi-contact resolution changes positions after every earlier pair.  The
+    generic dense geometry helper is ideal for discovery, but reusing its
+    initial matrix for every pair makes later impulses act on stale normals and
+    penetrations.  This pair-local form is both cheaper to refresh and matches
+    the independent solver's sequential contract.
+    """
+
+    first_position = objects.position[:, first]
+    second_position = objects.position[:, second]
+    relative = second_position - first_position
+    distance = torch.linalg.vector_norm(relative, dim=-1).clamp_min(1.0e-7)
+    normal = relative / distance.unsqueeze(-1)
+    radius = objects.radius.squeeze(-1)
+    gap = distance - radius[:, first] - radius[:, second]
+    primitive = objects.geometry_primitive
+    first_box = primitive[:, first] == int(RigidPrimitive.BOX)
+    second_box = primitive[:, second] == int(RigidPrimitive.BOX)
+    active_pair = objects.active[:, first] & objects.active[:, second]
+
+    box_box = active_pair & first_box & second_box
+    if bool(box_box.any()):
+        candidate_normal, candidate_gap = _oriented_box_axis(
+            first_position,
+            objects.geometry_half_extents[:, first],
+            rotations[:, first],
+            second_position,
+            objects.geometry_half_extents[:, second],
+            rotations[:, second],
+        )
+        normal = torch.where(box_box.unsqueeze(-1), candidate_normal, normal)
+        gap = torch.where(box_box, candidate_gap, gap)
+
+    sphere_box = active_pair & ~first_box & second_box
+    if bool(sphere_box.any()):
+        candidate_normal, candidate_gap = _sphere_box_axis(
+            first_position,
+            radius[:, first],
+            second_position,
+            objects.geometry_half_extents[:, second],
+            rotations[:, second],
+        )
+        normal = torch.where(sphere_box.unsqueeze(-1), candidate_normal, normal)
+        gap = torch.where(sphere_box, candidate_gap, gap)
+
+    box_sphere = active_pair & first_box & ~second_box
+    if bool(box_sphere.any()):
+        candidate_normal, candidate_gap = _sphere_box_axis(
+            second_position,
+            radius[:, second],
+            first_position,
+            objects.geometry_half_extents[:, first],
+            rotations[:, first],
+        )
+        normal = torch.where(box_sphere.unsqueeze(-1), -candidate_normal, normal)
+        gap = torch.where(box_sphere, candidate_gap, gap)
+    return normal, gap, (-gap).clamp_min(0.0)
+
+
 def _support_point(
     objects: ObjectBeliefTensor,
     rotation: Tensor,
@@ -214,6 +282,8 @@ def _contact_point(
 class RigidContactResolver6D(SphereContactResolver):
     """Hard rigid contacts with angular velocity and frictional torque."""
 
+    _ORDERED_POSITION_STD_MAX_M = 1.0e-3
+
     def _resolve_pairs(
         self,
         objects: ObjectBeliefTensor,
@@ -223,29 +293,38 @@ class RigidContactResolver6D(SphereContactResolver):
             return super()._resolve_pairs(objects, graph)
 
         batch, count = objects.active.shape
-        normal, gap, penetration = self._pair_geometry(objects)
-        upper = torch.triu(
-            torch.ones(count, count, device=objects.active.device, dtype=torch.bool),
-            diagonal=1,
-        ).unsqueeze(0)
-        active_pair = objects.active[:, :, None] & objects.active[:, None, :]
         position_variance = objects.fast_log_variance[..., :3].exp()
-        relative_variance = position_variance[:, :, None, :] + position_variance[:, None, :, :]
-        gap_sigma = (relative_variance * normal.square()).sum(dim=-1).sqrt()
-        confident_gap = gap + self.contact_confidence_sigma * gap_sigma
-        contact_upper = active_pair & upper & (confident_gap < self.contact_margin)
+        active_position_std = torch.where(
+            objects.active.unsqueeze(-1),
+            position_variance.sqrt(),
+            torch.zeros_like(position_variance),
+        )
+        ordered_rows = active_position_std.amax(dim=(1, 2)) <= self._ORDERED_POSITION_STD_MAX_M
+        all_ordered = bool(ordered_rows.all())
+        any_ordered = bool(ordered_rows.any())
+        if all_ordered:
+            contact_upper = torch.zeros(
+                batch,
+                count,
+                count,
+                dtype=torch.bool,
+                device=objects.active.device,
+            )
+            dense_normal = dense_penetration = None
+        else:
+            dense_normal, dense_gap, dense_penetration = self._pair_geometry(objects)
+            upper = torch.triu(
+                torch.ones(count, count, device=objects.active.device, dtype=torch.bool),
+                diagonal=1,
+            ).unsqueeze(0)
+            active_pair = objects.active[:, :, None] & objects.active[:, None, :]
+            relative_variance = position_variance[:, :, None, :] + position_variance[:, None, :, :]
+            gap_sigma = (relative_variance * dense_normal.square()).sum(dim=-1).sqrt()
+            confident_gap = dense_gap + self.contact_confidence_sigma * gap_sigma
+            contact_upper = active_pair & upper & (confident_gap < self.contact_margin)
         collision_upper = torch.zeros_like(contact_upper)
         pair_impulse = objects.position.new_zeros(batch, count, count)
-        symmetric_contact = contact_upper | contact_upper.transpose(1, 2)
-        if not bool(contact_upper.any()):
-            return (
-                objects,
-                symmetric_contact,
-                collision_upper,
-                pair_impulse,
-                penetration * symmetric_contact,
-                objects.position.new_zeros(batch),
-            )
+        pair_penetration = objects.position.new_zeros(batch, count, count)
         velocity = objects.velocity.clone()
         angular_velocity = objects.angular_velocity.clone()
         position = objects.position.clone()
@@ -257,15 +336,125 @@ class RigidContactResolver6D(SphereContactResolver):
         # Preserve the established lexicographic pair order within every
         # scene, but evaluate independent batch/candidate rows together. This
         # removes the B x K Python loop from counterfactual rigid planning
-        # without changing any row's sequential multi-contact resolution.
+        # without changing any row's sequential multi-contact resolution. Both
+        # geometry and positional projection are refreshed in this order: a
+        # later pair must observe the correction made by every earlier pair.
+        # For a visibly uncertain state, keep the established simultaneous
+        # mean correction instead of inventing a brittle ordering among pair
+        # geometries whose uncertainty envelopes overlap. Select that policy
+        # independently per batch row so another row's uncertainty cannot
+        # alter otherwise identical dynamics.
         for first in range(count):
             for second in range(first + 1, count):
-                candidate = contact_upper[:, first, second]
+                if all_ordered:
+                    current = replace(
+                        objects,
+                        position=position,
+                        velocity=velocity,
+                        angular_velocity=angular_velocity,
+                    )
+                    pair_normal, pair_gap, penetration = _batched_pair_geometry(
+                        current,
+                        rotations,
+                        first,
+                        second,
+                    )
+                    pair_variance = position_variance[:, first] + position_variance[:, second]
+                    pair_sigma = (pair_variance * pair_normal.square()).sum(dim=-1).sqrt()
+                    candidate = (
+                        objects.active[:, first]
+                        & objects.active[:, second]
+                        & (
+                            pair_gap + self.contact_confidence_sigma * pair_sigma
+                            < self.contact_margin
+                        )
+                    )
+                elif not any_ordered:
+                    assert dense_normal is not None and dense_penetration is not None
+                    current = objects
+                    pair_normal = dense_normal[:, first, second]
+                    penetration = dense_penetration[:, first, second]
+                    candidate = contact_upper[:, first, second]
+                else:
+                    assert dense_normal is not None and dense_penetration is not None
+                    current = replace(
+                        objects,
+                        position=position,
+                        velocity=velocity,
+                        angular_velocity=angular_velocity,
+                    )
+                    refreshed_normal, refreshed_gap, refreshed_penetration = _batched_pair_geometry(
+                        current,
+                        rotations,
+                        first,
+                        second,
+                    )
+                    pair_normal = torch.where(
+                        ordered_rows.unsqueeze(-1),
+                        refreshed_normal,
+                        dense_normal[:, first, second],
+                    )
+                    penetration = torch.where(
+                        ordered_rows,
+                        refreshed_penetration,
+                        dense_penetration[:, first, second],
+                    )
+                    pair_variance = position_variance[:, first] + position_variance[:, second]
+                    refreshed_sigma = (pair_variance * refreshed_normal.square()).sum(dim=-1).sqrt()
+                    ordered_candidate = (
+                        objects.active[:, first]
+                        & objects.active[:, second]
+                        & (
+                            refreshed_gap + self.contact_confidence_sigma * refreshed_sigma
+                            < self.contact_margin
+                        )
+                    )
+                    candidate = torch.where(
+                        ordered_rows,
+                        ordered_candidate,
+                        contact_upper[:, first, second],
+                    )
                 if not bool(candidate.any()):
                     continue
-                pair_normal = normal[:, first, second]
+                contact_upper[:, first, second] = candidate
+                pair_penetration[:, first, second] = torch.where(
+                    candidate,
+                    penetration,
+                    pair_penetration[:, first, second],
+                )
+                ordered_candidate_rows = candidate & ordered_rows
+                if bool(ordered_candidate_rows.any()):
+                    inverse_sum = (inverse_mass[:, first] + inverse_mass[:, second]).clamp_min(
+                        1.0e-8
+                    )
+                    correction = (
+                        self.penetration_fraction
+                        * (penetration - self.penetration_slop).clamp_min(0.0)
+                    ).clamp_max(self.max_position_correction)
+                    first_delta = (
+                        -pair_normal
+                        * correction.unsqueeze(-1)
+                        * (inverse_mass[:, first] / inverse_sum).unsqueeze(-1)
+                    )
+                    second_delta = (
+                        pair_normal
+                        * correction.unsqueeze(-1)
+                        * (inverse_mass[:, second] / inverse_sum).unsqueeze(-1)
+                    )
+                    candidate_vector = ordered_candidate_rows.unsqueeze(-1)
+                    position[:, first] = torch.where(
+                        candidate_vector,
+                        position[:, first] + first_delta,
+                        position[:, first],
+                    )
+                    position[:, second] = torch.where(
+                        candidate_vector,
+                        position[:, second] + second_delta,
+                        position[:, second],
+                    )
+                    current = replace(current, position=position)
                 point = _batched_contact_point(
-                    objects,
+                    current,
                     rotations,
                     first,
                     second,
@@ -411,25 +600,31 @@ class RigidContactResolver6D(SphereContactResolver):
                     collision_mask, impulse_world, pair_momentum[:, second, first]
                 )
 
-        inverse_mass_sum = (inverse_mass[:, :, None] + inverse_mass[:, None, :]).clamp_min(1.0e-8)
-        correction_scale = (
-            self.penetration_fraction
-            * (penetration - self.penetration_slop).clamp_min(0.0)
-            / inverse_mass_sum
-        ).clamp_max(self.max_position_correction)
-        position_first = (
-            -correction_scale.unsqueeze(-1)
-            * inverse_mass[:, :, None, None]
-            * normal
-            * contact_upper.unsqueeze(-1)
-        )
-        position_second = (
-            correction_scale.unsqueeze(-1)
-            * inverse_mass[:, None, :, None]
-            * normal
-            * contact_upper.unsqueeze(-1)
-        )
-        position += position_first.sum(dim=2) + position_second.sum(dim=1)
+        if bool((~ordered_rows).any()):
+            assert dense_normal is not None and dense_penetration is not None
+            uncertain_contact = contact_upper & (~ordered_rows).view(batch, 1, 1)
+            inverse_mass_sum = (inverse_mass[:, :, None] + inverse_mass[:, None, :]).clamp_min(
+                1.0e-8
+            )
+            correction_scale = (
+                self.penetration_fraction
+                * (dense_penetration - self.penetration_slop).clamp_min(0.0)
+                / inverse_mass_sum
+            ).clamp_max(self.max_position_correction)
+            position_first = (
+                -correction_scale.unsqueeze(-1)
+                * inverse_mass[:, :, None, None]
+                * dense_normal
+                * uncertain_contact.unsqueeze(-1)
+            )
+            position_second = (
+                correction_scale.unsqueeze(-1)
+                * inverse_mass[:, None, :, None]
+                * dense_normal
+                * uncertain_contact.unsqueeze(-1)
+            )
+            position += position_first.sum(dim=2) + position_second.sum(dim=1)
+
         active = objects.active.unsqueeze(-1)
         updated = replace(
             objects,
@@ -437,15 +632,17 @@ class RigidContactResolver6D(SphereContactResolver):
             velocity=torch.where(active, velocity, objects.velocity),
             angular_velocity=torch.where(active, angular_velocity, objects.angular_velocity),
         )
+        symmetric_contact = contact_upper | contact_upper.transpose(1, 2)
         symmetric_collision = collision_upper | collision_upper.transpose(1, 2)
         symmetric_impulse = pair_impulse + pair_impulse.transpose(1, 2)
+        symmetric_penetration = pair_penetration + pair_penetration.transpose(1, 2)
         residual = torch.linalg.vector_norm(pair_momentum.sum(dim=(1, 2)), dim=-1)
         return (
             updated,
             symmetric_contact,
             symmetric_collision,
             symmetric_impulse,
-            penetration * symmetric_contact,
+            symmetric_penetration,
             residual,
         )
 

@@ -137,14 +137,19 @@ def _geometry(position: tuple[float, float, float], angle: float) -> ObservableR
     )
 
 
-def _detection(position: tuple[float, float, float], angle: float) -> DiscoveredRigidObject:
+def _detection(
+    position: tuple[float, float, float],
+    angle: float,
+    *,
+    support_views: int = 3,
+) -> DiscoveredRigidObject:
     return DiscoveredRigidObject(
         geometry=_geometry(position, angle),
         appearance=torch.nn.functional.normalize(
             torch.tensor([0.7, 0.2, 0.4, 0.7, 0.5, 0.3, 0.0, 1.0], dtype=DTYPE),
             dim=0,
         ),
-        support_views=3,
+        support_views=support_views,
         confidence=1.0,
     )
 
@@ -286,6 +291,52 @@ def test_causal_orientation_filter_rejects_outlier_and_preserves_rotation() -> N
         float(rotating_result[0].geometry.orientation[3]),
     )
     assert rotating_angle == pytest.approx(0.20, abs=1.0e-8)
+
+
+def test_robust_geometry_aggregation_rejects_endpoint_jitter_and_preserves_motion() -> None:
+    static = OpenWorldRigidTracker(
+        motion_sample_count=5,
+        robust_geometry_aggregation=True,
+        linear_speed_deadzone=0.10,
+    )
+    static_result = ()
+    for index, position_error in enumerate((-0.006, 0.004, -0.003, 0.002, 0.010)):
+        detection = _detection(
+            (position_error, 0.0, 4.0),
+            0.0,
+            support_views=2 if index == 4 else 3,
+        )
+        if index == 4:
+            detection = replace(
+                detection,
+                geometry=replace(
+                    detection.geometry,
+                    box_residual=torch.tensor(0.01, dtype=DTYPE),
+                ),
+            )
+        static_result = static.update(
+            OpenWorldRigidFrame(
+                index * 0.05,
+                (detection,),
+            )
+        )
+    assert abs(float(static_result[0].geometry.world_position[0])) <= 0.003
+
+    moving = OpenWorldRigidTracker(
+        motion_sample_count=5,
+        robust_geometry_aggregation=True,
+    )
+    moving_result = ()
+    for index in range(5):
+        timestamp = index * 0.05
+        moving_result = moving.update(
+            OpenWorldRigidFrame(
+                timestamp,
+                (_detection((0.2 * timestamp, 0.0, 4.0), timestamp),),
+            )
+        )
+    assert float(moving_result[0].geometry.world_position[0]) == pytest.approx(0.04)
+    assert float(moving_result[0].velocity[0]) == pytest.approx(0.2)
 
 
 def test_geometry_only_tracker_recovers_ids_after_eight_missing_frames() -> None:

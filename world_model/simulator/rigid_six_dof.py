@@ -46,6 +46,23 @@ def _integrate_orientation(orientation: Tensor, angular_velocity: Tensor, dt: fl
     return updated / torch.linalg.vector_norm(updated, dim=-1, keepdim=True).clamp_min(1.0e-8)
 
 
+def _stable_substep_count(dt: float, max_substep: float) -> int:
+    """Return a ceiling count without adding a tick for clock roundoff.
+
+    Evaluation intervals are commonly formed by subtracting adjacent
+    floating-point timestamps.  A nominal ``0.05`` second interval can then be
+    a few ulps above six 120 Hz ticks.  Treat ratios indistinguishable from an
+    integer as that integer; genuinely longer intervals still use a ceiling.
+    """
+
+    ratio = dt / max_substep
+    nearest = round(ratio)
+    tolerance = 32.0 * math.ulp(max(1.0, abs(ratio)))
+    if nearest >= 1 and abs(ratio - nearest) <= tolerance:
+        return nearest
+    return max(1, math.ceil(ratio))
+
+
 def _inverse_inertia_body(state: RigidBodyState) -> Tensor:
     mass = state.mass[:, 0]
     radius = state.radius[:, 0]
@@ -372,7 +389,7 @@ def advance_rigid_bodies_6dof(
         state.active[:, None], impulse / state.mass, torch.zeros_like(impulse)
     )
     current = replace(state, velocity=velocity)
-    substeps = max(1, math.ceil(dt / config.max_substep))
+    substeps = _stable_substep_count(dt, config.max_substep)
     substep_dt = dt / substeps
     accumulated = empty_physics_events(
         state.max_objects,

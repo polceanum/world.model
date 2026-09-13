@@ -1,5 +1,39 @@
 # Tasks
 
+## Per-object accuracy-frontier hardening — completed 2026-09-13
+
+- [x] Replace aggregate-only visual acceptance with zero-regression checks for
+  N=4/N=6/N=8 position, velocity, box orientation, and repeated-contact F1.
+- [x] Add absolute per-runtime-object ceilings for maximum forecast position,
+  velocity, and observable box-orientation error so a good mean cannot hide an
+  outlier.
+- [x] Remove the 20 Hz reference-clock off-by-one substep caused by floating-
+  point subtraction while preserving a true longer-interval ceiling.
+- [x] Refresh confident mixed-shape geometry and positional correction in
+  lexicographic contact order, preserving the dense uncertain-state policy and
+  exact sphere-only behavior.
+- [x] Add opt-in public geometry-history aggregation gated by calibrated view
+  support, normalized fit residual, and bounded motion projection; preserve
+  true motion and legacy defaults.
+- [x] Publish `runs/20260913-worst-slice-hardening-v3` with all capability and
+  planning families passing at a `0.7835` paired macro ratio.
+- [x] Display all 18 per-object maxima and their gates, position/velocity/
+  orientation horizon evidence, and accurate RGB-D forecast provenance in the
+  compact dashboard.
+- [x] Keep the run at `476,527` bytes and the managed tree at `20,271,874`
+  bytes with no retained generated frames or raster/video animation media.
+- [x] Pass the 36-test affected final-tree suite, Ruff, Ruff format across 380
+  files, compileall, dashboard rebuild, browser inspection, and diff hygiene.
+- [x] Replace the order-dependent bit-exact incumbent comparison with a
+  manifest-bound `1e-6` relative/`1e-9` absolute numerical tolerance and prove
+  that a regression twice as large is still rejected.
+- [x] Pass the exact final repository suite: `2490 passed, 16 skipped, 13`
+  existing warnings in `6329.05 s` (`1:45:29`).
+- [ ] Re-measure the strict visual v2 latency gates in a fresh, isolated,
+  thermally stable process; do not promote the warmed timing-failed run.
+- [ ] Continue with public adaptive-physics generalization only behind this
+  per-object and cross-capability regression envelope.
+
 ## Cross-capability prediction hardening — completed 2026-09-13
 
 - [x] Replace the misleading mixed-protocol dashboard trend with separately

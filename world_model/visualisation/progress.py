@@ -443,6 +443,22 @@ def _merge_latest_factor_evidence(
                 evidence_source = summary
                 break
     qualitative = dict(latest.qualitative)
+    for source in reversed(summaries):
+        frontier = source.qualitative.get("accuracy_frontier")
+        if not isinstance(frontier, list) or not frontier:
+            continue
+        qualitative["accuracy_frontier"] = frontier
+        qualitative["accuracy_frontier_source_run"] = source.run_id
+        qualitative["accuracy_frontier_source_outcome"] = source.outcome
+        qualitative["accuracy_frontier_limits"] = {
+            key: source.configuration.get(key)
+            for key in (
+                "maximum_per_object_position_error_m",
+                "maximum_per_object_velocity_error_mps",
+                "maximum_per_box_orientation_error_degrees",
+            )
+        }
+        break
     animation_sources: dict[str, str] = {}
     for field, source_field in (
         ("animations", "animation_source_run"),
@@ -1131,12 +1147,15 @@ def _animation_cards(summary: CapabilityRunSummary) -> str:
     long_endpoints = []
     has_pose_markers = False
     has_known_actions = False
+    rgbd_initialized = False
     if isinstance(forecast_values, list):
         for animation in forecast_values:
             if not isinstance(animation, Mapping):
                 continue
             has_pose_markers |= animation.get("orientation_markers") is True
             has_known_actions |= animation.get("known_actions_in_rollout") is True
+            label = str(animation.get("label", "")).casefold()
+            rgbd_initialized |= "rgb-d initialized" in label or "rgbd initialized" in label
             endpoint = animation.get("long_horizon_endpoint_s")
             if isinstance(endpoint, (int, float)) and math.isfinite(float(endpoint)):
                 long_endpoints.append(float(endpoint))
@@ -1154,7 +1173,7 @@ def _animation_cards(summary: CapabilityRunSummary) -> str:
         )
     elif has_known_actions:
         forecast_title = "Two-second causal multi-contact forecasts"
-        if summary.configuration.get("public_calibrated_rgbd") is True:
+        if rgbd_initialized or summary.configuration.get("public_calibrated_rgbd") is True:
             forecast_introduction = (
                 "Public RGB-D initialized rollouts apply each declared future impulse exactly "
                 "once and continue through chained and simultaneous contacts without later "
@@ -1388,6 +1407,86 @@ def _regression_ledger(summary: CapabilityRunSummary) -> str:
     )
 
 
+def _accuracy_frontier(summary: CapabilityRunSummary) -> str:
+    """Render per-object worst errors so aggregate scores cannot hide a miss."""
+
+    evidence = summary.qualitative.get("accuracy_frontier")
+    if not isinstance(evidence, list):
+        return ""
+    retained_limits = summary.qualitative.get("accuracy_frontier_limits")
+    limits = retained_limits if isinstance(retained_limits, Mapping) else summary.configuration
+    position_limit = limits.get("maximum_per_object_position_error_m")
+    velocity_limit = limits.get("maximum_per_object_velocity_error_mps")
+    orientation_limit = limits.get("maximum_per_box_orientation_error_degrees")
+    limits_available = all(
+        isinstance(value, (int, float))
+        for value in (position_limit, velocity_limit, orientation_limit)
+    )
+    rows = []
+    for count_entry in evidence:
+        if not isinstance(count_entry, Mapping):
+            continue
+        objects = count_entry.get("objects")
+        if not isinstance(objects, Mapping):
+            continue
+        for object_id, metrics in objects.items():
+            if not isinstance(metrics, Mapping):
+                continue
+            passed = (
+                limits_available
+                and isinstance(metrics.get("position_m"), (int, float))
+                and float(metrics["position_m"]) <= float(position_limit)
+                and isinstance(metrics.get("velocity_mps"), (int, float))
+                and float(metrics["velocity_mps"]) <= float(velocity_limit)
+                and (
+                    not isinstance(metrics.get("orientation_degrees"), (int, float))
+                    or float(metrics["orientation_degrees"]) <= float(orientation_limit)
+                )
+            )
+            status = (
+                f'<span class="tag {"passed" if passed else "failed"}">'
+                f"{'passed' if passed else 'failed'}</span>"
+                if limits_available
+                else "—"
+            )
+            rows.append(
+                "<tr>"
+                f"<td>N={_escape(count_entry.get('object_count', '—'))}</td>"
+                f"<td>{_escape(object_id)}</td>"
+                f"<td>{_format_number(metrics.get('position_m'))}</td>"
+                f"<td>{_format_number(metrics.get('velocity_mps'))}</td>"
+                f"<td>{_format_number(metrics.get('orientation_degrees'))}</td>"
+                f"<td>{status}</td>"
+                "</tr>"
+            )
+    if not rows:
+        return ""
+    source_run = summary.qualitative.get("accuracy_frontier_source_run", summary.run_id)
+    source_outcome = summary.qualitative.get(
+        "accuracy_frontier_source_outcome",
+        summary.outcome,
+    )
+    return (
+        "<section><h2>Worst-slice accuracy frontier</h2>"
+        '<p class="table-note">Maximum error over the complete forecast for every public '
+        "runtime object. Orientation is reported only for boxes because sphere orientation "
+        "is neither observable nor physically consequential. Evidence source: "
+        f"{_escape(source_run)} · {_escape(source_outcome)}. "
+        + (
+            "Per-object gates: position ≤ "
+            f"{_format_number(position_limit)} m, velocity ≤ "
+            f"{_format_number(velocity_limit)} m/s, box orientation ≤ "
+            f"{_format_number(orientation_limit)} degrees.</p>"
+            if limits_available
+            else "No per-object gate was recorded for this historical run.</p>"
+        )
+        + "<table><thead><tr><th>Count</th><th>Runtime object</th>"
+        "<th>Max position error (m)</th><th>Max velocity error (m/s)</th>"
+        "<th>Max box orientation error (degrees)</th><th>Per-object gate</th></tr></thead>"
+        f"<tbody>{''.join(rows)}</tbody></table></section>"
+    )
+
+
 def _summary_section(
     summary: CapabilityRunSummary,
     *,
@@ -1491,6 +1590,7 @@ def _summary_section(
     {_parameter_convergence_section(summary)}
     <section><h2>Factor performance</h2>{_factor_metric_matrix(summary)}</section>
     {_regression_ledger(summary)}
+    {_accuracy_frontier(summary)}
     <section><h2>Physical behavior</h2>{_heatmap(summary, metric="current_position_rmse_m", title="Current-position RMSE (m) by object count, contact, and membership", lower_is_better=True)}{_heatmap(summary, metric="uncertainty_90_coverage", title="90% uncertainty coverage by object count, contact, and membership", lower_is_better=True, ideal_value=0.90)}</section>
     <section class="grid two"><article><h2>Capability frontier</h2>{_frontier_table(frontier_history)}</article><article><h2>Ablation attribution</h2>{_ablation_attribution(summary)}</article></section>
     <section><h2>Downstream planning</h2>{_planning_table(summary)}</section>

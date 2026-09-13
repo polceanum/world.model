@@ -2,6 +2,32 @@
 
 ## Unreleased — 2026-07-28
 
+### 2026-09-13 per-object accuracy-frontier hardening
+
+- Added per-object maximum position, velocity, and observable box-orientation
+  gates across the full N=4/N=6/N=8 forecasts; all 18 runtime objects pass.
+- Stabilized independent-oracle substep counts against adjacent timestamp
+  roundoff without weakening the ceiling for genuinely longer intervals.
+- Made confident mixed-shape contacts refresh geometry and positional
+  projection in lexicographic solver order. Uncertain rows retain the prior
+  dense policy and are isolated from confident batch rows.
+- Added an opt-in public RGB-D geometry-history aggregator that prefers a
+  stronger calibrated multi-view fit only when support, normalized residual,
+  and causal motion-projection checks justify reuse.
+- Added velocity/orientation horizon curves, a 12-row visual regression ledger,
+  and a provenance-labelled per-object accuracy frontier to the compact report.
+- Corrected aggregate animation prose to follow the embedded card metadata, so
+  public RGB-D forecasts are never mislabeled as state-first.
+- Published the 476,527-byte v3 aggregate hardening result at a `0.7835` paired
+  macro ratio with every capability family and K=8/K=32 planning check passing.
+  Kept the warmed strict timing failure visible rather than upgrading its claim.
+- Versioned and manifest-bound a `1e-6` relative/`1e-9` absolute numerical
+  comparison tolerance after the full suite exposed an order-dependent
+  bit-exact orientation check; physical per-object ceilings remain unchanged.
+- Passed Ruff, Ruff format across 380 files, compileall, diff hygiene, the
+  governed v3 aggregate audit, browser inspection, focused tests, and the
+  complete `2490 passed, 16 skipped` repository suite in `1:45:29`.
+
 ### 2026-09-13 cross-capability prediction hardening
 
 - Added a deterministic aggregate hardening runner with 32 paired checks over

@@ -48,6 +48,9 @@ def main(argv: list[str] | None = None) -> int:
                     "dense_serial_planning_oracle": True,
                     "planning_used_as_training_loss": False,
                     "generated_frames_retained": False,
+                    "maximum_per_object_position_error_m": 0.015,
+                    "maximum_per_object_velocity_error_mps": 0.075,
+                    "maximum_per_box_orientation_error_degrees": 6.0,
                 },
                 indent=2,
                 sort_keys=True,
@@ -55,7 +58,7 @@ def main(argv: list[str] | None = None) -> int:
         )
         return 0
     result = run_visual_dynamic_scale(enforce_latency=True)
-    default_name = f"{datetime.now(timezone.utc):%Y%m%d}-visual-dynamic-scale-v1"
+    default_name = f"{datetime.now(timezone.utc):%Y%m%d}-visual-dynamic-scale-v3"
     run_directory = Path(parsed.run_directory or Path("runs") / default_name)
     summary = publish_visual_dynamic_scale(result, run_directory=run_directory)
     print(

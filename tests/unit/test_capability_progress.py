@@ -234,6 +234,87 @@ def test_dashboard_keeps_latest_measured_factor_across_runs(tmp_path: Path) -> N
     assert "N1/contact=0/dynamic=0" in content
 
 
+def test_dashboard_carries_forward_newest_per_object_accuracy_frontier(
+    tmp_path: Path,
+) -> None:
+    runs = tmp_path / "runs"
+    visual_directory = runs / "visual"
+    aggregate_directory = runs / "aggregate"
+    visual_directory.mkdir(parents=True)
+    aggregate_directory.mkdir()
+    visual = replace(
+        _summary("visual", "failed"),
+        configuration={
+            "maximum_per_object_position_error_m": 0.015,
+            "maximum_per_object_velocity_error_mps": 0.075,
+            "maximum_per_box_orientation_error_degrees": 6.0,
+        },
+        qualitative={
+            "accuracy_frontier": [
+                {
+                    "object_count": 8,
+                    "objects": {
+                        "17": {
+                            "position_m": 0.010,
+                            "velocity_mps": 0.050,
+                            "orientation_degrees": 5.0,
+                        }
+                    },
+                }
+            ]
+        },
+    )
+    aggregate = replace(
+        _summary("aggregate"),
+        created_at_utc="2026-09-08T01:00:00+00:00",
+        qualitative={},
+    )
+    write_capability_summary(visual, visual_directory / "capability_summary.json")
+    write_capability_summary(aggregate, aggregate_directory / "capability_summary.json")
+
+    content = build_progress_dashboard(runs).read_text(encoding="utf-8")
+
+    assert "Worst-slice accuracy frontier" in content
+    assert "Evidence source: visual · failed" in content
+    assert "Per-object gates: position ≤ 0.0150 m" in content
+    assert '<span class="tag passed">passed</span>' in content
+
+
+def test_aggregate_report_describes_embedded_rgbd_forecasts_from_card_metadata() -> None:
+    summary = replace(
+        _summary("aggregate"),
+        configuration={"aggregate_protocol": True},
+        qualitative={
+            "forecast_animations": [
+                {
+                    "schema": "world_model_compact_animation_v1",
+                    "label": "N=6 RGB-D initialized multi-contact forecast",
+                    "episode": "visual-dynamic-n6",
+                    "object_count": 6,
+                    "mode": "forecast",
+                    "projection": "world_xy",
+                    "axis_labels": ["x", "y"],
+                    "bounds": {"horizontal": [-1.0, 1.0], "vertical": [-1.0, 1.0]},
+                    "known_actions_in_rollout": True,
+                    "frames": [
+                        {
+                            "frame": 0,
+                            "time_s": 0.0,
+                            "model": [],
+                            "reference": [],
+                        }
+                    ],
+                }
+            ]
+        },
+    )
+
+    content = render_summary_html(summary)
+
+    assert "Public RGB-D initialized rollouts" in content
+    assert "State-first scale rollouts" not in content
+
+
 def test_dashboard_keeps_planning_slices_separate_by_factor(tmp_path: Path) -> None:
     runs = tmp_path / "runs"
     for index, factor in enumerate(("sensor_noise", "camera_motion")):
