@@ -525,55 +525,52 @@ class SphereContactResolver(nn.Module):
                 first_box = primitive[:, first] == int(RigidPrimitive.BOX)
                 second_box = primitive[:, second] == int(RigidPrimitive.BOX)
                 any_box = first_box | second_box
-                if not bool((objects.active[:, first] & objects.active[:, second] & any_box).any()):
+                active_pair = objects.active[:, first] & objects.active[:, second]
+                if not bool((active_pair & any_box).any()):
                     continue
-                box_box_normal, box_box_gap = _oriented_box_axis(
-                    objects.position[:, first],
-                    half_extents[:, first],
-                    rotation[:, first],
-                    objects.position[:, second],
-                    half_extents[:, second],
-                    rotation[:, second],
-                )
-                first_sphere_normal, first_sphere_gap = _sphere_box_axis(
-                    objects.position[:, first],
-                    radius[:, first],
-                    objects.position[:, second],
-                    half_extents[:, second],
-                    rotation[:, second],
-                )
-                second_sphere_normal, second_sphere_gap = _sphere_box_axis(
-                    objects.position[:, second],
-                    radius[:, second],
-                    objects.position[:, first],
-                    half_extents[:, first],
-                    rotation[:, first],
-                )
-                pair_normal = torch.where(
-                    (first_box & second_box).unsqueeze(-1),
-                    box_box_normal,
-                    torch.where(
-                        (~first_box & second_box).unsqueeze(-1),
-                        first_sphere_normal,
-                        -second_sphere_normal,
-                    ),
-                )
-                pair_gap = torch.where(
-                    first_box & second_box,
-                    box_box_gap,
-                    torch.where(~first_box & second_box, first_sphere_gap, second_sphere_gap),
-                )
-                normal[:, first, second] = torch.where(
-                    any_box.unsqueeze(-1),
-                    pair_normal,
-                    normal[:, first, second],
-                )
+                pair_normal = normal[:, first, second]
+                pair_gap = gap[:, first, second]
+                box_box = active_pair & first_box & second_box
+                if bool(box_box.any()):
+                    candidate_normal, candidate_gap = _oriented_box_axis(
+                        objects.position[:, first],
+                        half_extents[:, first],
+                        rotation[:, first],
+                        objects.position[:, second],
+                        half_extents[:, second],
+                        rotation[:, second],
+                    )
+                    pair_normal = torch.where(box_box.unsqueeze(-1), candidate_normal, pair_normal)
+                    pair_gap = torch.where(box_box, candidate_gap, pair_gap)
+                sphere_box = active_pair & ~first_box & second_box
+                if bool(sphere_box.any()):
+                    candidate_normal, candidate_gap = _sphere_box_axis(
+                        objects.position[:, first],
+                        radius[:, first],
+                        objects.position[:, second],
+                        half_extents[:, second],
+                        rotation[:, second],
+                    )
+                    pair_normal = torch.where(
+                        sphere_box.unsqueeze(-1), candidate_normal, pair_normal
+                    )
+                    pair_gap = torch.where(sphere_box, candidate_gap, pair_gap)
+                box_sphere = active_pair & first_box & ~second_box
+                if bool(box_sphere.any()):
+                    candidate_normal, candidate_gap = _sphere_box_axis(
+                        objects.position[:, second],
+                        radius[:, second],
+                        objects.position[:, first],
+                        half_extents[:, first],
+                        rotation[:, first],
+                    )
+                    pair_normal = torch.where(
+                        box_sphere.unsqueeze(-1), -candidate_normal, pair_normal
+                    )
+                    pair_gap = torch.where(box_sphere, candidate_gap, pair_gap)
+                normal[:, first, second] = pair_normal
                 normal[:, second, first] = -normal[:, first, second]
-                gap[:, first, second] = torch.where(
-                    any_box,
-                    pair_gap,
-                    gap[:, first, second],
-                )
+                gap[:, first, second] = pair_gap
                 gap[:, second, first] = gap[:, first, second]
         return normal, gap, (-gap).clamp_min(0.0)
 

@@ -20,6 +20,7 @@ from scipy.optimize import linear_sum_assignment
 from torch import Tensor
 
 from world_model.belief import BeliefFactory, MotionMode, RigidPrimitive, WorldBelief
+from world_model.dynamics import integrate_quaternion, normalize_quaternion
 from world_model.observations.rgbd.rigid_geometry import (
     ObservableRigidGeometry,
     fit_rigid_geometry_from_rgbd,
@@ -572,6 +573,7 @@ class OpenWorldRigidTracker:
         max_missed_steps: int = 2,
         birth_confirmation_steps: int = 1,
         motion_sample_count: int = 2,
+        orientation_outlier_gate_degrees: float | None = None,
         linear_speed_deadzone: float = 0.0,
         angular_speed_deadzone: float = 0.0,
         association_gate: float = 2.0,
@@ -583,6 +585,10 @@ class OpenWorldRigidTracker:
             max_missed_steps < 0
             or birth_confirmation_steps < 1
             or motion_sample_count < 2
+            or (
+                orientation_outlier_gate_degrees is not None
+                and orientation_outlier_gate_degrees <= 0.0
+            )
             or linear_speed_deadzone < 0.0
             or angular_speed_deadzone < 0.0
             or association_gate <= 0.0
@@ -592,6 +598,7 @@ class OpenWorldRigidTracker:
         self.max_missed_steps = max_missed_steps
         self.birth_confirmation_steps = birth_confirmation_steps
         self.motion_sample_count = motion_sample_count
+        self.orientation_outlier_gate_degrees = orientation_outlier_gate_degrees
         self.linear_speed_deadzone = linear_speed_deadzone
         self.angular_speed_deadzone = angular_speed_deadzone
         self.association_gate = association_gate
@@ -681,6 +688,37 @@ class OpenWorldRigidTracker:
             velocity = torch.zeros_like(velocity)
         if float(torch.linalg.vector_norm(angular)) <= self.angular_speed_deadzone:
             angular = torch.zeros_like(angular)
+        if self.orientation_outlier_gate_degrees is not None and int(geometry.primitive) == int(
+            RigidPrimitive.BOX
+        ):
+            projected_orientations = torch.stack(
+                [
+                    integrate_quaternion(
+                        orientation,
+                        angular,
+                        timestamp - observed_timestamp,
+                    )
+                    for orientation, observed_timestamp in zip(
+                        track.observed_orientations,
+                        track.observed_timestamps,
+                        strict=True,
+                    )
+                ]
+            )
+            reference = geometry.orientation
+            signs = torch.where(
+                (projected_orientations * reference).sum(dim=-1, keepdim=True) < 0.0,
+                -torch.ones_like(projected_orientations[..., :1]),
+                torch.ones_like(projected_orientations[..., :1]),
+            )
+            robust_orientation = normalize_quaternion(
+                (projected_orientations * signs).median(dim=0).values
+            )
+            disagreement_degrees = math.degrees(
+                float(torch.acos((robust_orientation * reference).sum().abs().clamp(max=1.0)) * 2.0)
+            )
+            if disagreement_degrees > self.orientation_outlier_gate_degrees:
+                geometry = replace(geometry, orientation=robust_orientation)
         track.geometry = geometry
         track.appearance = torch.nn.functional.normalize(
             0.7 * track.appearance + 0.3 * detection.appearance,

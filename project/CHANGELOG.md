@@ -2,6 +2,31 @@
 
 ## Unreleased — 2026-07-28
 
+### 2026-09-13 cross-capability prediction hardening
+
+- Added a deterministic aggregate hardening runner with 32 paired checks over
+  protected long horizons, integrated behavior, open-world estimation,
+  recovery, N=4--8 multi-contact, and N=4--8 public visual prediction.
+- Diagnosed public N=8 drift with truth-position, truth-orientation, and
+  truth-geometry ablations. Added an opt-in causal quaternion outlier gate to
+  the owning public tracker seam without changing legacy defaults or adding
+  learned capacity.
+- Improved public N=8 two-second position, velocity, and orientation error by
+  `68.9%`, `84.3%`, and `44.7%`; repeated-contact F1 rises from `0.6133` to
+  `0.8095`. All other frozen paired checks and their original gates pass.
+- Specialized mixed-rigid pair geometry dispatch by active primitive type,
+  preserving numerical results while approximately halving isolated N=8
+  rollout time relative to the failed timing diagnostic.
+- Replaced the dashboard's mixed-protocol overall trend with comparable
+  schema/factor trends. Added a protected long-horizon curve and complete
+  accepted/candidate regression ledger with named axes and explicit limits.
+- Published isolated passing timing evidence plus the 477,609-byte aggregate
+  `20260913-capability-hardening-v2`; all retain only compact JSON, HTML,
+  manifest, and inline SVG data.
+- Passed Ruff, Ruff format across 380 files, compileall, diff hygiene, focused
+  behavioral tests, the strict governed audit, and the complete `2485 passed,
+  16 skipped` repository suite in `1:37:33`.
+
 ### 2026-09-12 integrated visual-dynamic N=4--8 scale
 
 - Added an end-to-end N=4/N=6/N=8 gate from prototype-free calibrated RGB-D

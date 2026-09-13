@@ -1,5 +1,34 @@
 # Tasks
 
+## Cross-capability prediction hardening — completed 2026-09-13
+
+- [x] Replace the misleading mixed-protocol dashboard trend with separately
+  grouped, like-for-like schema and factor trends.
+- [x] Freeze a 32-check regression envelope across protected long-horizon,
+  integrated, open-world, recovery, N=4--8 multi-contact, and N=4--8 public
+  visual behavior.
+- [x] Attribute the N=8 visual drift to public box orientation at the causal
+  anchor, then add an opt-in motion-compensated orientation outlier gate while
+  leaving legacy tracker behavior unchanged.
+- [x] Reduce N=8 two-second position/velocity/orientation error by
+  `68.9%`/`84.3%`/`44.7%` and raise repeated-contact F1 from `0.6133` to
+  `0.8095`, with no accepted N=4/N=6 or other capability regression.
+- [x] Avoid computing unused box/box and sphere/box geometry branches for each
+  mixed-rigid pair; retain exact heterogeneous-batch and legacy numerical
+  behavior while cutting isolated N=8 rollout time to `18.528 s`.
+- [x] Require aggregate K=8/K=32 action selection to preserve exact winners,
+  zero regret, goal success, serial parity, and zero maximum cost difference.
+- [x] Publish `runs/20260913-capability-hardening-v2` as a 477,609-byte
+  qualified audit with named horizon axes, a visible regression ledger, and
+  three lightweight vector animations; retain failed timing pilots as honest
+  diagnostics.
+- [x] Pass Ruff, Ruff format across 380 files, compileall, diff hygiene,
+  focused behavioral gates, the strict governed audit, and the complete
+  repository suite: `2485 passed, 16 skipped` in `1:37:33`.
+- [ ] Begin adaptive physical generalization at N=4--8 using public moving
+  pre-anchor evidence and heterogeneous per-object parameters, protected by
+  this hardening envelope.
+
 ## Integrated visual-dynamic N=4--8 scale — completed 2026-09-12
 
 - [x] Initialize N=4/N=6/N=8 alternating sphere/oriented-box scenes from

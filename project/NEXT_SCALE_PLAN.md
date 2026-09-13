@@ -297,9 +297,40 @@ K=8/K=32 planning selects the private winner with zero regret and exact cost
 parity; candidate batching is `7.57x`/`27.86x` faster than serial. The passing
 run is `484,220` bytes and contains no raster, video, or per-frame artifacts.
 
+## Phase J — Cross-capability prediction hardening
+
+Status: **implemented and passing** in
+`runs/20260913-capability-hardening-v2`.
+
+1. Freeze accepted metrics instead of inferring regression from unlike
+   dashboard scores. Replay protected long-horizon, integrated, open-world,
+   recovery, state-first multi-contact, and public visual protocols through one
+   deterministic aggregate audit.
+2. Use truth-state component ablations to identify the owner of any drift
+   before changing capacity. Require every source protocol's original gates in
+   addition to the paired envelope.
+3. Correct public pose only from causal observable history. Preserve the
+   legacy tracker output unless an explicit profile enables the bounded
+   outlier gate.
+4. Reduce interaction cost by skipping unused primitive geometry paths, while
+   preserving pair order, heterogeneous batch dispatch, dense/serial parity,
+   action invariants, and source immutability.
+5. Show accepted, candidate, delta, threshold, and status directly in the
+   dashboard. Plot only repeated comparable protocols as trends and keep the
+   protected long-horizon curve separate.
+
+All 32 paired checks pass. Public N=8 two-second position, velocity, and
+orientation errors improve by `68.9%`, `84.3%`, and `44.7%`, while repeated-
+contact F1 improves by `32.0%`. The protected 8-second position RMSE remains
+`5.994e-4 m`; aggregate K=8/K=32 planning retains exact winners, zero regret,
+goal success, serial parity, and zero cost difference. The lower-is-better
+macro ratio improves by `5.74%`. Isolated N=8 mixed-rigid rollout time falls
+from the `36.658 s` failed diagnostic to `18.528 s`. The final compact audit is
+477,609 bytes with no retained source frames or video.
+
 ## Completion and next frontier
 
-Phases A--I are implemented in order and remain separate regression tiers. No
+Phases A--J are implemented in order and remain separate regression tiers. No
 learned module was widened because the only integrated development failure was
 owned by public geometry/state estimation: public face-plane and algebraic
 sphere fits removed it directly, while Phase G's failure owner was public
@@ -307,7 +338,9 @@ support partitioning and metric association. Phase I now upgrades the N=4--8
 contact/planning bridge from state-first to public RGB-D evidence. Its first
 diagnostic likewise attributed error to near-cubic pose observability and
 short-window motion noise; both were corrected in the owning public-state seam
-without learned capacity.
+without learned capacity. Phase J adds the permanent cross-tier regression
+envelope and corrects the remaining N=8 pose outlier with bounded causal public
+history; it does not erase or relabel historical failed experiments.
 
 The next highest-impact frontier is adaptive physical generalization at this
 same visual scale. Add moving pre-anchor trajectories and varied per-object
@@ -320,9 +353,9 @@ that passes should full visual qualification rise above N=8. Flush featureless
 unions, unknown calibration, and identity recovery through unobserved impulses
 or collisions remain explicit observability limits.
 
-The expanded implementation gate passed Ruff, Ruff format, compileall, diff
-hygiene, the focused and broad compatibility checks, and the complete
-repository suite: `2479 passed, 16 skipped` in `1:32:21`. The 13 warnings are
-the existing dynamic-set PyTorch thread-setting notice. Absolute planning
-latency is separately adjudicated by the strict fresh-process runner bound into
-the Phase H manifest.
+The Phase J aggregate governed gate is qualified, with isolated fresh-process
+latency evidence for both multi-contact and public visual tiers. The final
+implementation passes Ruff, Ruff format, compileall, diff hygiene, focused
+behavioral tests, and the complete repository suite: `2485 passed, 16 skipped`
+in `1:37:33`. Absolute timing remains separately adjudicated by the isolated
+strict runners rather than the thermally contaminated aggregate process.

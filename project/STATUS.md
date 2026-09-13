@@ -1,5 +1,61 @@
 # Project status
 
+## Cross-capability prediction hardening — 2026-09-13
+
+The prediction stack is hardened in
+`runs/20260913-capability-hardening-v2`. The new deterministic audit replays
+the accepted long-horizon, integrated, open-world parameter/pose, extended
+recovery, state-first multi-contact, and public visual-dynamic protocols. All
+32 paired regression checks pass, as do every source protocol's original
+gates. Its lower-is-better macro ratio improves from `1.0000` to `0.9426`, a
+`5.74%` improvement rather than a comparison between unrelated dashboard
+scores.
+
+The actual regression was localized before changing the model. On the public
+N=8 visual scene, truth position did not help, while replacing only the causal
+anchor orientation reduced two-second position error from `0.013789 m` to
+`0.003367 m`. The tracker now has an opt-in `0.5 degree` observable
+orientation-outlier gate. It motion-compensates the bounded accepted history,
+uses a sign-aligned quaternion median, and replaces only a disagreeing box
+orientation. The legacy default is disabled and true constant rotation is
+preserved. The qualified public N=8 result reaches `0.004294 m` position,
+`0.008704 m/s` velocity, `5.2040 degrees` orientation, and `0.8095`
+repeated-contact F1: improvements of `68.9%`, `84.3%`, `44.7%`, and `32.0%`
+relative to the accepted Phase I result. N=4/N=6 and all other protected tiers
+remain unchanged within their frozen envelopes.
+
+The mixed-rigid resolver also stopped evaluating all three primitive geometry
+branches for every pair. It now evaluates only the box/box, sphere/box, or
+box/sphere branch actually present in each active batch row, preserving exact
+pair order and numerical results. Fresh isolated visual N=4/N=6/N=8 rollout
+times are `7.566/12.830/18.528 s`; the former N=8 diagnostic took `36.658 s`.
+K=8/K=32 planning retains exact winners, zero regret, successful goals, and
+zero serial/vectorized cost difference. Isolated candidate batching is
+`7.53x/26.91x` faster than the serial oracle.
+
+The dashboard no longer joins scores from different schemas, horizons, object
+counts, or gates into one apparent trend. It shows a 32-row accepted/candidate
+ledger, a separately named protected long-horizon curve, explicit world-axis
+labels, and corrected identity-colour versus model/reference marker semantics.
+Integrated-browser inspection confirmed the completed report and running
+N=4/N=6/N=8 vector animations. The aggregate artifact is `477,609` bytes and
+contains no retained RGB-D frames, raster media, or video. Failed composite
+and thermally contaminated timing runs remain visible as diagnostics; absolute
+latency is adjudicated by the passing isolated runners
+`20260913-multicontact-hardening-v2` and
+`20260913-visual-dynamic-hardening-v3`.
+
+The final implementation passes Ruff, Ruff format across 380 files,
+compileall, diff hygiene, focused behavioral tests, the strict governed audit,
+and the complete repository suite: `2485 passed, 16 skipped, 13 warnings` in
+`1:37:33`. The warnings are the existing dynamic-set PyTorch intra-op
+thread-setting notice.
+
+The next frontier remains adaptive physical generalization from public
+evidence, not more object slots or an unconditional learned residual. Unknown
+calibration, hidden actions, visual qualification above N=8, and planning over
+unobserved future membership changes remain unsupported.
+
 ## Integrated visual-dynamic N=4--8 scale — 2026-09-12
 
 The state-first Phase H executor is now joined to prototype-free public

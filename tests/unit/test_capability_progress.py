@@ -313,17 +313,75 @@ def test_trends_do_not_mix_physical_and_planning_score_scales() -> None:
     physical = replace(
         _summary("physical"),
         source_format="world_model_capability_factor_report_v1",
+        configuration={"factor": "sensor_noise"},
     )
+    physical_again = replace(physical, run_id="physical-again")
     planning = replace(
         _summary("planning"),
         source_format="world_model_capability_planning_report_v1",
+        configuration={"factor": "sensor_noise"},
+    )
+    planning_again = replace(planning, run_id="planning-again")
+
+    content = render_summary_html(
+        planning,
+        history=(physical, planning, physical_again, planning_again),
     )
 
-    content = render_summary_html(planning, history=(physical, planning))
-
-    assert "Physical factor score across runs" in content
-    assert "Downstream planning error across runs" in content
+    assert "Sensor Noise physical score — comparable protocol" in content
+    assert "Sensor Noise planning error — comparable protocol" in content
+    assert "Different horizons, cardinalities, and capability gates" in content
+    assert "Overall capability score across runs" not in content
     assert "Lower-is-better score across runs" not in content
+
+
+def test_unrelated_specialized_runs_are_not_connected_as_a_trend() -> None:
+    first = replace(_summary("first"), source_format="world_model_first_gate_v1")
+    second = replace(_summary("second"), source_format="world_model_second_gate_v1")
+
+    content = render_summary_html(second, history=(first, second))
+
+    assert "Comparable trend: insufficient repeated protocol evidence" in content
+    assert "Overall capability score across runs" not in content
+
+
+def test_hardening_report_shows_paired_regressions_and_protected_horizon() -> None:
+    base = _summary("hardening")
+    summary = replace(
+        base,
+        horizon_curves={
+            **base.horizon_curves,
+            "protected_long_horizon_position_rmse_m": {
+                "0.05": 0.0001,
+                "4": 0.0005,
+                "8": 0.0004,
+            },
+        },
+        qualitative={
+            **base.qualitative,
+            "regression_checks": [
+                {
+                    "family": "visual_n8",
+                    "metric": "maximum_position_rmse_m",
+                    "direction": "lower",
+                    "baseline": 0.014,
+                    "candidate": 0.004,
+                    "limit": 0.007,
+                    "passed": True,
+                }
+            ],
+        },
+    )
+
+    content = render_summary_html(summary)
+
+    assert "Cross-capability regression envelope" in content
+    assert "positive deltas improve higher-is-better metrics" in content
+    assert "visual_n8" in content
+    assert "-71.4%" in content
+    assert "≤ 0.0070" in content
+    assert "Protected long-horizon position RMSE" in content
+    assert "8s" in content
 
 
 def test_coverage_heatmap_colours_distance_from_target_not_larger_values() -> None:

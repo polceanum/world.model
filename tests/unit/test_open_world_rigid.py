@@ -232,6 +232,62 @@ def test_tracker_supports_robust_history_and_observable_motion_deadzone() -> Non
     torch.testing.assert_close(second[0].angular_velocity, torch.zeros(3, dtype=DTYPE))
 
 
+def test_causal_orientation_filter_rejects_outlier_and_preserves_rotation() -> None:
+    raw = OpenWorldRigidTracker(motion_sample_count=5)
+    smooth = OpenWorldRigidTracker(
+        motion_sample_count=5,
+        orientation_outlier_gate_degrees=0.5,
+        angular_speed_deadzone=0.5,
+    )
+    jittered = (
+        (-0.006, 0.108),
+        (0.004, 0.126),
+        (-0.003, 0.114),
+        (0.002, 0.122),
+        (0.010, 0.150),
+    )
+    raw_result = smooth_result = ()
+    for index, (position_error, angle) in enumerate(jittered):
+        frame = OpenWorldRigidFrame(
+            index * 0.05,
+            (_detection((position_error, 0.0, 4.0), angle),),
+        )
+        raw_result = raw.update(frame)
+        smooth_result = smooth.update(frame)
+
+    assert smooth_result[0].geometry.world_position.equal(raw_result[0].geometry.world_position)
+    smooth_angle = 2.0 * math.atan2(
+        float(smooth_result[0].geometry.orientation[2]),
+        float(smooth_result[0].geometry.orientation[3]),
+    )
+    raw_angle = 2.0 * math.atan2(
+        float(raw_result[0].geometry.orientation[2]),
+        float(raw_result[0].geometry.orientation[3]),
+    )
+    assert abs(smooth_angle - 0.12) < abs(raw_angle - 0.12)
+
+    rotating = OpenWorldRigidTracker(
+        motion_sample_count=5,
+        orientation_outlier_gate_degrees=0.5,
+    )
+    rotating_result = ()
+    for index in range(5):
+        timestamp = index * 0.05
+        rotating_result = rotating.update(
+            OpenWorldRigidFrame(
+                timestamp,
+                (_detection((0.2 * timestamp, 0.0, 4.0), timestamp),),
+            )
+        )
+    assert float(rotating_result[0].velocity[0]) == pytest.approx(0.2, abs=1.0e-8)
+    assert float(rotating_result[0].angular_velocity[2]) == pytest.approx(1.0, abs=1.0e-8)
+    rotating_angle = 2.0 * math.atan2(
+        float(rotating_result[0].geometry.orientation[2]),
+        float(rotating_result[0].geometry.orientation[3]),
+    )
+    assert rotating_angle == pytest.approx(0.20, abs=1.0e-8)
+
+
 def test_geometry_only_tracker_recovers_ids_after_eight_missing_frames() -> None:
     tracker = OpenWorldRigidTracker(
         max_missed_steps=8,

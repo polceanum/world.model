@@ -56,6 +56,26 @@ _OBSERVATION_DT = 0.05
 _OBSERVATION_FRAMES = 8
 _FORECAST_DT = 0.05
 _FORECAST_SECONDS = 2.0
+_ACCEPTED_VISUAL_BASELINE = {
+    4: {
+        "position": 0.0063384447408479745,
+        "velocity": 0.028042441735440335,
+        "orientation": 5.177510973549666,
+        "repeated_contact_f1": 0.875,
+    },
+    6: {
+        "position": 0.009352914348502018,
+        "velocity": 0.09070518811208458,
+        "orientation": 9.278944513978788,
+        "repeated_contact_f1": 0.7560975609756098,
+    },
+    8: {
+        "position": 0.01378871975459622,
+        "velocity": 0.0555040703509804,
+        "orientation": 9.40562622288037,
+        "repeated_contact_f1": 0.6133333333333333,
+    },
+}
 _PALETTE = torch.tensor(
     [
         [0.90, 0.16, 0.12],
@@ -141,6 +161,7 @@ def visual_dynamic_manifest_sha256() -> str:
             "remove_slot1_frames": [2, 3],
             "replacement_slot1_frames": [4, 5],
             "moving_calibrated_cameras": 6,
+            "orientation_outlier_gate_degrees": 0.5,
         },
         "forecast": {
             "horizon_seconds": _FORECAST_SECONDS,
@@ -168,6 +189,12 @@ def visual_dynamic_manifest_sha256() -> str:
             "friction": 0.25,
         },
         "retained_media": False,
+        "hardening": {
+            "maximum_n4_n6_regression": 0.02,
+            "n8_position_ratio": 0.50,
+            "n8_velocity_ratio": 0.50,
+            "n8_orientation_ratio": 0.60,
+        },
     }
     return hashlib.sha256(
         json.dumps(payload, sort_keys=True, separators=(",", ":")).encode()
@@ -433,6 +460,7 @@ def _evaluate_scenario(
         max_missed_steps=1,
         birth_confirmation_steps=2,
         motion_sample_count=8,
+        orientation_outlier_gate_degrees=0.5,
         linear_speed_deadzone=0.01,
         angular_speed_deadzone=0.5,
         geometry_weight=0.25,
@@ -788,6 +816,8 @@ def _gate_failures(
     failures = []
     for item in scenarios:
         prefix = f"n{item.object_count}"
+        baseline = _ACCEPTED_VISUAL_BASELINE[item.object_count]
+        hardening_ratio = 0.50 if item.object_count == 8 else 1.02
         checks = {
             "proposal_f1": item.proposal_f1 >= 0.95,
             "exact_visible_count": item.exact_visible_count_accuracy >= 0.95,
@@ -810,6 +840,14 @@ def _gate_failures(
             "orientation": item.maximum_orientation_rmse_degrees <= 10.0,
             "source_unchanged": item.source_unchanged,
             "finite": item.finite,
+            "accepted_position_envelope": item.maximum_position_rmse_m
+            <= baseline["position"] * hardening_ratio + 1.0e-12,
+            "accepted_velocity_envelope": item.maximum_velocity_rmse_mps
+            <= baseline["velocity"] * hardening_ratio + 1.0e-12,
+            "accepted_orientation_envelope": item.maximum_orientation_rmse_degrees
+            <= baseline["orientation"] * (0.60 if item.object_count == 8 else 1.02) + 1.0e-12,
+            "accepted_repeated_contact_envelope": item.repeated_contact_frame_f1
+            >= baseline["repeated_contact_f1"] - 0.02,
         }
         if enforce_latency:
             checks["latency"] = (
@@ -924,6 +962,7 @@ def _summary(
             "runtime_truth_inputs": False,
             "private_reference_opened_after_belief_construction": True,
             "dense_serial_planning_oracle": True,
+            "accepted_visual_baseline_run": "20260912-visual-dynamic-scale-v1",
         },
         scores={
             "candidate": {
@@ -931,10 +970,10 @@ def _summary(
                 "supported_weight": 1.0,
             },
             "incumbent": {
-                "value": max(item.maximum_position_rmse_m for item in result.scenarios),
+                "value": _ACCEPTED_VISUAL_BASELINE[8]["position"],
                 "supported_weight": 1.0,
             },
-            "selected": "visual_dynamic_scale" if result.qualified else "incumbent",
+            "selected": "hardened_visual_dynamic" if result.qualified else "incumbent",
         },
         factor_metrics={
             f"visual_dynamic_n{count}": {
@@ -996,7 +1035,7 @@ def _summary(
         },
         artifacts={"run_bytes": run_bytes, "archive_bytes": archive_bytes},
         selection={
-            "selected": "visual_dynamic_scale" if result.qualified else "none",
+            "selected": "hardened_visual_dynamic" if result.qualified else "none",
             "promotion_evaluated": False,
             "gate_failures": list(result.gate_failures),
         },

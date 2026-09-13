@@ -5831,3 +5831,36 @@ cross-reference was disambiguated.
   milestone must connect public RGB-D discovery, runtime identity/lifecycle,
   and partial visibility to this executor at N=4--8 before claiming integrated
   visual scale or moving perception above N=8.
+
+## ADR-191 — Harden comparable behavior before opening another capability frontier
+
+- **Date:** 2026-09-13
+- **Status:** accepted and qualified
+- **Context:** The progress dashboard connected lower-is-better scores produced
+  by different report schemas, horizons, cardinalities, and gates. That visual
+  comparison looked like a prediction regression even when protocols were not
+  comparable. Separately, the latest public N=8 visual run did contain real
+  two-second drift. Component ablations showed truth position did not improve
+  it, while truth orientation at the causal anchor removed most downstream
+  position and velocity error. The mixed-rigid resolver also evaluated
+  box/box and both sphere/box geometry paths for every mixed pair before
+  selecting one.
+- **Decision:** Freeze a manifest-bound cross-capability ledger against the
+  accepted result of each exact protocol and require each source gate as well
+  as its paired limit. Group trend lines only by matching report schema and,
+  where applicable, factor. Add an opt-in box-orientation gate that projects
+  bounded public orientation history to the current time, sign-aligns and
+  robustly aggregates it, and replaces only a disagreeing current observation.
+  Leave legacy tracker behavior disabled by default. Dispatch pair geometry by
+  the primitive types actually active in each batch row, retaining exact pair
+  order and dense/serial numerical oracles. Treat isolated fresh-process
+  runners as authoritative for absolute latency; the aggregate run is an
+  accuracy and invariance audit.
+- **Consequences:** All 32 frozen paired checks and every original source gate
+  pass. The aggregate score improves `5.74%`; N=8 visual position, velocity,
+  and orientation error improve `68.9%`, `84.3%`, and `44.7%`, and repeated-
+  contact F1 rises `32.0%`. N=4/N=6, 8-second prediction, open-world parameter
+  identification, recovery, integrated behavior, and downstream planning do
+  not regress. Isolated N=8 rollout time falls roughly in half with identical
+  metrics. Historical failures remain visible, trends no longer imply false
+  comparability, and the 477,609-byte audit retains no frame media.

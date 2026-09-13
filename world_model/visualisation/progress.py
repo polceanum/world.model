@@ -145,52 +145,50 @@ def _svg_line_chart(
 def _trend_charts(history: Sequence[CapabilityRunSummary]) -> str:
     """Plot only like-for-like scores on the same axis."""
 
-    groups = (
-        (
+    grouped: dict[tuple[str, str], list[tuple[str, float]]] = {}
+    for item in history:
+        value = _score_value(item, "candidate")
+        if value is None:
+            continue
+        factor = ""
+        if item.source_format in {
             "world_model_capability_factor_report_v1",
-            "Physical factor score across runs",
-        ),
-        (
             "world_model_capability_planning_report_v1",
-            "Downstream planning error across runs",
-        ),
-    )
+        }:
+            factor = str(item.configuration.get("factor", "unspecified"))
+        grouped.setdefault((item.source_format, factor), []).append((item.run_id, value))
+
     charts: list[str] = []
-    grouped_formats: set[str] = set()
-    for source_format, title in groups:
-        points = [
-            (item.run_id, value)
-            for item in history
-            if item.source_format == source_format
-            and (value := _score_value(item, "candidate")) is not None
-        ]
-        if points:
-            charts.append(
-                _svg_line_chart(
-                    points,
-                    title=title,
-                    x_label="Run",
-                    y_label="Score (lower is better)",
-                )
-            )
-            grouped_formats.add(source_format)
-    other_points = [
-        (item.run_id, value)
-        for item in history
-        if item.source_format not in grouped_formats
-        and (value := _score_value(item, "candidate")) is not None
-    ]
-    if other_points:
-        charts.insert(
-            0,
+    for (source_format, factor), points in grouped.items():
+        if len(points) < 2:
+            continue
+        if source_format == "world_model_capability_factor_report_v1":
+            title = f"{factor.replace('_', ' ').title()} physical score — comparable protocol"
+        elif source_format == "world_model_capability_planning_report_v1":
+            title = f"{factor.replace('_', ' ').title()} planning error — comparable protocol"
+        else:
+            label = source_format.removeprefix("world_model_")
+            if label.endswith("_v1"):
+                label = label[:-3]
+            title = f"{label.replace('_', ' ').title()} — comparable protocol"
+        charts.append(
             _svg_line_chart(
-                other_points,
-                title="Overall capability score across runs",
+                points,
+                title=title,
                 x_label="Run",
                 y_label="Score (lower is better)",
-            ),
+            )
         )
-    return "".join(charts) or '<div class="empty">Capability trend: unmeasured</div>'
+    explanation = (
+        '<p class="table-note">Each line contains only repeated runs from the same report '
+        "schema and factor protocol. Different horizons, cardinalities, and capability gates "
+        "are never connected as a model trend.</p>"
+    )
+    return explanation + (
+        "".join(charts)
+        if charts
+        else '<div class="empty">Comparable trend: insufficient repeated protocol evidence</div>'
+    )
 
 
 def _cell_value(metrics: object, metric: str) -> float | None:
@@ -1348,6 +1346,48 @@ def _parameter_convergence_section(summary: CapabilityRunSummary) -> str:
     )
 
 
+def _regression_ledger(summary: CapabilityRunSummary) -> str:
+    evidence = summary.qualitative.get("regression_checks")
+    if not isinstance(evidence, list):
+        return ""
+    rows = []
+    for item in evidence:
+        if not isinstance(item, Mapping):
+            continue
+        baseline = item.get("baseline")
+        candidate = item.get("candidate")
+        if not isinstance(baseline, (int, float)) or not isinstance(candidate, (int, float)):
+            continue
+        relative = (
+            100.0 * (float(candidate) / float(baseline) - 1.0) if float(baseline) != 0.0 else 0.0
+        )
+        passed = item.get("passed") is True
+        direction = "≤" if item.get("direction") == "lower" else "≥"
+        rows.append(
+            "<tr>"
+            f"<th>{_escape(item.get('family', 'unlabelled'))}</th>"
+            f"<td>{_escape(item.get('metric', 'unlabelled'))}</td>"
+            f"<td>{_format_number(baseline)}</td>"
+            f"<td>{_format_number(candidate)}</td>"
+            f"<td>{relative:+.1f}%</td>"
+            f"<td>{direction} {_format_number(item.get('limit'))}</td>"
+            f'<td><span class="tag {"passed" if passed else "failed"}">'
+            f"{'passed' if passed else 'failed'}</span></td>"
+            "</tr>"
+        )
+    if not rows:
+        return ""
+    return (
+        "<section><h2>Cross-capability regression envelope</h2>"
+        '<p class="table-note">Candidate values are paired with the accepted run of the '
+        "same fixed protocol. Negative deltas improve lower-is-better metrics; positive deltas "
+        "improve higher-is-better metrics. Each row must also satisfy its explicit limit.</p>"
+        "<table><thead><tr><th>Family</th><th>Metric</th><th>Accepted</th>"
+        "<th>Candidate</th><th>Delta</th><th>Limit</th><th>Status</th></tr></thead>"
+        f"<tbody>{''.join(rows)}</tbody></table></section>"
+    )
+
+
 def _summary_section(
     summary: CapabilityRunSummary,
     *,
@@ -1383,6 +1423,19 @@ def _summary_section(
             y_label="Position RMSE (m)",
         )
     )
+    protected_horizon = summary.horizon_curves.get("protected_long_horizon_position_rmse_m", {})
+    protected_horizon_points = (
+        [(f"{key}s", float(value)) for key, value in protected_horizon.items()]
+        if isinstance(protected_horizon, Mapping)
+        else []
+    )
+    if protected_horizon_points:
+        position_chart += _svg_line_chart(
+            protected_horizon_points,
+            title="Protected long-horizon position RMSE",
+            x_label="Prediction horizon (s)",
+            y_label="Position RMSE (m)",
+        )
     velocity_horizon = summary.horizon_curves.get("candidate_velocity_rmse_mps", {})
     velocity_horizon_points = (
         [(f"{key}s", float(value)) for key, value in velocity_horizon.items()]
@@ -1437,6 +1490,7 @@ def _summary_section(
     <section class="grid two"><article><h2>Capability coverage</h2>{_factor_table(summary)}</article><article><h2>Horizon error</h2>{position_chart}{velocity_chart}{orientation_chart}</article></section>
     {_parameter_convergence_section(summary)}
     <section><h2>Factor performance</h2>{_factor_metric_matrix(summary)}</section>
+    {_regression_ledger(summary)}
     <section><h2>Physical behavior</h2>{_heatmap(summary, metric="current_position_rmse_m", title="Current-position RMSE (m) by object count, contact, and membership", lower_is_better=True)}{_heatmap(summary, metric="uncertainty_90_coverage", title="90% uncertainty coverage by object count, contact, and membership", lower_is_better=True, ideal_value=0.90)}</section>
     <section class="grid two"><article><h2>Capability frontier</h2>{_frontier_table(frontier_history)}</article><article><h2>Ablation attribution</h2>{_ablation_attribution(summary)}</article></section>
     <section><h2>Downstream planning</h2>{_planning_table(summary)}</section>

@@ -33,11 +33,11 @@ analytic + modal + interaction + event dynamics
 
 ## Capability progress
 
-The active phase keeps the calibrated structured 1--6-object RGB-D checkpoint
-as the incumbent and broadens behavior through controlled sensor, physics,
-camera, known-action, and short-recovery factors. Planning is a required
-downstream acceptance test and is never an optimized winner/ranking loss.
-Historical one-shot qualification code is audit-only.
+The current hardened stack keeps the calibrated structured checkpoint as the
+incumbent and has qualified public RGB-D prediction through N=8, mixed rigid
+contact, changing membership, camera motion, recovery, and known actions.
+Planning is a required downstream acceptance test and is never an optimized
+winner/ranking loss. Historical one-shot qualification code is audit-only.
 
 Build and open the portable static dashboard directly—no server or external
 assets are required:
@@ -99,6 +99,10 @@ conda run -n orpheus python scripts/run_open_world_touching_recovery.py --dry-ru
 conda run -n orpheus python scripts/run_open_world_touching_recovery.py
 conda run -n orpheus python scripts/run_multicontact_six_dof_scale.py --dry-run
 conda run -n orpheus python scripts/run_multicontact_six_dof_scale.py
+conda run -n orpheus python scripts/run_visual_dynamic_scale.py --dry-run
+conda run -n orpheus python scripts/run_visual_dynamic_scale.py
+conda run -n orpheus python scripts/run_capability_hardening.py --dry-run
+conda run -n orpheus python scripts/run_capability_hardening.py
 ```
 
 The first gate spans all N=7/8 separated, action, contact, lifecycle,
@@ -122,6 +126,13 @@ scale gate with mixed rigid shapes, three known actions, chained and
 simultaneous contacts, and required N=8 planning. It accelerates independent
 candidate rows while preserving an exact serial oracle; it is not an RGB-D
 qualification.
+
+The visual-dynamic command connects that executor to public calibrated RGB-D
+at N=4/N=6/N=8. The hardening command then replays every accepted capability
+tier against its own frozen baseline, publishes a paired regression ledger,
+and regenerates the compact dashboard. Absolute latency remains the job of the
+isolated source runners because a sequential aggregate process is thermally
+order-dependent.
 
 The pre-six-DoF impact-first implementation passed the complete repository
 gate at `2457 passed, 16 skipped` (the skips require unavailable MPS hardware).

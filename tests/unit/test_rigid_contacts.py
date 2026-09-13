@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import math
+from dataclasses import fields, replace
 
 import torch
 
@@ -84,6 +85,56 @@ def test_sphere_box_collision_uses_closest_box_point() -> None:
         atol=1.0e-7,
         rtol=1.0e-7,
     )
+
+
+def test_mixed_primitive_batch_geometry_matches_independent_rows_exactly() -> None:
+    objects = (
+        BeliefFactory(max_objects=2, geometry_dim=5)
+        .create(
+            batch_size=4,
+            dtype=torch.float64,
+            gravity=(0.0, 0.0, 0.0),
+        )
+        .objects
+    )
+    objects.active[:] = True
+    objects.object_id[:] = torch.tensor([[4, 9]]).expand(4, -1)
+    objects.position[:] = objects.position.new_tensor([[[-0.35, 0.0, 0.0], [0.35, 0.0, 0.0]]])
+    sphere = RigidGeometryCodec.encode_sphere(
+        objects.position.new_full((4, 2, 1), 0.2),
+        geometry_dim=5,
+    )
+    box = RigidGeometryCodec.encode_box(
+        objects.position.new_tensor([0.4, 0.25, 0.3]).expand(4, 2, -1),
+        geometry_dim=5,
+    )
+    objects.geometry.copy_(sphere)
+    objects.geometry[0] = box[0]
+    objects.geometry[1, 1] = box[1, 1]
+    objects.geometry[2, 0] = box[2, 0]
+    half_angle = math.pi / 10.0
+    objects.orientation[0, 1] = objects.orientation.new_tensor(
+        [0.0, 0.0, math.sin(half_angle), math.cos(half_angle)]
+    )
+
+    resolver = _resolver()
+    batched = resolver._pair_geometry(objects)
+    for batch_index in range(objects.batch_size):
+        single = replace(
+            objects,
+            **{
+                field.name: getattr(objects, field.name)[batch_index : batch_index + 1].clone()
+                for field in fields(objects)
+            },
+        )
+        independent = resolver._pair_geometry(single)
+        for actual, expected in zip(batched, independent, strict=True):
+            torch.testing.assert_close(
+                actual[batch_index : batch_index + 1],
+                expected,
+                atol=0.0,
+                rtol=0.0,
+            )
 
 
 def test_rotated_box_collision_uses_sat_axis_and_keeps_gradients_finite() -> None:
