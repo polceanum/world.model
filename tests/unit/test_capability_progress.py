@@ -88,6 +88,9 @@ def test_summary_roundtrip_and_active_refresh_are_versioned(tmp_path: Path) -> N
     active_html = render_summary_html(active)
     assert 'http-equiv="refresh"' in active_html
     assert 'id="capability-run-summary"' in active_html
+    assert "Model used for this result" in active_html
+    assert "Structured online world model" in active_html
+    assert active_html.index("Model used for this result") < active_html.index("Capability error")
     assert "Position RMSE across horizon" in active_html
     assert "Prediction horizon (s)" in active_html
     assert "Position RMSE (m)" in active_html
@@ -112,6 +115,55 @@ def test_summary_roundtrip_and_active_refresh_are_versioned(tmp_path: Path) -> N
 
     completed_html = render_summary_html(replace(active, lifecycle_status="completed"))
     assert 'http-equiv="refresh"' not in completed_html
+
+
+def test_adaptive_model_overview_reports_size_training_and_belief_evolution() -> None:
+    summary = replace(
+        _summary("adaptive-model", "completed"),
+        source_format="world_model_adaptive_physics_scale_v1",
+        configuration={
+            "single_model": True,
+            "ensemble": False,
+            "mixture_of_experts": False,
+        },
+        provenance={
+            "checkpoint_loaded": False,
+            "learned_parameters_zero_initialized": True,
+        },
+        resources={"learned_weight_bytes": 12_984},
+        cell_metrics={
+            "N4/adaptive_physics/mixed_rigid": {
+                "parameter_relative_error": {"value": 0.002, "support": 16}
+            },
+            "N6/adaptive_physics/mixed_rigid": {
+                "parameter_relative_error": {"value": 0.002, "support": 24}
+            },
+            "N8/adaptive_physics/mixed_rigid": {
+                "parameter_relative_error": {"value": 0.002, "support": 32}
+            },
+        },
+        uncertainty={"parameter_contracted_fraction": 1.0},
+        qualitative={
+            "parameter_convergence": [
+                {"stage": "neutral priors", "mean_relative_error": 0.4373506},
+                {"stage": "public evidence", "mean_relative_error": 0.0023182},
+            ]
+        },
+    )
+
+    html = render_summary_html(summary)
+
+    assert "Single shared structured analytic model" in html
+    assert html.count('class="model-stage"') == 5
+    assert "1,623" in html
+    assert "12.7 KiB" in html
+    assert "0 / 1,623" in html
+    assert "0 steps" in html
+    assert "0 examples in this run" in html
+    assert "72 / 72" in html
+    assert "43.74% → 0.23%" in html
+    assert "99.47% lower parameter error" in html
+    assert "Weights and architecture stayed fixed" in html
 
 
 def test_parameter_uncertainty_contraction_is_not_mislabeled_as_coverage() -> None:

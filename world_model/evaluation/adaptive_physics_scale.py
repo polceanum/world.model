@@ -109,6 +109,8 @@ class AdaptivePhysicsScaleResult:
     planning: tuple[state_gate.MultiContactPlanningResult, ...]
     gate_failures: tuple[str, ...]
     qualified: bool
+    learned_parameter_count: int
+    nonzero_learned_parameter_count: int
     learned_weight_bytes: int
     peak_probe_tensor_bytes: int
     evaluation_seconds: float
@@ -926,6 +928,8 @@ def run_adaptive_physics_scale(*, enforce_latency: bool = True) -> AdaptivePhysi
     scenarios = []
     planning_inputs = None
     learned_weight_bytes = 0
+    learned_parameter_count = 0
+    nonzero_learned_parameter_count = 0
     for object_count in _COUNTS:
         scenario, dynamics, belief, truth, truth_by_slot = _evaluate_scenario(object_count)
         scenarios.append(scenario)
@@ -934,6 +938,14 @@ def run_adaptive_physics_scale(*, enforce_latency: bool = True) -> AdaptivePhysi
             sum(
                 parameter.numel() * parameter.element_size() for parameter in dynamics.parameters()
             ),
+        )
+        learned_parameter_count = max(
+            learned_parameter_count,
+            sum(parameter.numel() for parameter in dynamics.parameters()),
+        )
+        nonzero_learned_parameter_count = max(
+            nonzero_learned_parameter_count,
+            sum(int(torch.count_nonzero(parameter)) for parameter in dynamics.parameters()),
         )
         if object_count == 8:
             planning_inputs = dynamics, belief, truth, truth_by_slot
@@ -951,6 +963,8 @@ def run_adaptive_physics_scale(*, enforce_latency: bool = True) -> AdaptivePhysi
         planning=planning,
         gate_failures=failures,
         qualified=not failures,
+        learned_parameter_count=learned_parameter_count,
+        nonzero_learned_parameter_count=nonzero_learned_parameter_count,
         learned_weight_bytes=learned_weight_bytes,
         peak_probe_tensor_bytes=6 * _PROBE_IMAGE_SIZE[0] * _PROBE_IMAGE_SIZE[1] * 5 * 8,
         evaluation_seconds=time.perf_counter() - started,
@@ -1031,6 +1045,41 @@ def _summary(
             "forecast_seconds": _FORECAST_SECONDS,
             "planning_used_as_training_loss": False,
             "generated_frames_retained": False,
+            "model_profile": {
+                "name": "Single shared structured analytic model",
+                "variant": "analytic-dominant · zero learned residual activity",
+                "stages": [
+                    {
+                        "role": "Observe",
+                        "name": "Calibrated RGB-D",
+                        "detail": "analytic metric geometry",
+                    },
+                    {
+                        "role": "Track",
+                        "name": "Persistent object set",
+                        "detail": "6-DoF state + uncertainty",
+                    },
+                    {
+                        "role": "Adapt",
+                        "name": "Per-object physics",
+                        "detail": "mass · drag · bounce · friction",
+                    },
+                    {
+                        "role": "Predict",
+                        "name": "Shared rigid dynamics",
+                        "detail": "analytic contacts · residuals zero",
+                    },
+                    {
+                        "role": "Plan",
+                        "name": "Batched action rollouts",
+                        "detail": "serial numerical oracle",
+                    },
+                ],
+                "evolution_note": (
+                    "Weights and architecture stayed fixed; public observations "
+                    "adapted the physical belief."
+                ),
+            },
         },
         provenance={
             "scenario_manifest_sha256": result.manifest_sha256,
@@ -1041,6 +1090,8 @@ def _summary(
             "truth_reference_opened_after_each_public_estimate": True,
             "truth_parameter_ablation": True,
             "dense_serial_planning_oracle": True,
+            "checkpoint_loaded": False,
+            "learned_parameters_zero_initialized": True,
         },
         scores={
             "candidate": {"value": candidate_score, "supported_weight": 1.0},
@@ -1112,7 +1163,17 @@ def _summary(
         },
         resources={
             "evaluation_seconds": result.evaluation_seconds,
+            "learned_parameter_count": result.learned_parameter_count,
+            "nonzero_learned_parameter_count": result.nonzero_learned_parameter_count,
             "learned_weight_bytes": result.learned_weight_bytes,
+            "optimizer_updates": 0,
+            "training_examples": 0,
+            "public_parameter_updates_accepted": sum(
+                item.accepted_parameter_updates for item in result.scenarios
+            ),
+            "public_parameter_updates_attempted": sum(
+                item.expected_parameter_updates for item in result.scenarios
+            ),
             "peak_run_tensor_bytes": result.peak_probe_tensor_bytes,
             "n8_rollout_latency_seconds": by_count[8].rollout_latency_seconds,
             "public_probe_frame_count": sum(

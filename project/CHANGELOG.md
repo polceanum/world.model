@@ -20,6 +20,11 @@
 - Extended compact reports with parameter convergence, per-object prediction
   ledgers, four-second and parameter columns, adaptive-forecast gallery
   selection, truthful uncertainty labels, and complete ablation reductions.
+- Added a compact top-of-dashboard model diagram and provenance stats. The
+  adaptive run now distinguishes its `1,623` parameter slots and `12.7 KiB`
+  serialized size from the actual `0/1,623` active learned parameters and zero
+  optimizer updates, while showing the `72/72` public belief updates and
+  `99.47%` physical-parameter error reduction that produced the improvement.
 - Published the 939,418-byte qualified v2 run and retained the 939,450-byte v1
   failed diagnostic; the full managed tree remains 23,877,597 bytes with no
   retained generated frames or raster/video animations.

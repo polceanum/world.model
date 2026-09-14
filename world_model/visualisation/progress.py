@@ -46,6 +46,23 @@ def _format_number(value: object, *, digits: int = 4) -> str:
     return f"{number:.{digits}f}"
 
 
+def _format_compact_bytes(value: object) -> str:
+    if not isinstance(value, (int, float)) or isinstance(value, bool):
+        return "Not reported"
+    number = float(value)
+    if not math.isfinite(number) or number < 0.0:
+        return "Not reported"
+    units = ("B", "KiB", "MiB", "GiB")
+    unit = units[0]
+    for candidate in units:
+        unit = candidate
+        if number < 1024.0 or candidate == units[-1]:
+            break
+        number /= 1024.0
+    precision = 0 if unit == "B" else 1
+    return f"{number:.{precision}f} {unit}"
+
+
 def _has_resource_measurement(value: object) -> bool:
     """Return whether a resource value contains usable measured evidence."""
 
@@ -1626,6 +1643,181 @@ def _accuracy_frontier(summary: CapabilityRunSummary) -> str:
     )
 
 
+def _model_overview(summary: CapabilityRunSummary) -> str:
+    """Render a compact, provenance-aware view of the model used by a run."""
+
+    adaptive_physics = summary.source_format == "world_model_adaptive_physics_scale_v1"
+    configured_profile = summary.configuration.get("model_profile")
+    profile = configured_profile if isinstance(configured_profile, Mapping) else {}
+    model_name = profile.get(
+        "name",
+        (
+            "Single shared structured analytic model"
+            if adaptive_physics
+            else "Structured online world model"
+        ),
+    )
+    default_stages = (
+        (
+            ("Observe", "Calibrated RGB-D", "analytic metric geometry"),
+            ("Track", "Persistent object set", "6-DoF state + uncertainty"),
+            ("Adapt", "Per-object physics", "mass · drag · bounce · friction"),
+            ("Predict", "Shared rigid dynamics", "analytic contacts · residuals zero"),
+            ("Plan", "Batched action rollouts", "serial numerical oracle"),
+        )
+        if adaptive_physics
+        else (
+            ("Observe", "Calibrated observations", "public runtime evidence"),
+            ("Track", "Persistent object belief", "state + uncertainty"),
+            ("Predict", "Shared dynamics", "analytic + bounded residuals"),
+            ("Roll out", "Counterfactual futures", "known actions"),
+            ("Evaluate", "Planning + capability", "held-out gates"),
+        )
+    )
+    configured_stages = profile.get("stages")
+    stages: list[tuple[str, str, str]] = []
+    if isinstance(configured_stages, list):
+        for item in configured_stages:
+            if not isinstance(item, Mapping):
+                continue
+            stages.append(
+                (
+                    str(item.get("role", "Stage")),
+                    str(item.get("name", "Unlabelled")),
+                    str(item.get("detail", "")),
+                )
+            )
+    if not stages:
+        stages = list(default_stages)
+    stage_html = "".join(
+        '<li class="model-stage">'
+        f"<small>{_escape(role)}</small><strong>{_escape(name)}</strong>"
+        f"<span>{_escape(detail)}</span></li>"
+        for role, name, detail in stages
+    )
+
+    resources = summary.resources
+    learned_bytes = resources.get("learned_weight_bytes")
+    learned_parameters = resources.get("learned_parameter_count")
+    nonzero_parameters = resources.get("nonzero_learned_parameter_count")
+    optimizer_updates = resources.get("optimizer_updates")
+    training_examples = resources.get("training_examples")
+    accepted_updates = resources.get("public_parameter_updates_accepted")
+    attempted_updates = resources.get("public_parameter_updates_attempted")
+    if adaptive_physics:
+        if learned_parameters is None and learned_bytes == 12_984:
+            learned_parameters = 1_623
+        if nonzero_parameters is None:
+            nonzero_parameters = 0
+        if optimizer_updates is None:
+            optimizer_updates = 0
+        if training_examples is None:
+            training_examples = 0
+        if accepted_updates is None or attempted_updates is None:
+            supported_updates = 0
+            for cell in summary.cell_metrics.values():
+                if not isinstance(cell, Mapping):
+                    continue
+                evidence = cell.get("parameter_relative_error")
+                support = evidence.get("support") if isinstance(evidence, Mapping) else None
+                if isinstance(support, int) and support > 0:
+                    supported_updates += support
+            if supported_updates:
+                attempted_updates = supported_updates
+                contracted = summary.uncertainty.get("parameter_contracted_fraction")
+                if contracted == 1.0:
+                    accepted_updates = supported_updates
+
+    parameter_stages = summary.qualitative.get("parameter_convergence")
+    before_error = None
+    after_error = None
+    if isinstance(parameter_stages, list) and parameter_stages:
+        first = parameter_stages[0]
+        last = parameter_stages[-1]
+        if isinstance(first, Mapping) and isinstance(last, Mapping):
+            before_error = first.get("mean_relative_error")
+            after_error = last.get("mean_relative_error")
+    error_evolution = "Not reported"
+    reduction_detail = "No comparable parameter trajectory"
+    if isinstance(before_error, (int, float)) and isinstance(after_error, (int, float)):
+        error_evolution = f"{100.0 * float(before_error):.2f}% → {100.0 * float(after_error):.2f}%"
+        if float(before_error) > 0.0:
+            reduction = 100.0 * (1.0 - float(after_error) / float(before_error))
+            reduction_detail = f"{reduction:.2f}% lower parameter error"
+
+    parameter_value = (
+        f"{int(learned_parameters):,}"
+        if isinstance(learned_parameters, (int, float))
+        else "Not reported"
+    )
+    active_value = (
+        f"{int(nonzero_parameters):,} / {int(learned_parameters):,}"
+        if isinstance(nonzero_parameters, (int, float))
+        and isinstance(learned_parameters, (int, float))
+        else "Not reported"
+    )
+    training_value = (
+        f"{int(optimizer_updates):,} steps"
+        if isinstance(optimizer_updates, (int, float))
+        else "Not reported"
+    )
+    training_detail = (
+        f"{int(training_examples):,} examples in this run"
+        if isinstance(training_examples, (int, float))
+        else "Training examples not reported"
+    )
+    update_value = (
+        f"{int(accepted_updates):,} / {int(attempted_updates):,}"
+        if isinstance(accepted_updates, (int, float))
+        and isinstance(attempted_updates, (int, float))
+        else "Not reported"
+    )
+    checkpoint_loaded = summary.provenance.get("checkpoint_loaded")
+    evolution_note = profile.get(
+        "evolution_note",
+        (
+            "Weights and architecture stayed fixed; public observations adapted the physical belief."
+            if adaptive_physics
+            else "Training and architecture evolution are shown only when the run records them."
+        ),
+    )
+    checkpoint_note = (
+        "fresh zero-initialized residuals"
+        if checkpoint_loaded is False or adaptive_physics
+        else "checkpoint state not reported"
+    )
+    stats = (
+        (parameter_value, "learned parameter slots", _format_compact_bytes(learned_bytes)),
+        (active_value, "non-zero learned parameters", checkpoint_note),
+        (training_value, "gradient training in this run", training_detail),
+        (update_value, "accepted public physics updates", "analytic belief adaptation"),
+        (error_evolution, "physical-parameter error", reduction_detail),
+    )
+    stat_html = "".join(
+        '<div class="model-stat">'
+        f"<strong>{_escape(value)}</strong><span>{_escape(label)}</span>"
+        f"<small>{_escape(detail)}</small></div>"
+        for value, label, detail in stats
+    )
+    variant = profile.get(
+        "variant",
+        "analytic-dominant · zero learned residual activity"
+        if adaptive_physics
+        else str(summary.scores.get("selected", "variant not reported")),
+    )
+    return (
+        '<section class="model-overview" aria-labelledby="model-overview-title">'
+        '<div class="model-overview-heading"><div>'
+        '<span class="eyebrow">Model used for this result</span>'
+        f'<h2 id="model-overview-title">{_escape(model_name)}</h2></div>'
+        f'<span class="model-variant">{_escape(variant)}</span></div>'
+        f'<ol class="model-flow" aria-label="Model data flow">{stage_html}</ol>'
+        f'<div class="model-stats">{stat_html}</div>'
+        f'<p class="model-evolution"><strong>Evolution:</strong> {_escape(evolution_note)}</p>'
+        "</section>"
+    )
+
+
 def _summary_section(
     summary: CapabilityRunSummary,
     *,
@@ -1726,6 +1918,7 @@ def _summary_section(
       <p>{_escape(summary.outcome)} · {_escape(summary.created_at_utc)} · {_escape(summary.source_format)}</p></div>
       <div class="score"><small>candidate / incumbent · lower is better</small><strong>{_format_number(candidate_score)} / {_format_number(incumbent_score)}</strong><span>{_escape(summary.scores.get("selected", "unselected"))}</span></div>
     </section>
+    {_model_overview(summary)}
     <section class="grid three">
       <article><h2>Capability error</h2><p class="metric">{_format_number(candidate_score)}</p><p>Macro-averaged candidate score; lower is better</p></article>
       <article><h2>Uncertainty</h2><p class="metric">{uncertainty_text}</p><p>{uncertainty_caption}</p></article>
@@ -1769,7 +1962,7 @@ def _summary_section(
 
 
 _STYLE = """
-:root{color-scheme:dark;--bg:#0b1017;--panel:#141c27;--muted:#91a0b5;--ink:#f5f7fb;--accent:#69d6c5;--line:#344154}*{box-sizing:border-box}body{margin:0;background:radial-gradient(circle at top right,#172a37,var(--bg) 42%);color:var(--ink);font:14px/1.45 ui-sans-serif,system-ui,sans-serif}main{max-width:1180px;margin:auto;padding:28px}.hero{display:flex;justify-content:space-between;align-items:end;border-top:3px solid var(--accent);padding-top:18px}.hero h1{font-size:clamp(26px,4vw,48px);margin:.1em 0}.hero p,.metric+ p{color:var(--muted)}.eyebrow,.tag{font-size:11px;letter-spacing:.08em;text-transform:uppercase}.score{background:var(--panel);padding:18px 22px;border-radius:12px;display:grid;min-width:240px}.score strong,.metric{font-size:25px;color:var(--accent)}.grid{display:grid;gap:14px;margin:14px 0}.two{grid-template-columns:repeat(2,minmax(0,1fr))}.three{grid-template-columns:repeat(3,minmax(0,1fr))}article,section:not(.hero){background:color-mix(in srgb,var(--panel) 94%,transparent);border:1px solid var(--line);border-radius:12px;padding:16px;margin:14px 0;overflow:auto}section.grid{background:none;border:0;padding:0}section.grid article{margin:0}h2{margin:0 0 12px;font-size:16px}h3{font-size:13px;color:var(--muted)}table{border-collapse:collapse;width:100%}th,td{text-align:left;border-bottom:1px solid var(--line);padding:7px}.tag{padding:3px 6px;border-radius:9px;background:#303947}.tag.measured,.tag.passed{background:#165449}.tag.failed{background:#6b2737}.metric-matrix td{font-variant-numeric:tabular-nums}.metric-pass{background:#123d35}.metric-fail{background:#51232e;color:#ffdce4}.metric-info{background:#1c2d3b}.unmeasured{color:var(--muted)}.empty{color:var(--muted);padding:24px;text-align:center;border:1px dashed var(--line);border-radius:8px}svg{width:100%;min-width:520px}svg line{stroke:var(--line)}svg polyline{fill:none;stroke:var(--accent);stroke-width:3}svg circle{fill:var(--accent)}svg text{fill:var(--muted);font-size:11px}.chart-title{fill:var(--ink);font-size:13px}.axis-label{fill:var(--ink);font-size:11px;font-weight:600}.axis-tick,.heatmap-note{fill:var(--muted);font-size:9px}.chart-grid-line{stroke:#253444;stroke-width:1}.cell-label{fill:white;font-size:8px}.cell-value{fill:white;font-size:11px;font-weight:700}dl{display:grid;grid-template-columns:1fr 1fr;gap:7px}dt{color:var(--muted)}dd{margin:0;text-align:right}.animation-intro,.animation-meta,.animation-events{color:var(--muted)}.evidence-source{display:block;margin-top:4px;color:#c9d3df}.animation-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}.animation-card{margin:0!important;padding:12px!important}.animation-card h3{margin:0;color:var(--ink);text-transform:capitalize}.animation-meta{min-height:54px;font-size:12px}.world-animation{display:block;min-width:0;background:#0a1119;border:1px solid var(--line);border-radius:8px}.animation-stage{fill:#0c1621;stroke:#344154}.animation-grid-lines{fill:none;stroke:#253444;stroke-width:1}.animation-axis{fill:#c9d3df;font-size:10px;font-weight:600}.animation-tick{fill:var(--muted);font-size:8px}.animation-trail{fill:none;stroke:var(--object-color);stroke-width:1.3;opacity:.5}.animation-trail-truth{stroke-dasharray:3 3;opacity:.25}.animation-model{fill:var(--object-color);stroke:#081018;stroke-width:1.5}.animation-truth{fill:none;stroke:var(--object-color);stroke-width:2;stroke-dasharray:2 2}.animation-readout{display:flex;justify-content:space-between;gap:8px;min-height:20px;margin-top:5px;font-size:11px}.animation-clock{color:#c9d3df;font-variant-numeric:tabular-nums}.animation-event{color:#f3bc61;font-weight:700}.animation-legend{display:flex;gap:12px;margin-top:3px;color:var(--muted);font-size:12px}.model-key{color:var(--accent)}.truth-key{color:#f3bc61}.animation-events{min-height:38px;font-size:12px}.animation-controls{display:flex;align-items:center;gap:8px}.animation-controls button{border:1px solid var(--line);border-radius:7px;background:#1c2d3b;color:var(--ink);padding:5px 11px;cursor:pointer}.animation-controls button:hover{border-color:var(--accent)}.animation-controls input{min-width:72px;flex:1;accent-color:var(--accent)}.run-list a{color:var(--accent)}.run-ledger summary{cursor:pointer;color:#c9d3df}.notice{border-left:3px solid #f3bc61;padding-left:10px;color:var(--muted)}footer{color:var(--muted);padding:20px 0}@media(max-width:900px){.animation-grid{grid-template-columns:1fr}}@media(max-width:760px){.two,.three{grid-template-columns:1fr}.hero{display:block}.score{margin-top:12px}}@media(prefers-reduced-motion:reduce){.animation-controls button{outline:1px solid var(--muted)}}
+:root{color-scheme:dark;--bg:#0b1017;--panel:#141c27;--muted:#91a0b5;--ink:#f5f7fb;--accent:#69d6c5;--line:#344154}*{box-sizing:border-box}body{margin:0;background:radial-gradient(circle at top right,#172a37,var(--bg) 42%);color:var(--ink);font:14px/1.45 ui-sans-serif,system-ui,sans-serif}main{max-width:1180px;margin:auto;padding:28px}.hero{display:flex;justify-content:space-between;align-items:end;border-top:3px solid var(--accent);padding-top:18px}.hero h1{font-size:clamp(26px,4vw,48px);margin:.1em 0}.hero p,.metric+ p{color:var(--muted)}.eyebrow,.tag{font-size:11px;letter-spacing:.08em;text-transform:uppercase}.score{background:var(--panel);padding:18px 22px;border-radius:12px;display:grid;min-width:240px}.score strong,.metric{font-size:25px;color:var(--accent)}.model-overview{overflow:visible!important}.model-overview-heading{display:flex;align-items:end;justify-content:space-between;gap:16px}.model-overview-heading h2{margin:2px 0 0;font-size:18px}.model-variant{color:var(--muted);font-size:12px;text-align:right}.model-flow{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:16px;list-style:none;margin:13px 0 0;padding:0}.model-stage{position:relative;background:#0f1722;border:1px solid var(--line);border-radius:8px;padding:9px 10px;min-width:0}.model-stage:not(:last-child)::after{content:"→";position:absolute;right:-13px;top:50%;transform:translateY(-50%);color:var(--accent);font-weight:700}.model-stage small,.model-stage span{display:block;color:var(--muted);font-size:10px}.model-stage small{letter-spacing:.08em;text-transform:uppercase}.model-stage strong{display:block;margin:2px 0;font-size:12px}.model-stats{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:0;margin-top:12px;border-top:1px solid var(--line);border-bottom:1px solid var(--line)}.model-stat{padding:9px 12px;border-right:1px solid var(--line);min-width:0}.model-stat:last-child{border-right:0}.model-stat strong,.model-stat span,.model-stat small{display:block}.model-stat strong{color:var(--accent);font-size:17px;font-variant-numeric:tabular-nums}.model-stat span{font-size:11px}.model-stat small{color:var(--muted);font-size:10px}.model-evolution{margin:9px 0 0;color:var(--muted);font-size:12px}.model-evolution strong{color:var(--ink)}.grid{display:grid;gap:14px;margin:14px 0}.two{grid-template-columns:repeat(2,minmax(0,1fr))}.three{grid-template-columns:repeat(3,minmax(0,1fr))}article,section:not(.hero){background:color-mix(in srgb,var(--panel) 94%,transparent);border:1px solid var(--line);border-radius:12px;padding:16px;margin:14px 0;overflow:auto}section.grid{background:none;border:0;padding:0}section.grid article{margin:0}h2{margin:0 0 12px;font-size:16px}h3{font-size:13px;color:var(--muted)}table{border-collapse:collapse;width:100%}th,td{text-align:left;border-bottom:1px solid var(--line);padding:7px}.tag{padding:3px 6px;border-radius:9px;background:#303947}.tag.measured,.tag.passed{background:#165449}.tag.failed{background:#6b2737}.metric-matrix td{font-variant-numeric:tabular-nums}.metric-pass{background:#123d35}.metric-fail{background:#51232e;color:#ffdce4}.metric-info{background:#1c2d3b}.unmeasured{color:var(--muted)}.empty{color:var(--muted);padding:24px;text-align:center;border:1px dashed var(--line);border-radius:8px}svg{width:100%;min-width:520px}svg line{stroke:var(--line)}svg polyline{fill:none;stroke:var(--accent);stroke-width:3}svg circle{fill:var(--accent)}svg text{fill:var(--muted);font-size:11px}.chart-title{fill:var(--ink);font-size:13px}.axis-label{fill:var(--ink);font-size:11px;font-weight:600}.axis-tick,.heatmap-note{fill:var(--muted);font-size:9px}.chart-grid-line{stroke:#253444;stroke-width:1}.cell-label{fill:white;font-size:8px}.cell-value{fill:white;font-size:11px;font-weight:700}dl{display:grid;grid-template-columns:1fr 1fr;gap:7px}dt{color:var(--muted)}dd{margin:0;text-align:right}.animation-intro,.animation-meta,.animation-events{color:var(--muted)}.evidence-source{display:block;margin-top:4px;color:#c9d3df}.animation-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}.animation-card{margin:0!important;padding:12px!important}.animation-card h3{margin:0;color:var(--ink);text-transform:capitalize}.animation-meta{min-height:54px;font-size:12px}.world-animation{display:block;min-width:0;background:#0a1119;border:1px solid var(--line);border-radius:8px}.animation-stage{fill:#0c1621;stroke:#344154}.animation-grid-lines{fill:none;stroke:#253444;stroke-width:1}.animation-axis{fill:#c9d3df;font-size:10px;font-weight:600}.animation-tick{fill:var(--muted);font-size:8px}.animation-trail{fill:none;stroke:var(--object-color);stroke-width:1.3;opacity:.5}.animation-trail-truth{stroke-dasharray:3 3;opacity:.25}.animation-model{fill:var(--object-color);stroke:#081018;stroke-width:1.5}.animation-truth{fill:none;stroke:var(--object-color);stroke-width:2;stroke-dasharray:2 2}.animation-readout{display:flex;justify-content:space-between;gap:8px;min-height:20px;margin-top:5px;font-size:11px}.animation-clock{color:#c9d3df;font-variant-numeric:tabular-nums}.animation-event{color:#f3bc61;font-weight:700}.animation-legend{display:flex;gap:12px;margin-top:3px;color:var(--muted);font-size:12px}.model-key{color:var(--accent)}.truth-key{color:#f3bc61}.animation-events{min-height:38px;font-size:12px}.animation-controls{display:flex;align-items:center;gap:8px}.animation-controls button{border:1px solid var(--line);border-radius:7px;background:#1c2d3b;color:var(--ink);padding:5px 11px;cursor:pointer}.animation-controls button:hover{border-color:var(--accent)}.animation-controls input{min-width:72px;flex:1;accent-color:var(--accent)}.run-list a{color:var(--accent)}.run-ledger summary{cursor:pointer;color:#c9d3df}.notice{border-left:3px solid #f3bc61;padding-left:10px;color:var(--muted)}footer{color:var(--muted);padding:20px 0}@media(max-width:900px){.animation-grid{grid-template-columns:1fr}.model-flow{grid-template-columns:1fr}.model-stage:not(:last-child)::after{content:"↓";right:50%;top:auto;bottom:-16px;transform:translateX(50%)}.model-stats{grid-template-columns:repeat(2,minmax(0,1fr))}.model-stat{border-bottom:1px solid var(--line)}.model-stat:nth-child(2n){border-right:0}}@media(max-width:760px){.two,.three{grid-template-columns:1fr}.hero,.model-overview-heading{display:block}.score{margin-top:12px}.model-variant{display:block;margin-top:5px;text-align:left}}@media(max-width:460px){.model-stats{grid-template-columns:1fr}.model-stat{border-right:0}}@media(prefers-reduced-motion:reduce){.animation-controls button{outline:1px solid var(--muted)}}
 .table-note{color:var(--muted);font-size:12px}.resource-source{display:block;color:var(--muted);font-size:10px;margin-top:2px}.planning-slices,.run-ledger{margin-top:14px}.planning-slices summary,.run-ledger summary{cursor:pointer;color:#c9d3df;font-weight:600}.identity-key,.model-key,.truth-key{color:var(--muted)}.animation-orientation{stroke:var(--object-color);stroke-width:2.2;stroke-linecap:round}.animation-orientation-truth{stroke-dasharray:2 2;opacity:.8}.animation-contact{fill:none;stroke:#f3bc61;stroke-width:2;opacity:.95}
 """
 

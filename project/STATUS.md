@@ -42,11 +42,17 @@ orientation, identity, lifecycle, invariance, planning, and latency limits.
 
 The dashboard now renders parameter convergence, per-object error ledgers,
 four-second horizon curves, complete efficiency/storage provenance, and the
-new N=8 adaptive forecast. Browser inspection confirms the forecast scrubs to
-frame 79 at `+4.00 s`, uses colour only for object identity, uses filled/solid
-marks for the model and open/dashed marks for the private reference, reports
-parameter uncertainty contraction without mislabeling it as empirical
-coverage, and emits no console warnings. The passing run is `939,418` bytes;
+new N=8 adaptive forecast. Its top-level model strip makes the actual execution
+path and evolution explicit: one shared Observe → Track → Adapt → Predict →
+Plan model, `1,623` learned parameter slots (`12.7 KiB`), `0/1,623` non-zero
+parameters, zero optimizer steps/examples in this run, and `72/72` accepted
+public analytic belief updates that reduced mean physical-parameter error by
+`99.47%`. Browser inspection confirms the strip is compact and overflow-free,
+the forecast scrubs to frame 79 at `+4.00 s`, uses colour only for object
+identity, uses filled/solid marks for the model and open/dashed marks for the
+private reference, reports parameter uncertainty contraction without
+mislabeling it as empirical coverage, and emits no console warnings. The
+passing run is `939,418` bytes;
 the complete managed run tree is `23,877,597` bytes (`9.11%` of 250 MiB), and
 the separate archive is `34,315,899` bytes. No generated RGB-D frames, raster
 animation, or video are retained. The exact final source passes Ruff, Ruff

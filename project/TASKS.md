@@ -20,6 +20,9 @@
 - [x] Publish parameter convergence, truth-parameter/state ablations,
   per-object errors, resource provenance, and three lightweight vector
   forecasts in the static dashboard.
+- [x] Put a compact model-flow diagram at the top of the dashboard and report
+  learned parameter count/bytes, non-zero parameters, optimizer steps,
+  training examples, public belief updates, and measured parameter evolution.
 - [x] Browser-check the four-second animation, axes, role semantics,
   uncertainty label, ablation values, and console health.
 - [x] Keep the passing run below 1 MB and the managed tree below 10% of its
