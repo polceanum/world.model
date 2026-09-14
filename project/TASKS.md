@@ -1,5 +1,34 @@
 # Tasks
 
+## Single-model adaptive-physics scale — completed 2026-09-14
+
+- [x] Keep one shared `DynamicsModel` and existing belief/action/rollout
+  interfaces; add no ensemble, router, expert model, or learned capacity.
+- [x] Recover per-object drag and mass from accepted public RGB-D position
+  traces, including known-impulse timing, without private velocity input.
+- [x] Recover restitution and friction from public traces around isolated
+  stationary-boundary impacts; reject invalid fits without contracting
+  uncertainty.
+- [x] Qualify heterogeneous per-object physics at N=4/N=6/N=8 through four
+  seconds of actions and mixed rigid contacts against a finer independent
+  simulator.
+- [x] Retain hard per-object, endpoint, p95, contact, identity, lifecycle,
+  invariance, latency, and finite-state gates; report raw and one-frame-aligned
+  repeated-contact scores separately.
+- [x] Require N=8 K=8/K=32 planning with exact serial winner/cost parity, zero
+  regret, goal success, source immutability, and at least 5x batching speedup.
+- [x] Publish parameter convergence, truth-parameter/state ablations,
+  per-object errors, resource provenance, and three lightweight vector
+  forecasts in the static dashboard.
+- [x] Browser-check the four-second animation, axes, role semantics,
+  uncertainty label, ablation values, and console health.
+- [x] Keep the passing run below 1 MB and the managed tree below 10% of its
+  250 MiB budget with no generated frame, raster-animation, or video media.
+- [x] Pass Ruff, Ruff format across 383 files, compileall, the 35-test focused
+  suite, CLI manifest validation, dashboard/browser QA, diff hygiene, and the
+  complete repository suite: `2506 passed, 16 skipped, 13` existing warnings
+  in `5839.90 s` (`1:37:19`).
+
 ## Capability evidence closure and visual audit — completed 2026-09-14
 
 - [x] Calibrate measurement and process uncertainty jointly so sensor noise and
@@ -56,7 +85,7 @@
   existing warnings in `6329.05 s` (`1:45:29`).
 - [x] Re-measure the strict visual gates in a fresh isolated process; the v4
   run passes every N=4/N=6/N=8 timing and behavior gate.
-- [ ] Continue with public adaptive-physics generalization only behind this
+- [x] Continue with public adaptive-physics generalization only behind this
   per-object and cross-capability regression envelope.
 
 ## Cross-capability prediction hardening — completed 2026-09-13
@@ -84,7 +113,7 @@
 - [x] Pass Ruff, Ruff format across 380 files, compileall, diff hygiene,
   focused behavioral gates, the strict governed audit, and the complete
   repository suite: `2485 passed, 16 skipped` in `1:37:33`.
-- [ ] Begin adaptive physical generalization at N=4--8 using public moving
+- [x] Begin adaptive physical generalization at N=4--8 using public moving
   pre-anchor evidence and heterogeneous per-object parameters, protected by
   this hardening envelope.
 
@@ -108,7 +137,7 @@
 - [x] Pass the exact final-tree gate: Ruff, Ruff format, compileall, diff
   hygiene, focused capability tests, strict governed execution, and `2479
   passed, 16 skipped` repository-wide in `1:32:21`.
-- [ ] Add the next adaptive-physics rung: moving pre-anchor tracks and public
+- [x] Add the next adaptive-physics rung: moving pre-anchor tracks and public
   online identification of varied per-object mass, drag, restitution, and
   friction before repeating the N=4--8 contact/planning gate.
 

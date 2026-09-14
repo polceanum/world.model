@@ -5923,3 +5923,36 @@ cross-reference was disambiguated.
   comparison tolerance prevents PyTorch execution-order noise from masquerading
   as an accuracy regression while a twice-tolerance negative control still
   fails. The compact v3 aggregate result is 476,527 bytes.
+
+## ADR-193 — Adapt existing per-object physics from public position traces
+
+- **Date:** 2026-09-14
+- **Status:** accepted and qualified
+- **Context:** The public N=4--8 visual/contact bridge assumed one shared set of
+  physical parameters. That made higher object count look capable while
+  avoiding the more general case in which different objects have different
+  mass, drag, restitution, and friction. An ensemble or dynamics router would
+  add architectural and attribution complexity, while the existing belief and
+  analytic solver already support per-object parameters. Direct public motion
+  estimates are noisier than simulator velocity and cannot be treated as
+  private state.
+- **Decision:** Keep one shared `DynamicsModel` and add no learned capacity.
+  Fit velocity only internally from finite, ordered public metric position
+  traces. Identify drag during isolated free motion, mass around an exactly
+  known impulse, and restitution/friction around an isolated stationary-boundary
+  impact. Gate each update by physical identifiability and a bounded fit
+  residual; leave the belief and uncertainty unchanged on rejection. Evaluate
+  heterogeneous N=4/N=6/N=8 four-second contact forecasts against a finer
+  independent simulator, retain per-object hard limits, and require N=8
+  K=8/K=32 planning with an exact serial oracle. Report frame-exact and
+  one-frame-aligned repeated-contact F1 as distinct measurements.
+- **Consequences:** All 72 parameter blocks update from public evidence. Mean
+  relative parameter error falls from `0.4374` to `0.0023`, the worst parameter
+  error is `0.01875`, and N=4/N=6/N=8 four-second position RMSE is
+  `0.02940/0.01576/0.02596 m`. Planning winners and costs remain exact with
+  zero regret and `7.48x/28.12x` batching speedup. The v1 diagnostic remains
+  failed; a globally smaller-substep trial was rejected because it added cost
+  without improving the owning velocity error. The next solver change should
+  therefore be event-local and must preserve the existing ordinary path. The
+  v2 artifact is 939,418 bytes and contains no retained generated frames or
+  raster/video animation.

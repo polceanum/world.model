@@ -2,6 +2,33 @@
 
 ## Unreleased — 2026-07-28
 
+### 2026-09-14 single-model adaptive-physics scale
+
+- Added public position-trace evidence for free motion, known impulses, and
+  stationary-boundary impacts to the existing bounded rigid-parameter
+  estimator. Accepted updates adapt per-object mass, drag, restitution, and
+  friction and contract only their existing belief uncertainty.
+- Added a deterministic N=4/N=6/N=8 adaptive-physics gate with heterogeneous
+  object parameters, public calibrated RGB-D control traces, a four-second
+  mixed-contact forecast, finer independent simulation, truth-parameter/state
+  ablations, and required N=8 K=8/K=32 planning.
+- Kept a single shared analytic model with no ensemble, router, expert branch,
+  new learned tensor, private runtime velocity, or private physical parameter.
+- Accepted all 72 parameter updates, reduced mean relative parameter error
+  from `0.4374` to `0.0023`, held four-second N=4/6/8 position RMSE to
+  `0.02940/0.01576/0.02596 m`, and preserved exact planning winners and costs.
+- Extended compact reports with parameter convergence, per-object prediction
+  ledgers, four-second and parameter columns, adaptive-forecast gallery
+  selection, truthful uncertainty labels, and complete ablation reductions.
+- Published the 939,418-byte qualified v2 run and retained the 939,450-byte v1
+  failed diagnostic; the full managed tree remains 23,877,597 bytes with no
+  retained generated frames or raster/video animations.
+- Browser-verified the four-second N=8 forecast through its final frame, role
+  legend, complete uncertainty/ablation displays, and a clean console.
+- Passed Ruff, Ruff format across 383 files, compileall, 35 focused tests, CLI
+  manifest validation, dashboard rebuild, diff hygiene, and the complete
+  `2506 passed, 16 skipped` repository suite in `1:37:19`.
+
 ### 2026-09-14 capability evidence closure and visual audit
 
 - Added checkpoint-compatible measurement/process uncertainty calibration and

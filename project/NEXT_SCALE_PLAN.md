@@ -328,6 +328,44 @@ macro ratio improves by `5.74%`. Isolated N=8 mixed-rigid rollout time falls
 from the `36.658 s` failed diagnostic to `18.528 s`. The final compact audit is
 477,609 bytes with no retained source frames or video.
 
+## Phase K — Single-model adaptive physical generalization
+
+Status: **implemented and passing** in
+`runs/20260914-adaptive-physics-scale-v2`.
+
+1. Keep one shared analytic `DynamicsModel`; adapt only the mass, drag,
+   restitution, and friction already stored per object in `WorldBelief`.
+2. Derive evidence from public calibrated RGB-D position traces: free motion,
+   a precisely timed known impulse, and an isolated stationary-boundary
+   collision. Do not expose simulator velocities, parameters, IDs, or primitive
+   labels to runtime inference.
+3. Accept a parameter update only when the trace is finite, temporally ordered,
+   physically identifiable, and below the declared fit residual. Contract only
+   the corresponding existing uncertainty block on acceptance.
+4. Repeat public N=4/N=6/N=8 discovery and lifecycle evidence, then forecast
+   heterogeneous mixed rigid contacts and three known actions for four seconds
+   against a finer independent simulator.
+5. Require per-object and aggregate position, velocity, orientation, contact,
+   lifecycle, identity, latency, invariance, and finite-state gates. Preserve
+   raw frame-exact contact F1 and separately report the declared one-frame
+   timing-tolerant score.
+6. Require N=8 K=8/K=32 downstream action choice with exact serial winners and
+   costs, zero regret, goal success, source immutability, and at least 5x
+   batching speedup.
+7. Publish only compact JSON/HTML/manifest evidence plus inline vector
+   keyframes, including parameter convergence, truth-parameter/state
+   attribution, and an all-object prediction ledger.
+
+All `72/72` parameter blocks update. Mean relative physical-parameter error
+falls from `0.4374` under neutral priors to `0.0023`, with a worst parameter
+error of `0.01875`. N=4/N=6/N=8 four-second position RMSE is
+`0.02940/0.01576/0.02596 m`; one-frame-aligned repeated-contact F1 is
+`0.8000/0.7857/0.6479`. K=8/K=32 planning remains exact with zero regret and
+`7.48x/28.12x` batching speedup. The passing run is 939,418 bytes and retains
+no generated frames, raster animation, or video. The exact final source passes
+Ruff, Ruff format, compileall, focused behavioral tests, browser inspection,
+and the complete repository suite: `2506 passed, 16 skipped` in `1:37:19`.
+
 ## Completion and next frontier
 
 Phases A--J are implemented in order and remain separate regression tiers. No
@@ -342,16 +380,18 @@ without learned capacity. Phase J adds the permanent cross-tier regression
 envelope and corrects the remaining N=8 pose outlier with bounded causal public
 history; it does not erase or relabel historical failed experiments.
 
-The next highest-impact frontier is adaptive physical generalization at this
-same visual scale. Add moving pre-anchor trajectories and varied per-object
-mass, drag, restitution, and friction. Derive parameter evidence only from
-accepted public observations, known impulses, free-motion intervals, and
-observed contacts; contract uncertainty only on accepted updates. Repeat the
-N=4--8 contact and required planning gates from the identified belief and add
-truth-parameter/state/association ablations to localize failures. Only after
-that passes should full visual qualification rise above N=8. Flush featureless
-unions, unknown calibration, and identity recovery through unobserved impulses
-or collisions remain explicit observability limits.
+Phase K closes adaptive physical generalization at the same public visual
+scale without introducing an ensemble or widening learned capacity. The next
+highest-impact frontier is event-local contact refinement under heterogeneous
+physics: reduce the remaining N=8 four-second orientation tail and improve raw
+repeated-contact timing while leaving the ordinary free-motion path and its
+latency unchanged. Prefer a bounded event-time correction or continuous
+collision calculation inside the shared solver over globally smaller
+substeps; the rejected `1/80 s` trial showed that uniform extra integration
+cost did not own the error. Qualify any change against the full per-object and
+cross-capability envelope before moving public RGB-D qualification above N=8.
+Flush featureless unions, unknown calibration, and identity recovery through
+unobserved impulses or collisions remain explicit observability limits.
 
 The Phase J aggregate governed gate is qualified, with isolated fresh-process
 latency evidence for both multi-contact and public visual tiers. The final

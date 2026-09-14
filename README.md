@@ -101,6 +101,8 @@ conda run -n orpheus python scripts/run_multicontact_six_dof_scale.py --dry-run
 conda run -n orpheus python scripts/run_multicontact_six_dof_scale.py
 conda run -n orpheus python scripts/run_visual_dynamic_scale.py --dry-run
 conda run -n orpheus python scripts/run_visual_dynamic_scale.py
+conda run -n orpheus python scripts/run_adaptive_physics_scale.py --dry-run
+conda run -n orpheus python scripts/run_adaptive_physics_scale.py
 conda run -n orpheus python scripts/run_capability_hardening.py --dry-run
 conda run -n orpheus python scripts/run_capability_hardening.py
 ```
@@ -128,16 +130,19 @@ candidate rows while preserving an exact serial oracle; it is not an RGB-D
 qualification.
 
 The visual-dynamic command connects that executor to public calibrated RGB-D
-at N=4/N=6/N=8. The hardening command then replays every accepted capability
-tier against its own frozen baseline, publishes a paired regression ledger,
-and regenerates the compact dashboard. Absolute latency remains the job of the
-isolated source runners because a sequential aggregate process is thermally
-order-dependent.
+at N=4/N=6/N=8. The adaptive-physics command keeps one shared analytic model
+and estimates heterogeneous per-object mass, drag, restitution, and friction
+from public position traces, known impulses, and stationary-boundary impacts
+before a four-second mixed-contact forecast and required K=8/K=32 planning.
+It adds no ensemble, router, or learned capacity. The hardening command replays
+every accepted capability tier against its own frozen baseline, publishes a
+paired regression ledger, and regenerates the compact dashboard. Absolute
+latency remains the job of the isolated source runners because a sequential
+aggregate process is thermally order-dependent.
 
-The pre-six-DoF impact-first implementation passed the complete repository
-gate at `2457 passed, 16 skipped` (the skips require unavailable MPS hardware).
-The expanded multi-contact final tree passes at `2476 passed, 16 skipped`; full
-details are reported in `project/STATUS.md`.
+The current adaptive-physics tree passes the complete repository gate at
+`2506 passed, 16 skipped` (the skips require unavailable MPS hardware). Full
+historical and current evidence is reported in `project/STATUS.md`.
 
 Run or reproduce one streamed physical factor without retaining its episodes:
 

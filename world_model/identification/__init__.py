@@ -21,18 +21,26 @@ from world_model.identification.recurrent_updater import (
     RecurrentParameterUpdater,
 )
 from world_model.identification.rigid_analytic import (
+    BoundaryCollisionEvidence,
+    BoundaryCollisionPositionEvidence,
     FreeMotionEvidence,
+    FreeMotionPositionEvidence,
     KnownImpulseEvidence,
+    KnownImpulsePositionEvidence,
     OnlineRigidParameterEstimator,
     PairCollisionEvidence,
     RigidParameterUpdate,
 )
 
 __all__ = [
+    "BoundaryCollisionEvidence",
+    "BoundaryCollisionPositionEvidence",
     "LocalOptimiserConfig",
     "LocalParameterOptimiser",
     "FreeMotionEvidence",
+    "FreeMotionPositionEvidence",
     "KnownImpulseEvidence",
+    "KnownImpulsePositionEvidence",
     "Observability",
     "ObservabilityConfig",
     "ObservabilityEstimator",

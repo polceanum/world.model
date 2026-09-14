@@ -29,6 +29,28 @@ class FreeMotionEvidence:
 
 
 @dataclass(frozen=True)
+class FreeMotionPositionEvidence:
+    """Public metric positions for an uninterrupted force-free interval."""
+
+    object_id: Tensor
+    positions_world: Tensor
+    timestamps: Tensor
+
+
+@dataclass(frozen=True)
+class KnownImpulsePositionEvidence:
+    """Public position traces immediately before and after a known impulse."""
+
+    object_id: Tensor
+    positions_before_world: Tensor
+    timestamps_before: Tensor
+    positions_after_world: Tensor
+    timestamps_after: Tensor
+    action_timestamp: Tensor
+    impulse_world: Tensor
+
+
+@dataclass(frozen=True)
 class PairCollisionEvidence:
     first_object_id: Tensor
     second_object_id: Tensor
@@ -39,6 +61,31 @@ class PairCollisionEvidence:
     second_velocity_after: Tensor
     relative_contact_velocity_before: Tensor | None = None
     relative_contact_velocity_after: Tensor | None = None
+
+
+@dataclass(frozen=True)
+class BoundaryCollisionEvidence:
+    """Public before/after motion around one stationary boundary impact."""
+
+    object_id: Tensor
+    normal_world: Tensor
+    velocity_before: Tensor
+    velocity_after: Tensor
+    relative_contact_velocity_before: Tensor | None = None
+    relative_contact_velocity_after: Tensor | None = None
+
+
+@dataclass(frozen=True)
+class BoundaryCollisionPositionEvidence:
+    """Public position traces bracketing one stationary-boundary impact."""
+
+    object_id: Tensor
+    normal_world: Tensor
+    positions_before_world: Tensor
+    timestamps_before: Tensor
+    positions_after_world: Tensor
+    timestamps_after: Tensor
+    collision_timestamp: Tensor
 
 
 @dataclass(frozen=True)
@@ -75,6 +122,60 @@ class OnlineRigidParameterEstimator:
             raise ValueError(f"{name} must match belief dtype and device")
         if not torch.isfinite(value).all():
             raise ValueError(f"{name} must be finite")
+
+    @staticmethod
+    def _validate_position_trace(
+        name: str,
+        positions: Tensor,
+        timestamps: Tensor,
+        belief: WorldBelief,
+        *,
+        minimum_samples: int,
+    ) -> None:
+        if (
+            positions.ndim != 3
+            or positions.shape[0] != belief.batch_size
+            or positions.shape[2] != 3
+        ):
+            raise ValueError(f"{name} positions must have shape [B,T,3]")
+        if positions.shape[1] < minimum_samples:
+            raise ValueError(f"{name} requires at least {minimum_samples} samples")
+        if timestamps.shape != positions.shape[:2]:
+            raise ValueError(f"{name} timestamps must have shape [B,T]")
+        for value_name, value in (("positions", positions), ("timestamps", timestamps)):
+            if value.device != belief.device or value.dtype != belief.dtype:
+                raise ValueError(f"{name} {value_name} must match belief dtype and device")
+            if not torch.isfinite(value).all():
+                raise ValueError(f"{name} {value_name} must be finite")
+        if torch.any(timestamps[:, 1:] <= timestamps[:, :-1]):
+            raise ValueError(f"{name} timestamps must be strictly increasing")
+
+    @staticmethod
+    def _fit_velocity_at_timestamp(
+        positions: Tensor,
+        timestamps: Tensor,
+        reference_timestamp: Tensor,
+        drag: Tensor,
+    ) -> tuple[Tensor, Tensor]:
+        """Fit exponential-drag motion and return velocity at ``reference``."""
+
+        velocities = []
+        residuals = []
+        for row in range(positions.shape[0]):
+            relative = timestamps[row] - reference_timestamp[row]
+            row_drag = drag[row].clamp_min(1.0e-8)
+            displacement_scale = -torch.expm1(-row_drag * relative) / row_drag
+            design = torch.stack((torch.ones_like(relative), displacement_scale), dim=-1)
+            solution = torch.linalg.lstsq(design, positions[row]).solution
+            fitted = design @ solution
+            velocities.append(solution[1])
+            residuals.append((fitted - positions[row]).square().mean().sqrt())
+        return torch.stack(velocities), torch.stack(residuals)
+
+    @staticmethod
+    def _validate_fit_residual(maximum_fit_residual_m: float) -> None:
+        if not math.isfinite(maximum_fit_residual_m) or maximum_fit_residual_m <= 0.0:
+            raise ValueError("maximum_fit_residual_m must be finite and positive")
 
     @staticmethod
     def _slots(object_id: Tensor, belief: WorldBelief) -> Tensor:
@@ -217,6 +318,138 @@ class OnlineRigidParameterEstimator:
         )
         return updated, RigidParameterUpdate("drag", evidence.object_id.clone(), estimate, accepted)
 
+    def update_free_motion_positions(
+        self,
+        belief: WorldBelief,
+        evidence: FreeMotionPositionEvidence,
+        *,
+        maximum_fit_residual_m: float = 0.01,
+    ) -> tuple[WorldBelief, RigidParameterUpdate]:
+        """Estimate drag from a public position series with bounded grid fitting."""
+
+        slots = self._slots(evidence.object_id, belief)
+        self._validate_position_trace(
+            "free motion",
+            evidence.positions_world,
+            evidence.timestamps,
+            belief,
+            minimum_samples=4,
+        )
+        self._validate_fit_residual(maximum_fit_residual_m)
+        estimates = []
+        accepted_rows = []
+        lower, upper = self.bounds.drag
+        candidates = torch.logspace(
+            math.log10(lower),
+            math.log10(upper),
+            257,
+            device=belief.device,
+            dtype=belief.dtype,
+        )
+        for row in range(belief.batch_size):
+            positions = evidence.positions_world[row]
+            timestamps = evidence.timestamps[row]
+            reference = timestamps[0]
+            losses = []
+            velocities = []
+            for candidate in candidates:
+                velocity, residual = self._fit_velocity_at_timestamp(
+                    positions.unsqueeze(0),
+                    timestamps.unsqueeze(0),
+                    reference.unsqueeze(0),
+                    candidate.unsqueeze(0),
+                )
+                losses.append(residual[0])
+                velocities.append(velocity[0])
+            loss = torch.stack(losses)
+            best = int(loss.argmin())
+            duration = timestamps[-1] - timestamps[0]
+            accepted = bool(
+                duration >= 0.25
+                and torch.linalg.vector_norm(velocities[best]) > 1.0e-4
+                and loss[best] <= maximum_fit_residual_m
+            )
+            estimates.append(candidates[best])
+            accepted_rows.append(accepted)
+        estimate = torch.stack(estimates)
+        accepted = torch.tensor(accepted_rows, device=belief.device, dtype=torch.bool)
+        updated = self._update_scalar(
+            belief,
+            slots=slots,
+            estimate=estimate,
+            accepted=accepted,
+            parameter="drag",
+        )
+        return updated, RigidParameterUpdate(
+            "drag",
+            evidence.object_id.clone(),
+            estimate,
+            accepted,
+        )
+
+    def update_known_impulse_positions(
+        self,
+        belief: WorldBelief,
+        evidence: KnownImpulsePositionEvidence,
+        *,
+        maximum_fit_residual_m: float = 0.01,
+    ) -> tuple[WorldBelief, RigidParameterUpdate]:
+        """Estimate mass from public position traces around a known impulse."""
+
+        slots = self._slots(evidence.object_id, belief)
+        self._validate_fit_residual(maximum_fit_residual_m)
+        for name, positions, timestamps in (
+            ("pre-impulse", evidence.positions_before_world, evidence.timestamps_before),
+            ("post-impulse", evidence.positions_after_world, evidence.timestamps_after),
+        ):
+            self._validate_position_trace(
+                name,
+                positions,
+                timestamps,
+                belief,
+                minimum_samples=3,
+            )
+        action_timestamp = evidence.action_timestamp
+        if (
+            action_timestamp.shape != (belief.batch_size,)
+            or action_timestamp.device != belief.device
+            or action_timestamp.dtype != belief.dtype
+            or not torch.isfinite(action_timestamp).all()
+        ):
+            raise ValueError("action_timestamp must be finite [B] on the belief device")
+        if torch.any(evidence.timestamps_before[:, -1] > action_timestamp) or torch.any(
+            evidence.timestamps_after[:, 0] < action_timestamp
+        ):
+            raise ValueError("known-impulse traces must bracket the action timestamp")
+        self._validate_vector("impulse_world", evidence.impulse_world, belief)
+        batch_index = torch.arange(belief.batch_size, device=belief.device)
+        drag = belief.objects.drag[batch_index, slots, 0]
+        before, before_residual = self._fit_velocity_at_timestamp(
+            evidence.positions_before_world,
+            evidence.timestamps_before,
+            action_timestamp,
+            drag,
+        )
+        after, after_residual = self._fit_velocity_at_timestamp(
+            evidence.positions_after_world,
+            evidence.timestamps_after,
+            action_timestamp,
+            drag,
+        )
+        fit_accepted = (before_residual <= maximum_fit_residual_m) & (
+            after_residual <= maximum_fit_residual_m
+        )
+        safe_after = torch.where(fit_accepted.unsqueeze(-1), after, before)
+        return self.update_known_impulse(
+            belief,
+            KnownImpulseEvidence(
+                evidence.object_id,
+                before,
+                safe_after,
+                evidence.impulse_world,
+            ),
+        )
+
     def update_pair_collision(
         self,
         belief: WorldBelief,
@@ -317,6 +550,158 @@ class OnlineRigidParameterEstimator:
             ),
         )
 
+    def update_boundary_collision(
+        self,
+        belief: WorldBelief,
+        evidence: BoundaryCollisionEvidence,
+    ) -> tuple[WorldBelief, tuple[RigidParameterUpdate, RigidParameterUpdate]]:
+        """Estimate one object's restitution and friction at a fixed boundary.
+
+        The boundary normal and before/after velocities are observable metric
+        quantities.  A caller may provide contact-point relative velocities
+        when angular motion is observable; otherwise the centre-of-mass
+        velocities provide the conservative linear estimate.
+        """
+
+        slots = self._slots(evidence.object_id, belief)
+        for name, value in (
+            ("normal_world", evidence.normal_world),
+            ("velocity_before", evidence.velocity_before),
+            ("velocity_after", evidence.velocity_after),
+        ):
+            self._validate_vector(name, value, belief)
+        normal_norm = torch.linalg.vector_norm(evidence.normal_world, dim=-1)
+        if torch.any(normal_norm <= 1.0e-8):
+            raise ValueError("boundary normal must be nonzero")
+        normal = evidence.normal_world / normal_norm.unsqueeze(-1)
+        relative_before = (
+            evidence.relative_contact_velocity_before
+            if evidence.relative_contact_velocity_before is not None
+            else evidence.velocity_before
+        )
+        relative_after = (
+            evidence.relative_contact_velocity_after
+            if evidence.relative_contact_velocity_after is not None
+            else evidence.velocity_after
+        )
+        self._validate_vector("relative_contact_velocity_before", relative_before, belief)
+        self._validate_vector("relative_contact_velocity_after", relative_after, belief)
+        before_normal = (relative_before * normal).sum(dim=-1)
+        after_normal = (relative_after * normal).sum(dim=-1)
+        restitution = -after_normal / before_normal.clamp(max=-1.0e-8)
+        collision_accepted = (
+            (before_normal < -1.0e-4) & (after_normal >= 0.0) & torch.isfinite(restitution)
+        )
+        belief = self._update_scalar(
+            belief,
+            slots=slots,
+            estimate=restitution,
+            accepted=collision_accepted,
+            parameter="restitution",
+        )
+
+        batch_index = torch.arange(belief.batch_size, device=belief.device)
+        mass = belief.objects.mass[batch_index, slots, 0]
+        impulse = mass.unsqueeze(-1) * (evidence.velocity_after - evidence.velocity_before)
+        normal_impulse = (impulse * normal).sum(dim=-1).abs()
+        tangent_impulse = torch.linalg.vector_norm(
+            impulse - (impulse * normal).sum(dim=-1, keepdim=True) * normal,
+            dim=-1,
+        )
+        friction = tangent_impulse / normal_impulse.clamp_min(1.0e-8)
+        tangent_before = relative_before - before_normal.unsqueeze(-1) * normal
+        tangential_speed = torch.linalg.vector_norm(tangent_before, dim=-1)
+        friction_accepted = (
+            collision_accepted
+            & (tangential_speed > 1.0e-3)
+            & (normal_impulse > 1.0e-8)
+            & torch.isfinite(friction)
+        )
+        belief = self._update_scalar(
+            belief,
+            slots=slots,
+            estimate=friction,
+            accepted=friction_accepted,
+            parameter="friction",
+        )
+        return belief, (
+            RigidParameterUpdate(
+                "restitution",
+                evidence.object_id.clone(),
+                restitution,
+                collision_accepted,
+            ),
+            RigidParameterUpdate(
+                "friction",
+                evidence.object_id.clone(),
+                friction,
+                friction_accepted,
+            ),
+        )
+
+    def update_boundary_collision_positions(
+        self,
+        belief: WorldBelief,
+        evidence: BoundaryCollisionPositionEvidence,
+        *,
+        maximum_fit_residual_m: float = 0.01,
+    ) -> tuple[WorldBelief, tuple[RigidParameterUpdate, RigidParameterUpdate]]:
+        """Estimate boundary response directly from public position traces."""
+
+        slots = self._slots(evidence.object_id, belief)
+        for name, positions, timestamps in (
+            ("pre-collision", evidence.positions_before_world, evidence.timestamps_before),
+            ("post-collision", evidence.positions_after_world, evidence.timestamps_after),
+        ):
+            self._validate_position_trace(
+                name,
+                positions,
+                timestamps,
+                belief,
+                minimum_samples=3,
+            )
+        collision_timestamp = evidence.collision_timestamp
+        if (
+            collision_timestamp.shape != (belief.batch_size,)
+            or collision_timestamp.device != belief.device
+            or collision_timestamp.dtype != belief.dtype
+            or not torch.isfinite(collision_timestamp).all()
+        ):
+            raise ValueError("collision_timestamp must be finite [B] on the belief device")
+        if torch.any(evidence.timestamps_before[:, -1] > collision_timestamp) or torch.any(
+            evidence.timestamps_after[:, 0] < collision_timestamp
+        ):
+            raise ValueError("boundary traces must bracket the collision timestamp")
+        self._validate_vector("normal_world", evidence.normal_world, belief)
+        self._validate_fit_residual(maximum_fit_residual_m)
+        batch_index = torch.arange(belief.batch_size, device=belief.device)
+        drag = belief.objects.drag[batch_index, slots, 0]
+        before, before_residual = self._fit_velocity_at_timestamp(
+            evidence.positions_before_world,
+            evidence.timestamps_before,
+            collision_timestamp,
+            drag,
+        )
+        after, after_residual = self._fit_velocity_at_timestamp(
+            evidence.positions_after_world,
+            evidence.timestamps_after,
+            collision_timestamp,
+            drag,
+        )
+        fit_accepted = (before_residual <= maximum_fit_residual_m) & (
+            after_residual <= maximum_fit_residual_m
+        )
+        safe_after = torch.where(fit_accepted.unsqueeze(-1), after, before)
+        return self.update_boundary_collision(
+            belief,
+            BoundaryCollisionEvidence(
+                evidence.object_id,
+                evidence.normal_world,
+                before,
+                safe_after,
+            ),
+        )
+
 
 def _repeat_belief_rows(belief: WorldBelief, count: int) -> WorldBelief:
     """Repeat a belief by row for paired per-object scalar updates."""
@@ -378,8 +763,12 @@ def _merge_repeated_belief(
 
 
 __all__ = [
+    "BoundaryCollisionEvidence",
+    "BoundaryCollisionPositionEvidence",
     "FreeMotionEvidence",
+    "FreeMotionPositionEvidence",
     "KnownImpulseEvidence",
+    "KnownImpulsePositionEvidence",
     "OnlineRigidParameterEstimator",
     "PairCollisionEvidence",
     "RigidParameterUpdate",

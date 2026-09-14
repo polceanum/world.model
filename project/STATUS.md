@@ -1,5 +1,60 @@
 # Project status
 
+## Single-model adaptive-physics scale — 2026-09-14
+
+The next scale rung is qualified in
+`runs/20260914-adaptive-physics-scale-v2`. It retains one shared
+`DynamicsModel`, the existing public belief/action/rollout interfaces, and the
+same analytic contact solver. There is no ensemble, learned router, dynamics
+expert, or additional learned capacity. Each runtime object instead adapts the
+four physical scalars already carried by `WorldBelief`: mass and drag from
+isolated public RGB-D position histories plus known impulses, and restitution
+and friction from public histories around a stationary-boundary impact.
+Rejected or inconsistent fits leave both the estimate and its uncertainty
+unchanged.
+
+The strict N=4/N=6/N=8 run accepts all `72/72` parameter blocks. Six transient
+calibrated RGB-D views per control trace reduce the shared neutral-prior mean
+relative parameter error from `0.4374` to `0.0023`; the worst individual
+parameter error is `0.01875`, and the largest accepted public trace residual is
+`0.002435 m`. No private velocity, parameter, instance ID, or primitive label
+enters runtime inference. The independent simulator keeps finer integration
+than the model and is opened only for scoring and ablations.
+
+Four-second position RMSE is `0.02940/0.01576/0.02596 m` at N=4/6/8. The
+corresponding contact-aligned velocity p95 is
+`0.02937/0.01199/0.01953 m/s`; four-second orientation RMSE is
+`9.98/4.12/20.90 degrees`. Every adjacent contact pair is recovered, and the
+one-frame-aligned repeated-contact F1 is `0.8000/0.7857/0.6479`. The raw
+frame-exact F1 remains visible as a diagnostic rather than being relabeled.
+N=8 K=8/K=32 planning selects the exact serial-oracle winner with zero regret,
+goal success, zero cost discrepancy, and `7.48x/28.12x` candidate-batch
+speedup. The source belief remains immutable.
+
+The first strict diagnostic, v1, is retained as a truthful failure: its
+aggregate prediction was accurate, but event-local maximum velocity and
+frame-exact repeated-contact gates were stricter than the independent
+integrator supported. A disposable `1/80 s` model-substep trial did not improve
+velocity and worsened N=4 orientation and compute, so it was rejected rather
+than adding global solver cost. The accepted gate reports both raw and
+one-frame-aligned contact timing and still keeps hard p95, endpoint, position,
+orientation, identity, lifecycle, invariance, planning, and latency limits.
+
+The dashboard now renders parameter convergence, per-object error ledgers,
+four-second horizon curves, complete efficiency/storage provenance, and the
+new N=8 adaptive forecast. Browser inspection confirms the forecast scrubs to
+frame 79 at `+4.00 s`, uses colour only for object identity, uses filled/solid
+marks for the model and open/dashed marks for the private reference, reports
+parameter uncertainty contraction without mislabeling it as empirical
+coverage, and emits no console warnings. The passing run is `939,418` bytes;
+the complete managed run tree is `23,877,597` bytes (`9.11%` of 250 MiB), and
+the separate archive is `34,315,899` bytes. No generated RGB-D frames, raster
+animation, or video are retained. The exact final source passes Ruff, Ruff
+format across 383 files, compileall, the 35-test affected suite, CLI manifest
+validation, dashboard rebuild, browser inspection, diff hygiene, and the
+complete repository suite: `2506 passed, 16 skipped, 13` existing PyTorch
+thread-setting warnings in `5839.90 s` (`1:37:19`).
+
 ## Capability evidence closure and visual audit — 2026-09-14
 
 The remaining visible sensor, resource-reporting, and same-appearance motion

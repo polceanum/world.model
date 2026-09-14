@@ -393,7 +393,9 @@ _FACTOR_METRIC_COLUMNS = (
     ("lifecycle_f1", "Lifecycle F1", 0.95, False),
     ("current_position_rmse_m", "Current RMSE", 0.020, True),
     ("two_second_position_rmse_m", "2 s RMSE", 0.120, True),
+    ("four_second_position_rmse_m", "4 s RMSE", 0.045, True),
     ("collision_f1", "Collision F1", 0.90, False),
+    ("parameter_relative_error", "Parameter error", 0.060, True),
     ("uncertainty_90_coverage", "90% coverage", (0.82, 0.97), None),
 )
 
@@ -610,7 +612,8 @@ def _merge_latest_factor_evidence(
             scaled = [
                 item
                 for item in candidates
-                if "rgb-d initialized multi-contact" in str(item[0].get("label", "")).casefold()
+                if "rgb-d" in str(item[0].get("label", "")).casefold()
+                or "rgbd" in str(item[0].get("label", "")).casefold()
             ]
             scaled_choice = (
                 max(
@@ -1392,10 +1395,21 @@ def _ablation_attribution(summary: CapabilityRunSummary) -> str:
     if isinstance(ablations, Mapping):
         for intervention, result in ablations.items():
             if isinstance(result, Mapping):
+                reduction = result.get("error_reduction")
+                if reduction is None and str(intervention).startswith(
+                    "truth_state_and_parameters_n"
+                ):
+                    object_count = str(intervention).rpartition("_n")[2]
+                    factor = summary.factor_metrics.get(f"adaptive_physics_n{object_count}")
+                    endpoint = result.get("endpoint_position_rmse_m")
+                    if isinstance(factor, Mapping) and isinstance(endpoint, (int, float)):
+                        candidate_endpoint = factor.get("four_second_position_rmse_m")
+                        if isinstance(candidate_endpoint, (int, float)):
+                            reduction = max(float(candidate_endpoint) - float(endpoint), 0.0)
                 rows.append(
                     (
                         str(intervention),
-                        _format_number(result.get("error_reduction")),
+                        _format_number(reduction),
                         str(result.get("status", "measured")),
                     )
                 )
@@ -1456,6 +1470,37 @@ def _parameter_convergence_section(summary: CapabilityRunSummary) -> str:
         "<table><thead><tr><th>Evidence stage</th><th>Mean</th><th>Mass</th>"
         "<th>Restitution</th><th>Drag</th><th>Friction</th></tr></thead>"
         f"<tbody>{''.join(rows)}</tbody></table></article></section>"
+    )
+
+
+def _per_object_prediction_section(summary: CapabilityRunSummary) -> str:
+    values = summary.qualitative.get("per_object_prediction_errors")
+    if not isinstance(values, list) or not values:
+        return ""
+    rows = []
+    for item in values:
+        if not isinstance(item, Mapping):
+            continue
+        rows.append(
+            "<tr>"
+            f"<th>{_escape(item.get('scenario', 'unlabelled'))}</th>"
+            f"<td>{_escape(item.get('runtime_id', '—'))}</td>"
+            f"<td>{_format_number(item.get('position_m'))}</td>"
+            f"<td>{_format_number(item.get('velocity_mps'))}</td>"
+            f"<td>{_format_number(item.get('orientation_degrees'))}</td>"
+            "</tr>"
+        )
+    if not rows:
+        return ""
+    return (
+        "<section><h2>Per-object prediction ledger</h2>"
+        '<p class="table-note">Maxima span the declared forecast. Raw velocity maxima '
+        "remain contact-frame sensitive; the governed aggregate additionally reports the "
+        "one-frame-aligned contact metric.</p>"
+        "<table><thead><tr><th>Scenario</th><th>Runtime ID</th>"
+        "<th>Max position error (m)</th><th>Raw max velocity error (m/s)</th>"
+        "<th>Max orientation error (degrees)</th></tr></thead>"
+        f"<tbody>{''.join(rows)}</tbody></table></section>"
     )
 
 
@@ -1665,11 +1710,16 @@ def _summary_section(
     n8_probe = _n8_perceptual_probe(resources) or {}
     n8_probe_source = "scalability.perceptual_development_probes"
     coverage = summary.uncertainty.get("coverage_90_range", ())
-    coverage_text = (
-        f"{_format_number(coverage[0])}–{_format_number(coverage[1])}"
-        if isinstance(coverage, (list, tuple)) and len(coverage) == 2
-        else "—"
-    )
+    parameter_contracted_fraction = summary.uncertainty.get("parameter_contracted_fraction")
+    if isinstance(coverage, (list, tuple)) and len(coverage) == 2:
+        uncertainty_text = f"{_format_number(coverage[0])}–{_format_number(coverage[1])}"
+        uncertainty_caption = "Observed nominal-90% coverage range"
+    elif isinstance(parameter_contracted_fraction, (int, float)):
+        uncertainty_text = f"{100.0 * float(parameter_contracted_fraction):.1f}%"
+        uncertainty_caption = "Accepted object-parameter blocks with contracted uncertainty"
+    else:
+        uncertainty_text = "—"
+        uncertainty_caption = "No uncertainty measurement reported"
     return f"""
     <section class="hero">
       <div><span class="eyebrow">{_escape(summary.lifecycle_status)}</span><h1>{_escape(summary.run_id)}</h1>
@@ -1678,11 +1728,12 @@ def _summary_section(
     </section>
     <section class="grid three">
       <article><h2>Capability error</h2><p class="metric">{_format_number(candidate_score)}</p><p>Macro-averaged candidate score; lower is better</p></article>
-      <article><h2>Uncertainty</h2><p class="metric">{coverage_text}</p><p>Observed nominal-90% coverage range</p></article>
+      <article><h2>Uncertainty</h2><p class="metric">{uncertainty_text}</p><p>{uncertainty_caption}</p></article>
       <article><h2>Planning parity</h2><p class="metric">{_escape(summary.planning.get("serial_vectorized_winner_parity", "—"))}</p><p>Maximum cost difference {_format_number(summary.planning.get("maximum_cost_difference"))}</p></article>
     </section>
     <section class="grid two"><article><h2>Capability coverage</h2>{_factor_table(summary)}</article><article><h2>Horizon error</h2>{position_chart}{velocity_chart}{orientation_chart}</article></section>
     {_parameter_convergence_section(summary)}
+    {_per_object_prediction_section(summary)}
     <section><h2>Factor performance</h2>{_factor_metric_matrix(summary)}</section>
     {_regression_ledger(summary)}
     {_accuracy_frontier(summary)}

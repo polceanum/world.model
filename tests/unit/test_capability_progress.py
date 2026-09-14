@@ -96,6 +96,8 @@ def test_summary_roundtrip_and_active_refresh_are_versioned(tmp_path: Path) -> N
     assert "N1/contact=0/dynamic=0" in active_html
     assert "Factor performance" in active_html
     assert "Proposal F1" in active_html
+    assert "4 s RMSE" in active_html
+    assert "Parameter error" in active_html
     assert "90% uncertainty coverage by object count, contact, and membership" in active_html
     assert "closest to 0.9 target" in active_html
     assert "Relative within this run; colour is not a pass/fail gate." in active_html
@@ -106,9 +108,45 @@ def test_summary_roundtrip_and_active_refresh_are_versioned(tmp_path: Path) -> N
     assert "Capability frontier" in active_html
     assert "RGB-D" in active_html
     assert "Ablation attribution" in active_html
+    assert "Observed nominal-90% coverage range" in active_html
 
     completed_html = render_summary_html(replace(active, lifecycle_status="completed"))
     assert 'http-equiv="refresh"' not in completed_html
+
+
+def test_parameter_uncertainty_contraction_is_not_mislabeled_as_coverage() -> None:
+    summary = replace(
+        _summary("parameter-adaptation", "completed"),
+        uncertainty={"parameter_contracted_fraction": 1.0},
+    )
+
+    html = render_summary_html(summary)
+
+    assert "100.0%" in html
+    assert "Accepted object-parameter blocks with contracted uncertainty" in html
+    assert "Observed nominal-90% coverage range" not in html
+
+
+def test_adaptive_truth_state_ablation_derives_endpoint_reduction() -> None:
+    summary = replace(
+        _summary("adaptive-ablation", "completed"),
+        factor_metrics={"adaptive_physics_n8": {"four_second_position_rmse_m": 0.026}},
+        failure_attribution={
+            "primary_bottleneck": "none",
+            "ablation_owner": "shared analytic dynamics",
+            "ablations": {
+                "truth_state_and_parameters_n8": {
+                    "endpoint_position_rmse_m": 0.021,
+                    "status": "diagnostic",
+                }
+            },
+        },
+    )
+
+    html = render_summary_html(summary)
+
+    assert "truth_state_and_parameters_n8" in html
+    assert "0.005" in html
 
 
 def test_report_labels_n8_rgbd_probe_as_development_only() -> None:
@@ -755,6 +793,16 @@ def test_dashboard_forecast_gallery_covers_touching_scale_and_long_horizon(
                     "long_horizon_endpoint_s": 2.0,
                 },
             ),
+            (
+                "adaptive",
+                {
+                    **base,
+                    "episode": "adaptive-n8",
+                    "label": "N=8 public RGB-D adaptive-physics four-second forecast",
+                    "object_count": 8,
+                    "long_horizon_endpoint_s": 4.0,
+                },
+            ),
         )
     ):
         directory = runs / run_id
@@ -769,7 +817,8 @@ def test_dashboard_forecast_gallery_covers_touching_scale_and_long_horizon(
     content = build_progress_dashboard(runs).read_text(encoding="utf-8")
 
     assert "same-appearance touching action-free two-second forecast" in content
-    assert "N=8 RGB-D initialized multi-contact forecast" in content
+    assert "N=8 public RGB-D adaptive-physics four-second forecast" in content
+    assert "N=8 RGB-D initialized multi-contact forecast" not in content
     assert "eight-second causal forecast" in content
     assert content.count('class="animation-card"') == 3
 
@@ -926,6 +975,15 @@ def test_pose_animation_and_parameter_convergence_are_self_describing() -> None:
                     "friction_relative_error": 0.01,
                 },
             ],
+            "per_object_prediction_errors": [
+                {
+                    "scenario": "N=8",
+                    "runtime_id": "42",
+                    "position_m": 0.025,
+                    "velocity_mps": 0.10,
+                    "orientation_degrees": 4.5,
+                }
+            ],
         },
     )
 
@@ -936,6 +994,9 @@ def test_pose_animation_and_parameter_convergence_are_self_describing() -> None:
     assert "Online physical identification" in content
     assert "Mean relative parameter error" in content
     assert "observed contact" in content
+    assert "Per-object prediction ledger" in content
+    assert "Max position error (m)" in content
+    assert "Runtime ID" in content
     assert 'data-orientation-role="truth"' in content
     assert "data-contact-marker" in content
     assert "Math.atan2" in content
