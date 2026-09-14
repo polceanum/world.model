@@ -35,6 +35,8 @@ class UncertaintyDynamics(nn.Module):
         base_process_variance_per_second: float = 1e-5,
         position_process_variance_per_second: float | None = None,
         velocity_process_variance_per_second: float | None = None,
+        calibrated_position_process_variance_per_second: float = 0.0,
+        calibrated_velocity_process_variance_per_second: float = 0.0,
         log_variance_bounds: tuple[float, float] = (-20.0, 10.0),
         max_process_variance_per_step: float = 1.0,
     ) -> None:
@@ -53,9 +55,27 @@ class UncertaintyDynamics(nn.Module):
         )
         if min(base_process_variance_per_second, position_noise, velocity_noise) <= 0:
             raise ValueError("base process variances must be positive")
+        for name, value in (
+            (
+                "calibrated_position_process_variance_per_second",
+                calibrated_position_process_variance_per_second,
+            ),
+            (
+                "calibrated_velocity_process_variance_per_second",
+                calibrated_velocity_process_variance_per_second,
+            ),
+        ):
+            if isinstance(value, bool) or not math.isfinite(value) or value < 0.0:
+                raise ValueError(f"{name} must be finite and nonnegative")
         self.fast_state_dim = fast_state_dim
         self.log_variance_bounds = log_variance_bounds
         self.max_process_variance_per_step = max_process_variance_per_step
+        self.calibrated_position_process_variance_per_second = float(
+            calibrated_position_process_variance_per_second
+        )
+        self.calibrated_velocity_process_variance_per_second = float(
+            calibrated_velocity_process_variance_per_second
+        )
         self.process_network = nn.Sequential(
             nn.Linear(self.feature_dim, hidden_dim),
             nn.LayerNorm(hidden_dim),
@@ -191,6 +211,18 @@ class UncertaintyDynamics(nn.Module):
             dim=-1,
         )
         process_variance = F.softplus(self.process_network(features))
+        if (
+            self.calibrated_position_process_variance_per_second > 0.0
+            or self.calibrated_velocity_process_variance_per_second > 0.0
+        ):
+            # This floor is deliberately an ordinary runtime scalar rather
+            # than a parameter/buffer: legacy checkpoints therefore retain an
+            # exact strict state_dict contract while a newer deployment can
+            # calibrate uncertainty around the inherited deterministic mean.
+            calibrated = torch.zeros_like(process_variance)
+            calibrated[..., :3] = self.calibrated_position_process_variance_per_second
+            calibrated[..., 3:6] = self.calibrated_velocity_process_variance_per_second
+            process_variance = process_variance + calibrated
         if process_log_scale_residual is not None:
             if process_log_scale_residual.shape != speed.shape:
                 raise ValueError("process_log_scale_residual must have object shape [B,N]")

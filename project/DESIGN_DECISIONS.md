@@ -6,6 +6,31 @@ to make every heading unambiguous; the suffixes do not imply precedence, no
 substantive decision or chronology changed, and the one corresponding
 cross-reference was disambiguated.
 
+## ADR-191 — Calibrate confidence and evidence windows without weakening behavior gates
+
+- **Date:** 2026-09-14
+- **Status:** accepted and implemented
+- **Context:** Sensor and varied-physics means passed their absolute accuracy
+  gates but their 90% coverage sat just outside the common interval in opposite
+  directions. A noisy N=4 planning row retained the correct tracks yet had only
+  15 valid measurements in 22 elapsed frames. The dashboard also replaced
+  complete resource telemetry with sparse newer reports, and the touching demo
+  did not make predicted motion visually evident.
+- **Decision:** Add explicit non-checkpoint measurement and process calibration
+  scalars, jointly require both controlled factor families to pass, and retain
+  zero/one as exact legacy behavior. Use the already bounded 32-frame recovery
+  history for any degraded-observation planning family while preserving the
+  16-valid-sample maturity gate. Merge resource measurements field by field and
+  attach source provenance; failed reports remain in the ledger but do not
+  displace an accepted headline operating point. Require the same-appearance
+  scenario to emit a scored action-free two-second forecast with visible
+  minimum displacement.
+- **Consequences:** Sensor and varied-physics coverage pass at `0.9645` and
+  `0.8343`; all sensor N=1--6/K=8,32 planning gates and invariants pass. The
+  same-appearance forecast moves every object by at least `0.3283 m` and ends
+  at `0.03056 m` RMSE. Strict checkpoint keys, physical/planning thresholds,
+  truth isolation, and the 250 MiB artifact policy are unchanged.
+
 ## ADR-190 — Join public visual state to the scaled contact/planning executor before adding capacity
 
 - **Date:** 2026-09-12

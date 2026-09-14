@@ -2,6 +2,29 @@
 
 ## Unreleased — 2026-07-28
 
+### 2026-09-14 capability evidence closure and visual audit
+
+- Added checkpoint-compatible measurement/process uncertainty calibration and
+  published passing sensor-noise and varied-physics evidence under a versioned
+  factor protocol.
+- Extended only degraded-observation planning histories to the existing
+  32-frame recovery window, preserving the 16-valid-sample maturity gate and
+  qualifying all sensor-conditioned N=1--6/K=8/K=32 planning slices.
+- Reworked the same-appearance touching/recovery example with larger observable
+  motion, a genuine two-second action-free public forecast, endpoint-error and
+  minimum-displacement gates, and complete planning latency/speedup reporting.
+- Published a fresh strict passing N=4/N=6/N=8 visual-dynamic run to supersede
+  older thermally contaminated failed rows without deleting their audit data.
+- Made dashboard resource evidence field-wise and provenance-labelled, prefer
+  accepted measurements for headline efficiency, and select complementary
+  touching, N=8 RGB-D, and long-horizon forecast cards.
+- Browser-verified every relevant passed row, complete efficiency/storage
+  values, clean console, correct `+0.00 s` forecast event, and visible movement
+  of all three same-appearance model tracks.
+- Passed Ruff, Ruff format, compileall, all affected focused suites, and the
+  complete `2496 passed, 16 skipped` repository suite in `1:38:06` on the exact
+  final source tree.
+
 ### 2026-09-13 per-object accuracy-frontier hardening
 
 - Added per-object maximum position, velocity, and observable box-orientation

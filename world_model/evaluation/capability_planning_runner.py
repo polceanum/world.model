@@ -52,7 +52,7 @@ from world_model.utils.io import atomic_write_text
 from world_model.utils.run_artifacts import enforce_run_budget, inventory_runs, write_run_manifest
 from world_model.visualisation.progress import build_progress_dashboard, write_run_report
 
-CAPABILITY_PLANNING_REPORT_SCHEMA = "world_model_capability_planning_report_v1"
+CAPABILITY_PLANNING_REPORT_SCHEMA = "world_model_capability_planning_report_v2"
 _ACTION_TIME_STRATUM = {"early": 0, "middle": 2, "late": 3}
 
 
@@ -363,6 +363,7 @@ def run_incumbent_factor_planning(
         "factor_controls_generator_only": True,
         "capability_manifest_sha256": manifest_sha256(complete_manifest),
         "factor_planning_rows_sha256": manifest_sha256(capability_rows),
+        "degraded_observation_history_frames": 32,
     }
 
     def update(message: str) -> None:

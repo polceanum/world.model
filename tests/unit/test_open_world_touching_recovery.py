@@ -33,9 +33,17 @@ def test_touching_recovery_milestone_qualifies_and_stays_compact(tmp_path: Path)
     assert result.maximum_gap_position_rmse_m <= 0.04
     assert result.recovery_position_rmse_m <= 0.03
     assert result.recovery_velocity_rmse_mps <= 0.08
+    assert result.forecast_endpoint_position_rmse_m <= 0.04
+    assert result.minimum_forecast_displacement_m >= 0.15
+    assert result.forecast_animation["mode"] == "forecast"
+    assert result.forecast_animation["known_actions_in_rollout"] is False
+    assert result.forecast_animation["long_horizon_endpoint_s"] == 2.0
+    assert len(result.forecast_animation["frames"]) > 10
     assert all(item.winner_correct for item in result.planning)
     assert all(item.serial_vectorized_parity for item in result.planning)
     assert all(item.latency_seconds > 0.0 for item in result.planning)
+    assert all(item.serial_latency_seconds > 0.0 for item in result.planning)
+    assert all(item.vectorization_speedup > 0.0 for item in result.planning)
     assert all(item.maximum_cost_difference == 0.0 for item in result.planning)
 
     runs = tmp_path / "runs"
@@ -56,5 +64,6 @@ def test_touching_recovery_milestone_qualifies_and_stays_compact(tmp_path: Path)
     assert not list(run.rglob("*.mp4"))
     dashboard = (runs / "progress" / "index.html").read_text(encoding="utf-8")
     assert "same-appearance touching split and eight-frame recovery" in dashboard
+    assert "same-appearance touching action-free two-second forecast" in dashboard
     assert "Position RMSE through observation gap and recovery" in dashboard
     assert "Colour = object identity" in dashboard

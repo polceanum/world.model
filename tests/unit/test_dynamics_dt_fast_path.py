@@ -272,6 +272,35 @@ def test_explicit_low_uncertainty_bound_reaches_below_historical_floor() -> None
     assert torch.isfinite(calibrated.objects.fast_log_variance).all()
 
 
+def test_calibrated_process_floor_preserves_checkpoint_keys_and_adds_variance() -> None:
+    belief = _active_belief(batch_size=1)
+    legacy = UncertaintyDynamics(
+        belief.objects.fast_state_dim,
+        base_process_variance_per_second=1.0e-8,
+    )
+    calibrated = UncertaintyDynamics(
+        belief.objects.fast_state_dim,
+        base_process_variance_per_second=1.0e-8,
+        calibrated_position_process_variance_per_second=2.0e-4,
+        calibrated_velocity_process_variance_per_second=3.0e-4,
+    )
+    calibrated.load_state_dict(legacy.state_dict(), strict=True)
+
+    legacy_output = legacy(belief.objects, 0.5)
+    calibrated_output = calibrated(belief.objects, 0.5)
+
+    assert calibrated.state_dict().keys() == legacy.state_dict().keys()
+    expected = torch.zeros_like(legacy_output.process_variance)
+    expected[..., :3] = 1.0e-4
+    expected[..., 3:6] = 1.5e-4
+    torch.testing.assert_close(
+        calibrated_output.process_variance - legacy_output.process_variance,
+        expected,
+        rtol=1.0e-5,
+        atol=1.0e-10,
+    )
+
+
 def _assert_composite_uses_one_segment_validation(
     monkeypatch: pytest.MonkeyPatch,
     *,

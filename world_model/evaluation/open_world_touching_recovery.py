@@ -48,11 +48,12 @@ from world_model.utils.io import atomic_write_text
 from world_model.utils.run_artifacts import inventory_runs, write_run_manifest
 from world_model.visualisation.progress import build_progress_dashboard, write_run_report
 
-OPEN_WORLD_TOUCHING_RECOVERY_SCHEMA = "world_model_open_world_touching_recovery_v1"
+OPEN_WORLD_TOUCHING_RECOVERY_SCHEMA = "world_model_open_world_touching_recovery_v2"
 _DTYPE = torch.float64
 _IMAGE_SIZE = (96, 96)
 _FRAME_DT = 0.05
 _DROPOUT_FRAMES = 8
+_DROPOUT_START_FRAME = 8
 _BOUNDS = ((-4.0, 4.0), (-4.0, 4.0), (2.0, 6.0))
 
 
@@ -66,6 +67,8 @@ class RecoveryPlanningResult:
     maximum_cost_difference: float
     source_unchanged: bool
     latency_seconds: float
+    serial_latency_seconds: float
+    vectorization_speedup: float
 
 
 @dataclass(frozen=True, slots=True)
@@ -91,6 +94,9 @@ class OpenWorldTouchingRecoveryResult:
     evaluation_seconds: float
     recovery_curve: dict[str, float]
     animation: dict[str, Any]
+    forecast_animation: dict[str, Any]
+    forecast_endpoint_position_rmse_m: float
+    minimum_forecast_displacement_m: float
     gate_failures: tuple[str, ...]
     qualified: bool
     generated_frames_retained: bool = False
@@ -108,6 +114,9 @@ def capability_manifest_sha256() -> str:
         "touching_requirement": "fewer connected depth components than recovered instances",
         "association_weights": {"appearance": 0.0, "primitive": 0.0, "geometry": 0.75},
         "dropout_frames": _DROPOUT_FRAMES,
+        "minimum_visible_forecast_displacement_m": 0.15,
+        "action_free_forecast_endpoint_seconds": 2.0,
+        "maximum_forecast_endpoint_position_rmse_m": 0.04,
         "planning_candidate_counts": [8, 32],
         "planning_latency_protocol": {
             "adjudication": "fresh_process_governed_runner",
@@ -138,7 +147,7 @@ def _state(timestamp: float) -> RigidBodyState:
         dtype=_DTYPE,
     )
     velocity = torch.tensor(
-        [[-0.04, 0.02, 0.0], [0.05, 0.02, 0.0], [0.0, -0.025, 0.0]],
+        [[-0.20, 0.10, 0.0], [0.22, 0.09, 0.0], [0.06, -0.18, 0.0]],
         dtype=_DTYPE,
     )
     spheres = SphereState(
@@ -378,6 +387,7 @@ def _planning_result(
             vectorized_measurements.append(time.perf_counter() - started)
         assert vectorized is not None
         latency = sorted(vectorized_measurements)[1]
+        serial_started = time.perf_counter()
         serial = plan_counterfactual_actions(
             dynamics,
             belief,
@@ -388,6 +398,7 @@ def _planning_result(
             return_events=False,
             return_auxiliary=False,
         )
+        serial_latency = time.perf_counter() - serial_started
     selected = int(vectorized.selected_index[0])
     scale = max(float(truth_cost.max()), 1.0e-12)
     selected_error = float(
@@ -402,6 +413,8 @@ def _planning_result(
         maximum_cost_difference=float((vectorized.total_cost - serial.total_cost).abs().max()),
         source_unchanged=torch.equal(source.objects.position, belief.objects.position),
         latency_seconds=latency,
+        serial_latency_seconds=serial_latency,
+        vectorization_speedup=serial_latency / max(latency, 1.0e-12),
     )
 
 
@@ -459,11 +472,139 @@ def _animation(
         "bounds": {"horizontal": bounds(values_x), "vertical": bounds(values_y)},
         "frames": frames,
         "events": [
-            {"frame": 3, "kind": "complete RGB-D gap begins"},
-            {"frame": 11, "kind": "IDs recovered after 8 missing frames"},
+            {"frame": _DROPOUT_START_FRAME, "kind": "complete RGB-D gap begins"},
+            {
+                "frame": _DROPOUT_START_FRAME + _DROPOUT_FRAMES,
+                "kind": "IDs recovered after 8 missing frames",
+            },
+        ],
+        "prediction_windows": [
+            {
+                "start_frame": _DROPOUT_START_FRAME,
+                "end_frame": _DROPOUT_START_FRAME + _DROPOUT_FRAMES - 1,
+                "kind": "prediction without RGB-D observations",
+            }
         ],
         "reference": "private positions opened only after geometry-only public tracking",
     }
+
+
+def _forecast_animation(
+    anchor: tuple[TrackedRigidObject, ...],
+    truth_by_id: dict[int, int],
+    *,
+    anchor_timestamp: float,
+) -> tuple[dict[str, Any], float, float]:
+    """Create genuine public open-loop motion evidence before opening truth."""
+
+    belief = tracked_objects_to_belief(
+        anchor,
+        timestamp=anchor_timestamp,
+        max_objects=3,
+        initial_mass=1.0,
+        initial_restitution=0.5,
+        initial_drag=0.001,
+        initial_friction=0.25,
+    )
+    dynamics = _dynamics(belief)
+    query_times = torch.arange(0.10, 2.01, 0.10, dtype=belief.dtype)
+    source = belief.clone()
+    with torch.no_grad():
+        prediction = dynamics.rollout(
+            belief,
+            query_times,
+            return_events=False,
+            return_auxiliary=False,
+        )
+    if not torch.equal(source.objects.position, belief.objects.position):
+        raise RuntimeError("forecast rollout mutated its public source belief")
+
+    active_slots = torch.where(belief.objects.active[0])[0]
+    object_ids = belief.objects.object_id[0, active_slots]
+    predicted = prediction.positions[0, :, active_slots]
+    # Private reference is deliberately opened only after public rollout.
+    references = torch.stack(
+        [
+            _state(anchor_timestamp + float(offset)).position[
+                [truth_by_id[int(object_id)] for object_id in object_ids.tolist()]
+            ]
+            for offset in query_times
+        ]
+    )
+    endpoint_rmse = float((predicted[-1] - references[-1]).square().mean().sqrt())
+    initial_position = belief.objects.position[0, active_slots]
+    displacement = torch.linalg.vector_norm(predicted[-1] - initial_position, dim=-1)
+    minimum_displacement = float(displacement.min())
+
+    frames: list[dict[str, Any]] = []
+
+    def points(position: Tensor) -> list[list[float | int]]:
+        return [
+            [int(object_id), round(float(point[0]), 5), round(float(point[1]), 5)]
+            for object_id, point in zip(object_ids.tolist(), position, strict=True)
+        ]
+
+    frames.append(
+        {
+            "frame": _DROPOUT_START_FRAME - 1,
+            "time_s": 0.0,
+            "model": points(initial_position),
+            "truth": points(
+                _state(anchor_timestamp).position[
+                    [truth_by_id[int(object_id)] for object_id in object_ids.tolist()]
+                ]
+            ),
+        }
+    )
+    for index, offset in enumerate(query_times):
+        frames.append(
+            {
+                "frame": _DROPOUT_START_FRAME + index,
+                "time_s": round(float(offset), 3),
+                "model": points(predicted[index]),
+                "truth": points(references[index]),
+            }
+        )
+    values_x = [
+        point[1] for frame in frames for role in ("model", "truth") for point in frame[role]
+    ]
+    values_y = [
+        point[2] for frame in frames for role in ("model", "truth") for point in frame[role]
+    ]
+
+    def bounds(values: list[float]) -> list[float]:
+        padding = max(0.10 * (max(values) - min(values)), 0.10)
+        return [round(min(values) - padding, 4), round(max(values) + padding, 4)]
+
+    payload = {
+        "schema": "world_model_compact_touching_forecast_animation_v1",
+        "label": "same-appearance touching action-free two-second forecast",
+        "episode": "geometry-only:touching-public-open-loop",
+        "object_count": 3,
+        "contact": False,
+        "dynamic_membership": False,
+        "mode": "forecast",
+        "known_actions_in_rollout": False,
+        "anchor_frame": _DROPOUT_START_FRAME - 1,
+        "frame_rate": 10.0,
+        "long_horizon_endpoint_s": 2.0,
+        "endpoint_position_rmse_m": endpoint_rmse,
+        "minimum_model_displacement_m": minimum_displacement,
+        "rollout_horizons_s": [round(float(value), 3) for value in query_times],
+        "projection": "world_xy",
+        "axis_labels": ["x", "y"],
+        "bounds": {"horizontal": bounds(values_x), "vertical": bounds(values_y)},
+        "frames": frames,
+        "events": [
+            {
+                "frame": _DROPOUT_START_FRAME - 1,
+                "time_s": 0.0,
+                "kind": "public open-loop forecast begins",
+            }
+        ],
+        "reference": "private future truth opened only after the public action-free rollout",
+    }
+    return payload, endpoint_rmse, minimum_displacement
 
 
 def _gate_failures(
@@ -491,6 +632,10 @@ def _gate_failures(
         failures.append("recovery_position_rmse")
     if values["recovery_velocity_rmse_mps"] > 0.08:
         failures.append("recovery_velocity_rmse")
+    if values["forecast_endpoint_position_rmse_m"] > 0.04:
+        failures.append("forecast_endpoint_position_rmse")
+    if values["minimum_forecast_displacement_m"] < 0.15:
+        failures.append("forecast_motion_visibility")
     if values["maximum_perception_latency_seconds"] > 1.0:
         failures.append("perception_latency")
     for item in planning:
@@ -528,16 +673,19 @@ def run_open_world_touching_recovery_capability(
         geometry_weight=0.75,
         primitive_weight=0.0,
     )
-    timestamps = tuple(-0.10 + _FRAME_DT * index for index in range(13))
+    timestamps = tuple(
+        -0.10 + _FRAME_DT * index for index in range(_DROPOUT_START_FRAME + _DROPOUT_FRAMES + 2)
+    )
     history: list[tuple[float, tuple[TrackedRigidObject, ...]]] = []
     latencies = []
     connected_components = 0
     initial_truth_by_id: dict[int, int] | None = None
+    forecast_anchor: tuple[TrackedRigidObject, ...] | None = None
     recovery_curve: dict[str, float] = {}
     gap_errors: list[float] = []
     all_tracks_retained = True
     for frame_index, timestamp in enumerate(timestamps):
-        missing = 3 <= frame_index < 3 + _DROPOUT_FRAMES
+        missing = _DROPOUT_START_FRAME <= frame_index < _DROPOUT_START_FRAME + _DROPOUT_FRAMES
         frame, components, latency = _observe(timestamp, missing=missing)
         latencies.append(latency)
         tracked = tracker.update(frame)
@@ -549,6 +697,8 @@ def run_open_world_touching_recovery_capability(
                 item.object_id: int(assignment[index]) for index, item in enumerate(tracked)
             }
             connected_components = components
+        if frame_index == _DROPOUT_START_FRAME - 1:
+            forecast_anchor = tracked
         if initial_truth_by_id is not None:
             position_rmse = _rmse(tracked, truth, initial_truth_by_id)
             recovery_curve[f"{frame_index * _FRAME_DT:.2f}"] = position_rmse
@@ -556,9 +706,10 @@ def run_open_world_touching_recovery_capability(
                 gap_errors.append(position_rmse)
         if missing:
             all_tracks_retained &= len(tracked) == 3 and all(
-                item.missed_steps == frame_index - 2 and not item.observed for item in tracked
+                item.missed_steps == frame_index - (_DROPOUT_START_FRAME - 1) and not item.observed
+                for item in tracked
             )
-    if initial_truth_by_id is None:
+    if initial_truth_by_id is None or forecast_anchor is None:
         raise RuntimeError("initial public set did not become measurable")
     recovered = history[-1][1]
     recovery_truth = _state(timestamps[-1])
@@ -612,6 +763,11 @@ def run_open_world_touching_recovery_capability(
         )
         and not private_names.intersection(runtime_parameters)
     )
+    forecast_animation, forecast_endpoint_rmse, minimum_forecast_displacement = _forecast_animation(
+        forecast_anchor,
+        initial_truth_by_id,
+        anchor_timestamp=timestamps[_DROPOUT_START_FRAME - 1],
+    )
     values = {
         "object_count": len(recovered),
         "connected_depth_components": connected_components,
@@ -625,6 +781,8 @@ def run_open_world_touching_recovery_capability(
         "maximum_gap_position_rmse_m": max(gap_errors),
         "recovery_position_rmse_m": recovery_position,
         "recovery_velocity_rmse_mps": recovery_velocity,
+        "forecast_endpoint_position_rmse_m": forecast_endpoint_rmse,
+        "minimum_forecast_displacement_m": minimum_forecast_displacement,
         "duplicate_id_count": len(recovered) - len({item.object_id for item in recovered}),
         "maximum_perception_latency_seconds": max(latencies),
     }
@@ -640,6 +798,7 @@ def run_open_world_touching_recovery_capability(
         evaluation_seconds=time.perf_counter() - started,
         recovery_curve=recovery_curve,
         animation=animation,
+        forecast_animation=forecast_animation,
         gate_failures=failures,
         qualified=not failures,
         **values,
@@ -658,14 +817,18 @@ def _summary(
             "winner_accuracy": float(item.winner_correct),
             "median_normalized_regret": item.normalized_regret,
             "goal_success": float(item.goal_success),
+            "vectorized_latency_seconds": item.latency_seconds,
+            "serial_latency_seconds": item.serial_latency_seconds,
+            "vectorization_speedup": item.vectorization_speedup,
         }
         for item in result.planning
     }
     candidate_score = (
         result.recovery_position_rmse_m / 0.03
         + result.maximum_gap_position_rmse_m / 0.04
+        + result.forecast_endpoint_position_rmse_m / 0.04
         + (1.0 - result.recovery_id_accuracy)
-    ) / 3.0
+    ) / 4.0
     return CapabilityRunSummary(
         schema=CAPABILITY_SUMMARY_SCHEMA,
         run_id=run_id,
@@ -680,6 +843,7 @@ def _summary(
             "appearance_weight": result.appearance_weight,
             "primitive_weight": result.primitive_weight,
             "planning_used_as_training_loss": False,
+            "forecast_endpoint_seconds": 2.0,
         },
         provenance={
             "scenario_manifest_sha256": result.manifest_sha256,
@@ -705,6 +869,14 @@ def _summary(
                 "identity_accuracy": result.recovery_id_accuracy,
                 "current_position_rmse_m": result.recovery_position_rmse_m,
             },
+            "same_appearance_touching_forecast": {
+                "status": "passed"
+                if result.forecast_endpoint_position_rmse_m <= 0.04
+                and result.minimum_forecast_displacement_m >= 0.15
+                else "failed",
+                "two_second_position_rmse_m": result.forecast_endpoint_position_rmse_m,
+                "minimum_forecast_displacement_m": result.minimum_forecast_displacement_m,
+            },
         },
         cell_metrics={
             "N3/touching=1/same_appearance=1/gap=8": {
@@ -716,7 +888,12 @@ def _summary(
                 "proposal_f1": {"value": 1.0 if result.object_count == 3 else 0.0, "support": 3},
             }
         },
-        horizon_curves={"recovery_position_rmse_m": result.recovery_curve},
+        horizon_curves={
+            "recovery_position_rmse_m": result.recovery_curve,
+            "touching_forecast_endpoint_position_rmse_m": {
+                "2.0": result.forecast_endpoint_position_rmse_m
+            },
+        },
         uncertainty={"status": "not promoted by this deterministic recovery milestone"},
         planning={
             "status": "passed"
@@ -752,6 +929,8 @@ def _summary(
             "representative_episode": "same-appearance-touching-recovery",
             "worst_episode": "same-appearance-touching-recovery",
             "animations": [result.animation],
+            "forecast_animations": [result.forecast_animation],
+            "forecast_gallery_mode": "latest_run",
             "diagnostic_contact_sheets": [],
         },
         unsupported_claims=(

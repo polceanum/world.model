@@ -234,6 +234,83 @@ def test_dashboard_keeps_latest_measured_factor_across_runs(tmp_path: Path) -> N
     assert "N1/contact=0/dynamic=0" in content
 
 
+def test_dashboard_merges_sparse_resource_measurements_with_provenance(
+    tmp_path: Path,
+) -> None:
+    runs = tmp_path / "runs"
+    older_directory = runs / "older"
+    latest_directory = runs / "latest"
+    older_directory.mkdir(parents=True)
+    latest_directory.mkdir()
+    older = replace(
+        _summary("older"),
+        resources={
+            "perception_latency_seconds": 0.12,
+            "process_rss_bytes": 12_000,
+            "scalability": {"probes": [{"object_count": 16, "median_latency_seconds": 0.08}]},
+        },
+    )
+    latest = replace(
+        _summary("latest"),
+        created_at_utc="2026-09-08T02:00:00+00:00",
+        resources={
+            "learned_weight_bytes": 20_000,
+            "scalability": {
+                "perceptual_development_probes": [
+                    {
+                        "object_count": 8,
+                        "observed_active_count": 8,
+                        "position_rmse_m": 0.002,
+                        "inference_latency_seconds": 0.21,
+                        "full_perceptual_qualification": False,
+                    }
+                ]
+            },
+        },
+    )
+    write_capability_summary(older, older_directory / "capability_summary.json")
+    write_capability_summary(latest, latest_directory / "capability_summary.json")
+
+    content = build_progress_dashboard(runs).read_text(encoding="utf-8")
+
+    assert "0.1200 s" in content
+    assert "0.0800 s" in content
+    assert "0.2100 s" in content
+    assert "2.000e+04 bytes" in content
+    assert "source: older" in content
+    assert "source: latest" in content
+    assert '"perception_latency_seconds": "older"' in content
+    assert '"scalability.perceptual_development_probes": "latest"' in content
+
+
+def test_dashboard_resource_headline_prefers_latest_successful_measurement(
+    tmp_path: Path,
+) -> None:
+    runs = tmp_path / "runs"
+    passed_directory = runs / "passed"
+    failed_directory = runs / "failed"
+    passed_directory.mkdir(parents=True)
+    failed_directory.mkdir()
+    passed = replace(
+        _summary("passed"),
+        resources={"n8_rollout_latency_seconds": 0.18},
+    )
+    failed = replace(
+        _summary("failed", "failed"),
+        created_at_utc="2026-09-08T03:00:00+00:00",
+        outcome="capability_gate_failed",
+        resources={"n8_rollout_latency_seconds": 56.0},
+    )
+    write_capability_summary(passed, passed_directory / "capability_summary.json")
+    write_capability_summary(failed, failed_directory / "capability_summary.json")
+
+    content = build_progress_dashboard(runs).read_text(encoding="utf-8")
+
+    assert "0.1800 s" in content
+    assert "56.0000 s" not in content
+    assert '"n8_rollout_latency_seconds": "passed"' in content
+
+
 def test_dashboard_carries_forward_newest_per_object_accuracy_frontier(
     tmp_path: Path,
 ) -> None:
@@ -632,6 +709,71 @@ def test_dashboard_keeps_three_lightweight_vector_animations_from_latest_evidenc
     assert len(content.encode("utf-8")) < 250_000
 
 
+def test_dashboard_forecast_gallery_covers_touching_scale_and_long_horizon(
+    tmp_path: Path,
+) -> None:
+    base = {
+        "schema": "world_model_compact_forecast_animation_v1",
+        "object_count": 1,
+        "mode": "forecast",
+        "projection": "world_xy",
+        "axis_labels": ["x", "y"],
+        "bounds": {"horizontal": [-1.0, 1.0], "vertical": [-1.0, 1.0]},
+        "frames": [
+            {"frame": 0, "time_s": 0.0, "truth": [[0, 0.0, 0.0]], "model": [[0, 0.0, 0.0]]},
+            {"frame": 1, "time_s": 2.0, "truth": [[0, 0.1, 0.0]], "model": [[0, 0.1, 0.0]]},
+        ],
+    }
+    runs = tmp_path / "runs"
+    for index, (run_id, animation) in enumerate(
+        (
+            (
+                "long",
+                {
+                    **base,
+                    "episode": "long",
+                    "label": "eight-second causal forecast",
+                    "long_horizon_endpoint_s": 8.0,
+                },
+            ),
+            (
+                "touching",
+                {
+                    **base,
+                    "episode": "touching",
+                    "label": "same-appearance touching action-free two-second forecast",
+                    "long_horizon_endpoint_s": 2.0,
+                },
+            ),
+            (
+                "scale",
+                {
+                    **base,
+                    "episode": "scale-n8",
+                    "label": "N=8 RGB-D initialized multi-contact forecast",
+                    "object_count": 8,
+                    "long_horizon_endpoint_s": 2.0,
+                },
+            ),
+        )
+    ):
+        directory = runs / run_id
+        directory.mkdir(parents=True)
+        summary = replace(
+            _summary(run_id),
+            created_at_utc=f"2026-09-08T0{index}:00:00+00:00",
+            qualitative={"forecast_animations": [animation]},
+        )
+        write_capability_summary(summary, directory / "capability_summary.json")
+
+    content = build_progress_dashboard(runs).read_text(encoding="utf-8")
+
+    assert "same-appearance touching action-free two-second forecast" in content
+    assert "N=8 RGB-D initialized multi-contact forecast" in content
+    assert "eight-second causal forecast" in content
+    assert content.count('class="animation-card"') == 3
+
+
 def test_recovery_curve_names_observation_gap_axes() -> None:
     summary = replace(
         _summary("long-recovery"),
@@ -649,6 +791,35 @@ def test_recovery_curve_names_observation_gap_axes() -> None:
     assert "Position RMSE through observation gap and recovery" in content
     assert "Elapsed sequence time (s)" in content
     assert "Prediction horizon (s)" not in content
+
+
+def test_action_free_forecast_introduction_does_not_invent_anchor_or_horizons() -> None:
+    forecast = {
+        "schema": "world_model_compact_touching_forecast_animation_v1",
+        "label": "action-free forecast",
+        "episode": "touching",
+        "object_count": 1,
+        "mode": "forecast",
+        "anchor_frame": 7,
+        "long_horizon_endpoint_s": 2.0,
+        "projection": "world_xy",
+        "axis_labels": ["x", "y"],
+        "bounds": {"horizontal": [-1.0, 1.0], "vertical": [-1.0, 1.0]},
+        "frames": [
+            {"frame": 7, "time_s": 0.0, "truth": [[0, 0.0, 0.0]], "model": [[0, 0.0, 0.0]]},
+            {"frame": 8, "time_s": 0.1, "truth": [[0, 0.1, 0.0]], "model": [[0, 0.1, 0.0]]},
+        ],
+    }
+    summary = replace(
+        _summary("action-free"),
+        qualitative={"forecast_animations": [forecast]},
+    )
+
+    content = render_summary_html(summary)
+
+    assert "labelled public observation-derived belief" in content
+    assert "frame-15" not in content
+    assert "0.05, 0.10, 0.25" not in content
 
 
 def test_long_horizon_animation_uses_declared_endpoint_and_frame_rate() -> None:

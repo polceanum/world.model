@@ -1,5 +1,30 @@
 # Tasks
 
+## Capability evidence closure and visual audit — completed 2026-09-14
+
+- [x] Calibrate measurement and process uncertainty jointly so sensor noise and
+  varied physical parameters both pass the unchanged 0.82--0.97 coverage gate.
+- [x] Preserve strict legacy checkpoint keys and exact zero-calibration
+  behavior; keep deterministic state predictions independent of confidence
+  calibration.
+- [x] Give noisy planning histories a bounded recovery window while retaining
+  the 16-valid-sample maturity requirement, then qualify every N=1--6/K=8,32
+  sensor-conditioned planning slice and invariant.
+- [x] Replace the nearly static same-appearance evidence with visible motion, a
+  separately scored two-second action-free rollout, and a minimum-displacement
+  acceptance gate.
+- [x] Publish a fresh strict N=4/N=6/N=8 visual-dynamic run with every physical,
+  per-object, contact, efficiency, and planning gate passing.
+- [x] Merge resource telemetry per field, show source-run provenance, prefer
+  accepted headline timing evidence, and keep historical failures in the run
+  ledger.
+- [x] Keep a complementary three-card forecast gallery: same-appearance
+  recovery, highest-count public RGB-D contact, and longest causal horizon.
+- [x] Verify dashboard rows, plot/event labels, console health, and all-object
+  animation movement in the integrated browser.
+- [x] Pass Ruff, format check, compileall, and the complete repository suite on
+  the final tree: `2496 passed, 16 skipped` in `5886.22 s` (`1:38:06`).
+
 ## Per-object accuracy-frontier hardening — completed 2026-09-13
 
 - [x] Replace aggregate-only visual acceptance with zero-regression checks for
@@ -29,8 +54,8 @@
   that a regression twice as large is still rejected.
 - [x] Pass the exact final repository suite: `2490 passed, 16 skipped, 13`
   existing warnings in `6329.05 s` (`1:45:29`).
-- [ ] Re-measure the strict visual v2 latency gates in a fresh, isolated,
-  thermally stable process; do not promote the warmed timing-failed run.
+- [x] Re-measure the strict visual gates in a fresh isolated process; the v4
+  run passes every N=4/N=6/N=8 timing and behavior gate.
 - [ ] Continue with public adaptive-physics generalization only behind this
   per-object and cross-capability regression envelope.
 

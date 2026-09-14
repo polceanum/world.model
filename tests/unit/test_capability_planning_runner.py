@@ -97,6 +97,23 @@ def test_partial_visibility_history_allows_a_complete_post_recovery_window() -> 
     )
 
 
+def test_sensor_noise_history_allows_sixteen_valid_samples_despite_dropout() -> None:
+    capability, row = next(
+        item
+        for item in factor_planning_rows("sensor_noise")
+        if item[1].object_count == 4 and item[1].candidate_count == 32
+    )
+    controlled = materialize_capability_planning_task(
+        row,
+        _environment("sensor_noise", capability.controls),
+    )
+
+    assert len(controlled.public_history.frames) == CAPABILITY_RECOVERY_HISTORY_FRAMES
+    assert controlled.public_history.frames[-1].frame_index == (
+        CAPABILITY_RECOVERY_HISTORY_FRAMES - 1
+    )
+
+
 def test_capability_planning_cli_dry_run_has_no_artifact_side_effect() -> None:
     assert main(["--factor", "known_actions", "--dry-run"]) == 0
 

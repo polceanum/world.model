@@ -480,7 +480,10 @@ class OnlineWorldModel(nn.Module):
                     maximum_surface_radius_relative_error=(
                         rgbd_config.maximum_surface_radius_relative_error
                     ),
-                    measurement_position_variance=(rgbd_config.measurement_position_variance),
+                    measurement_position_variance=(
+                        rgbd_config.measurement_position_variance
+                        * float(getattr(rgbd_config, "measurement_variance_scale", 1.0))
+                    ),
                     temporal_history_size=rgbd_config.temporal_history_size,
                     temporal_min_samples=rgbd_config.temporal_min_samples,
                     temporal_min_dt=rgbd_config.temporal_min_dt,

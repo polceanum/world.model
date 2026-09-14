@@ -130,6 +130,8 @@ class DynamicsConfig:
     base_process_variance_per_second: float = 1e-5
     process_noise_position: float | None = None
     process_noise_velocity: float | None = None
+    calibrated_process_noise_position: float = 0.0
+    calibrated_process_noise_velocity: float = 0.0
     log_variance_min: float = -20.0
     log_variance_max: float = 10.0
     ground_height: float = 0.0
@@ -268,6 +270,18 @@ class DynamicsConfig:
         ):
             if value is not None and value <= 0:
                 raise ValueError(f"{name} must be positive")
+        for name, value in (
+            (
+                "calibrated_process_noise_position",
+                self.calibrated_process_noise_position,
+            ),
+            (
+                "calibrated_process_noise_velocity",
+                self.calibrated_process_noise_velocity,
+            ),
+        ):
+            if isinstance(value, bool) or not math.isfinite(value) or value < 0.0:
+                raise ValueError(f"{name} must be finite and nonnegative")
         if self.log_variance_min >= self.log_variance_max:
             raise ValueError("invalid log variance bounds")
         for name, value in (
@@ -407,6 +421,12 @@ class DynamicsModel(nn.Module):
             base_process_variance_per_second=(self.config.base_process_variance_per_second),
             position_process_variance_per_second=(self.config.process_noise_position),
             velocity_process_variance_per_second=(self.config.process_noise_velocity),
+            calibrated_position_process_variance_per_second=(
+                self.config.calibrated_process_noise_position
+            ),
+            calibrated_velocity_process_variance_per_second=(
+                self.config.calibrated_process_noise_velocity
+            ),
             log_variance_bounds=(
                 self.config.log_variance_min,
                 self.config.log_variance_max,
@@ -526,6 +546,12 @@ class DynamicsModel(nn.Module):
             attention_dropout=float(dynamics.attention_dropout),
             process_noise_position=float(dynamics.process_noise_position),
             process_noise_velocity=float(dynamics.process_noise_velocity),
+            calibrated_process_noise_position=float(
+                getattr(dynamics, "calibrated_process_noise_position", 0.0)
+            ),
+            calibrated_process_noise_velocity=float(
+                getattr(dynamics, "calibrated_process_noise_velocity", 0.0)
+            ),
             log_variance_min=float(state.fast_log_variance_min),
             log_variance_max=float(state.fast_log_variance_max),
             ground_height=ground_height,

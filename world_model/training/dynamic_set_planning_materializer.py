@@ -1043,8 +1043,21 @@ def _build_controlled_public_history(
     final_rgb: Tensor | None = None
     final_target_mask: Tensor | None = None
     final_render: RenderOutput | None = None
+    degraded_observation_history = bool(
+        controls.occlusion_frames
+        or controls.rgb_noise_std
+        or controls.depth_noise_std_m
+        or controls.pixel_dropout_probability
+        or controls.exposure_scale != 1.0
+    )
+    # Corrupted observations can legitimately reject individual metric
+    # measurements while preserving the track. Give every degraded-observation
+    # capability the same bounded recovery window used for partial occlusion,
+    # so maturity means 16 valid samples rather than merely 16 elapsed frames.
     history_frame_count = (
-        CAPABILITY_RECOVERY_HISTORY_FRAMES if controls.occlusion_frames else PLANNING_HISTORY_FRAMES
+        CAPABILITY_RECOVERY_HISTORY_FRAMES
+        if degraded_observation_history
+        else PLANNING_HISTORY_FRAMES
     )
     for frame_index in range(history_frame_count):
         timestamp = frame_index / DYNAMIC_SET_FRAME_RATE_HZ

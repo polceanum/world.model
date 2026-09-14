@@ -1,5 +1,49 @@
 # Project status
 
+## Capability evidence closure and visual audit — 2026-09-14
+
+The remaining visible sensor, resource-reporting, and same-appearance motion
+gaps are closed by five fresh compact runs. Sensor noise now passes every
+physical gate in `runs/20260914-capability-sensor-noise-v10`, including 90%
+coverage `0.9645`; varied physical parameters pass in
+`runs/20260914-capability-physical-parameters-v5` at coverage `0.8343` and
+two-second position RMSE `0.02609 m`. The shared CPU profile applies a `0.5`
+measurement-variance calibration and explicit `1e-4` position/velocity process
+variance rates. These are ordinary runtime scalars, not checkpoint tensors, so
+legacy state dictionaries still load strictly and zero retains the historical
+function.
+
+Sensor-conditioned downstream planning is separately qualified in
+`runs/20260914-capability-sensor-noise-planning-v5`: all N=1--6 target handles,
+K=8/K=32 winners, zero regrets, goals, serial/vectorized parity, and invariants
+pass. Degraded-observation histories use the existing bounded 32-frame
+recovery window so the required maturity remains 16 valid measurements rather
+than 16 elapsed frames. The previously failing N=4/K=32 row now has complete
+support without relaxing a planning gate.
+
+`runs/20260914-open-world-touching-recovery-v3` replaces the visually weak
+same-appearance example with clearly moving tracks and a genuine action-free
+two-second public rollout. Every object moves at least `0.3283 m`; endpoint
+position RMSE is `0.03056 m`, gap RMSE is `0.00551 m`, all persistent IDs
+recover, and K=8/K=32 planning remains exact. The independent strict visual
+rerun `runs/20260914-visual-dynamic-scale-v4` also passes N=4/N=6/N=8 physical,
+per-object, contact, latency, and planning gates, superseding the older warmed
+failed rows.
+
+The dashboard now merges resource evidence field by field, names the source of
+each latency/memory/storage value, and prefers accepted operating points while
+retaining failed reports in the audit ledger. Its three forecast cards cover
+the same-appearance challenge, public RGB-D N=8 scale, and a long causal
+horizon. Integrated-browser inspection found no console warnings; scrubbing
+the touching forecast from frame 7 to frame 27 visibly moved all three public
+markers and ended at exactly `+2.00 s`. The managed run tree is `21,917,821`
+bytes (`8.36%` of 250 MiB), with no generated frame directories or raster/video
+animations retained.
+
+The exact final tree passes Ruff, Ruff format, compileall, the affected focused
+suites, and the complete repository suite: `2496 passed, 16 skipped` with 13
+existing PyTorch thread-setting warnings in `5886.22 s` (`1:38:06`).
+
 ## Per-object accuracy-frontier hardening — 2026-09-13
 
 The focused accuracy pass is implemented in

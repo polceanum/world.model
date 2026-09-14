@@ -46,6 +46,102 @@ def _format_number(value: object, *, digits: int = 4) -> str:
     return f"{number:.{digits}f}"
 
 
+def _has_resource_measurement(value: object) -> bool:
+    """Return whether a resource value contains usable measured evidence."""
+
+    if value is None:
+        return False
+    if isinstance(value, Mapping):
+        return bool(value)
+    if isinstance(value, (list, tuple, str)):
+        return bool(value)
+    return True
+
+
+def _merge_resource_evidence(
+    summaries: Sequence[CapabilityRunSummary],
+) -> dict[str, Any]:
+    """Build a field-wise portfolio from compact, subsystem-specific runs.
+
+    Most milestone reports measure only the resources they exercise. Treating
+    a non-empty latest resource mapping as complete made valid latency and RSS
+    measurements disappear whenever a later accuracy-only run was published.
+    The portfolio keeps the newest value for each field and records its source.
+    """
+
+    def collect(
+        selected: Sequence[CapabilityRunSummary],
+    ) -> tuple[dict[str, Any], dict[str, Any], dict[str, str]]:
+        fields: dict[str, Any] = {}
+        scalability_fields: dict[str, Any] = {}
+        field_sources: dict[str, str] = {}
+        for summary in selected:
+            if not isinstance(summary.resources, Mapping):
+                continue
+            for key, value in summary.resources.items():
+                if key in {"measurement_sources", "source_run"}:
+                    continue
+                if key == "scalability" and isinstance(value, Mapping):
+                    for nested_key, nested_value in value.items():
+                        if not _has_resource_measurement(nested_value):
+                            continue
+                        scalability_fields[str(nested_key)] = nested_value
+                        field_sources[f"scalability.{nested_key}"] = summary.run_id
+                    continue
+                if not _has_resource_measurement(value):
+                    continue
+                fields[str(key)] = value
+                field_sources[str(key)] = summary.run_id
+        return fields, scalability_fields, field_sources
+
+    # Failed runs remain inspectable in their own portable reports, but a
+    # failed latency gate must not replace the latest accepted operating point
+    # in the dashboard headline. Fall back to failed evidence only for fields
+    # that have never been measured by a successful completed run.
+    fallback, fallback_scalability, fallback_sources = collect(summaries)
+    accepted = tuple(
+        summary
+        for summary in summaries
+        if summary.lifecycle_status == "completed" and "failed" not in summary.outcome
+    )
+    preferred, preferred_scalability, preferred_sources = collect(accepted)
+    merged = {**fallback, **preferred}
+    scalability = {**fallback_scalability, **preferred_scalability}
+    sources = {**fallback_sources, **preferred_sources}
+    if scalability:
+        merged["scalability"] = scalability
+    if sources:
+        merged["measurement_sources"] = sources
+    return merged
+
+
+def _resource_source(resources: Mapping[str, Any], key: str) -> str | None:
+    sources = resources.get("measurement_sources")
+    if not isinstance(sources, Mapping):
+        return None
+    source = sources.get(key)
+    return str(source) if isinstance(source, str) and source else None
+
+
+def _resource_cell(
+    resources: Mapping[str, Any],
+    key: str,
+    value: object,
+    *,
+    suffix: str = "",
+) -> str:
+    rendered = _format_number(value)
+    if rendered == "—":
+        return '<span class="unmeasured">unmeasured</span>'
+    source = _resource_source(resources, key)
+    provenance = (
+        f'<small class="resource-source">source: {_escape(source)}</small>'
+        if source is not None
+        else ""
+    )
+    return f"{rendered}{_escape(suffix)}{provenance}"
+
+
 def _format_axis_tick(value: float) -> str:
     if value == 0.0:
         return "0"
@@ -153,7 +249,9 @@ def _trend_charts(history: Sequence[CapabilityRunSummary]) -> str:
         factor = ""
         if item.source_format in {
             "world_model_capability_factor_report_v1",
+            "world_model_capability_factor_report_v2",
             "world_model_capability_planning_report_v1",
+            "world_model_capability_planning_report_v2",
         }:
             factor = str(item.configuration.get("factor", "unspecified"))
         grouped.setdefault((item.source_format, factor), []).append((item.run_id, value))
@@ -162,9 +260,15 @@ def _trend_charts(history: Sequence[CapabilityRunSummary]) -> str:
     for (source_format, factor), points in grouped.items():
         if len(points) < 2:
             continue
-        if source_format == "world_model_capability_factor_report_v1":
+        if source_format in {
+            "world_model_capability_factor_report_v1",
+            "world_model_capability_factor_report_v2",
+        }:
             title = f"{factor.replace('_', ' ').title()} physical score — comparable protocol"
-        elif source_format == "world_model_capability_planning_report_v1":
+        elif source_format in {
+            "world_model_capability_planning_report_v1",
+            "world_model_capability_planning_report_v2",
+        }:
             title = f"{factor.replace('_', ' ').title()} planning error — comparable protocol"
         else:
             label = source_format.removeprefix("world_model_")
@@ -465,87 +569,81 @@ def _merge_latest_factor_evidence(
         ("forecast_animations", "forecast_animation_source_run"),
     ):
         if field == "forecast_animations":
-            latest_values = latest.qualitative.get(field)
-            if latest.qualitative.get("forecast_gallery_mode") == "latest_run" and isinstance(
-                latest_values, list
-            ):
-                latest_gallery: list[dict[str, Any]] = []
-                latest_keys: set[tuple[str, str]] = set()
-                for animation in latest_values:
-                    if not isinstance(animation, Mapping):
-                        continue
-                    key = (
-                        str(animation.get("episode", "")),
-                        str(animation.get("label", "")),
-                    )
-                    if key in latest_keys:
-                        continue
-                    latest_gallery.append({**dict(animation), "source_run": latest.run_id})
-                    latest_keys.add(key)
-                    if len(latest_gallery) == 3:
-                        break
-                if latest_gallery:
-                    qualitative[field] = latest_gallery
-                    animation_sources[source_field] = latest.run_id
-                    continue
-            collected: list[dict[str, Any]] = []
-            source_runs: list[str] = []
-            seen_from_newer: set[tuple[str, str]] = set()
-            reserved_source: str | None = None
-            # Reserve one card for the newest measured forecast so a newly
-            # qualified behavior (for example pose/contact) cannot disappear
-            # behind three older long-horizon cards.
+            candidates: list[tuple[Mapping[str, Any], str]] = []
             for summary in reversed(summaries):
                 values = summary.qualitative.get(field)
                 if not isinstance(values, list) or not values:
                     continue
-                newest = next((item for item in values if isinstance(item, Mapping)), None)
-                if newest is None:
-                    continue
-                key = (str(newest.get("episode", "")), str(newest.get("label", "")))
-                collected.append({**dict(newest), "source_run": summary.run_id})
-                seen_from_newer.add(key)
-                source_runs.append(summary.run_id)
-                reserved_source = summary.run_id
-                break
-            # Prefer a compact gallery of genuine long-horizon forecasts from
-            # the newest distinct runs, then fill any remaining card slots
-            # with shorter forecasts. Repeated cards inside one source run are
-            # preserved for backward-compatible best/median/worst galleries.
-            for long_only in (True, False):
-                for summary in reversed(summaries):
-                    values = summary.qualitative.get(field)
-                    if not isinstance(values, list) or not values:
-                        continue
-                    source_keys: set[tuple[str, str]] = set()
-                    for animation in values:
-                        if not isinstance(animation, Mapping):
-                            continue
-                        endpoint = animation.get("long_horizon_endpoint_s", 2.0)
-                        try:
-                            is_long = float(endpoint) > 2.0
-                        except (TypeError, ValueError):
-                            is_long = False
-                        if long_only != is_long:
-                            continue
-                        key = (
-                            str(animation.get("episode", "")),
-                            str(animation.get("label", "")),
-                        )
-                        if key in seen_from_newer and summary.run_id != reserved_source:
-                            continue
-                        collected.append({**dict(animation), "source_run": summary.run_id})
-                        source_keys.add(key)
-                        if summary.run_id not in source_runs:
-                            source_runs.append(summary.run_id)
-                        if len(collected) == 3:
-                            break
-                    seen_from_newer.update(source_keys)
-                    if len(collected) == 3:
-                        break
-                if len(collected) == 3:
+                candidates.extend(
+                    (animation, summary.run_id)
+                    for animation in values
+                    if isinstance(animation, Mapping)
+                )
+
+            def endpoint(item: tuple[Mapping[str, Any], str]) -> float:
+                value = item[0].get("long_horizon_endpoint_s", 2.0)
+                try:
+                    number = float(value)
+                except (TypeError, ValueError):
+                    return 2.0
+                return number if math.isfinite(number) else 2.0
+
+            def key(item: tuple[Mapping[str, Any], str]) -> tuple[str, str]:
+                return (
+                    str(item[0].get("episode", "")),
+                    str(item[0].get("label", "")),
+                )
+
+            # Three complementary examples are more informative than three
+            # near-duplicates: the geometry-only same-appearance challenge,
+            # the highest-count public RGB-D contact forecast, and the longest
+            # causal horizon. Fill from newest evidence when a role is absent.
+            selected: list[tuple[Mapping[str, Any], str]] = []
+            touching = next(
+                (
+                    item
+                    for item in candidates
+                    if "same-appearance touching" in str(item[0].get("label", "")).casefold()
+                ),
+                None,
+            )
+            scaled = [
+                item
+                for item in candidates
+                if "rgb-d initialized multi-contact" in str(item[0].get("label", "")).casefold()
+            ]
+            scaled_choice = (
+                max(
+                    scaled,
+                    key=lambda item: (
+                        int(item[0].get("object_count", 0)),
+                        -candidates.index(item),
+                    ),
+                )
+                if scaled
+                else None
+            )
+            long = [item for item in candidates if endpoint(item) > 2.0]
+            long_choice = max(long, key=endpoint) if long else None
+            for item in (touching, scaled_choice, long_choice):
+                if item is not None and key(item) not in {key(value) for value in selected}:
+                    selected.append(item)
+            for item in candidates:
+                if len(selected) == 3:
                     break
+                if key(item) not in {key(value) for value in selected}:
+                    selected.append(item)
+            # Historical adapters can contain repeated labelled examples;
+            # preserve their bounded three-card behavior after unique filling.
+            for item in candidates:
+                if len(selected) == 3:
+                    break
+                selected.append(item)
+            collected = [
+                {**dict(animation), "source_run": run_id} for animation, run_id in selected[:3]
+            ]
             if collected:
+                source_runs = list(dict.fromkeys(run_id for _, run_id in selected[:3]))
                 qualitative[field] = collected
                 animation_sources[source_field] = ", ".join(source_runs)
             continue
@@ -570,11 +668,7 @@ def _merge_latest_factor_evidence(
             "horizon_curves": latest.horizon_curves or evidence_source.horizon_curves,
             "uncertainty": latest.uncertainty or evidence_source.uncertainty,
             "planning": planning,
-            "resources": latest.resources
-            or {
-                **evidence_source.resources,
-                "source_run": evidence_source.run_id,
-            },
+            "resources": _merge_resource_evidence(summaries),
             "qualitative": qualitative,
             "unsupported_claims": unsupported,
             "provenance": {
@@ -1191,10 +1285,10 @@ def _animation_cards(summary: CapabilityRunSummary) -> str:
     else:
         forecast_title = "Two-second open-loop forecasts"
         forecast_introduction = (
-            "Each forecast starts from the mature frame-15 public belief and rolls forward "
-            "without later observations. Lines connect the evaluated 0.05, 0.10, 0.25, "
-            "0.50, 1.0, and 2.0 second horizons; future actions and membership changes are "
-            "excluded."
+            "Each forecast starts from its labelled public observation-derived belief and "
+            "rolls forward without later observations. Lines connect every declared evaluated "
+            "horizon through the labelled endpoint; future actions and membership changes are "
+            "excluded unless explicitly identified as causal inputs."
         )
     forecasts = _animation_section(
         summary,
@@ -1569,6 +1663,7 @@ def _summary_section(
     )
     resources = summary.resources
     n8_probe = _n8_perceptual_probe(resources) or {}
+    n8_probe_source = "scalability.perceptual_development_probes"
     coverage = summary.uncertainty.get("coverage_90_range", ())
     coverage_text = (
         f"{_format_number(coverage[0])}–{_format_number(coverage[1])}"
@@ -1595,18 +1690,18 @@ def _summary_section(
     <section class="grid two"><article><h2>Capability frontier</h2>{_frontier_table(frontier_history)}</article><article><h2>Ablation attribution</h2>{_ablation_attribution(summary)}</article></section>
     <section><h2>Downstream planning</h2>{_planning_table(summary)}</section>
     <section class="grid two"><article><h2>Efficiency and storage</h2><dl>
-      <dt>Perception latency</dt><dd>{_format_number(resources.get("perception_latency_seconds"))} s</dd>
-      <dt>Six-horizon rollout</dt><dd>{_format_number(resources.get("six_horizon_rollout_seconds"))} s</dd>
-      <dt>State-only N=16</dt><dd>{_format_number(_n16_latency(resources))} s</dd>
-      <dt>N=8 multi-contact rollout</dt><dd>{_format_number(resources.get("n8_rollout_latency_seconds"))} s</dd>
-      <dt>K=32 planning speedup</dt><dd>{_format_number(resources.get("k32_vectorization_speedup"))}×</dd>
-      <dt>N=8 RGB-D development</dt><dd>{_format_number(n8_probe.get("inference_latency_seconds"))} s</dd>
-      <dt>N=8 observed objects</dt><dd>{_format_number(n8_probe.get("observed_active_count"))} / {_format_number(n8_probe.get("object_count"))}</dd>
-      <dt>N=8 position RMSE</dt><dd>{_format_number(n8_probe.get("position_rmse_m"))} m</dd>
+      <dt>Perception latency</dt><dd>{_resource_cell(resources, "perception_latency_seconds", resources.get("perception_latency_seconds"), suffix=" s")}</dd>
+      <dt>Six-horizon rollout</dt><dd>{_resource_cell(resources, "six_horizon_rollout_seconds", resources.get("six_horizon_rollout_seconds"), suffix=" s")}</dd>
+      <dt>State-only N=16</dt><dd>{_resource_cell(resources, "scalability.probes", _n16_latency(resources), suffix=" s")}</dd>
+      <dt>N=8 multi-contact rollout</dt><dd>{_resource_cell(resources, "n8_rollout_latency_seconds", resources.get("n8_rollout_latency_seconds"), suffix=" s")}</dd>
+      <dt>K=32 planning speedup</dt><dd>{_resource_cell(resources, "k32_vectorization_speedup", resources.get("k32_vectorization_speedup"), suffix="×")}</dd>
+      <dt>N=8 RGB-D development</dt><dd>{_resource_cell(resources, n8_probe_source, n8_probe.get("inference_latency_seconds"), suffix=" s")}</dd>
+      <dt>N=8 observed objects</dt><dd>{_resource_cell(resources, n8_probe_source, n8_probe.get("observed_active_count"))} / {_format_number(n8_probe.get("object_count"))}</dd>
+      <dt>N=8 position RMSE</dt><dd>{_resource_cell(resources, n8_probe_source, n8_probe.get("position_rmse_m"), suffix=" m")}</dd>
       <dt>N=8 claim level</dt><dd>{"qualified" if n8_probe.get("full_perceptual_qualification") is True else "development only"}</dd>
-      <dt>Learned weights</dt><dd>{_format_number(resources.get("learned_weight_bytes"))} bytes</dd>
-      <dt>Persistent tensors</dt><dd>{_format_number(resources.get("persistent_tensor_bytes"))} bytes</dd>
-      <dt>RSS</dt><dd>{_format_number(resources.get("process_rss_bytes"))} bytes</dd>
+      <dt>Learned weights</dt><dd>{_resource_cell(resources, "learned_weight_bytes", resources.get("learned_weight_bytes"), suffix=" bytes")}</dd>
+      <dt>Persistent tensors</dt><dd>{_resource_cell(resources, "persistent_tensor_bytes", resources.get("persistent_tensor_bytes"), suffix=" bytes")}</dd>
+      <dt>RSS</dt><dd>{_resource_cell(resources, "process_rss_bytes", resources.get("process_rss_bytes"), suffix=" bytes")}</dd>
       <dt>Run artifacts</dt><dd>{_format_number(summary.artifacts.get("run_bytes"))} bytes</dd>
       <dt>Managed run tree</dt><dd>{_format_number(summary.artifacts.get("managed_run_tree_bytes"))} bytes</dd>
       <dt>Rolling budget</dt><dd>{_format_number(summary.artifacts.get("managed_budget_bytes"))} bytes</dd>
@@ -1624,7 +1719,7 @@ def _summary_section(
 
 _STYLE = """
 :root{color-scheme:dark;--bg:#0b1017;--panel:#141c27;--muted:#91a0b5;--ink:#f5f7fb;--accent:#69d6c5;--line:#344154}*{box-sizing:border-box}body{margin:0;background:radial-gradient(circle at top right,#172a37,var(--bg) 42%);color:var(--ink);font:14px/1.45 ui-sans-serif,system-ui,sans-serif}main{max-width:1180px;margin:auto;padding:28px}.hero{display:flex;justify-content:space-between;align-items:end;border-top:3px solid var(--accent);padding-top:18px}.hero h1{font-size:clamp(26px,4vw,48px);margin:.1em 0}.hero p,.metric+ p{color:var(--muted)}.eyebrow,.tag{font-size:11px;letter-spacing:.08em;text-transform:uppercase}.score{background:var(--panel);padding:18px 22px;border-radius:12px;display:grid;min-width:240px}.score strong,.metric{font-size:25px;color:var(--accent)}.grid{display:grid;gap:14px;margin:14px 0}.two{grid-template-columns:repeat(2,minmax(0,1fr))}.three{grid-template-columns:repeat(3,minmax(0,1fr))}article,section:not(.hero){background:color-mix(in srgb,var(--panel) 94%,transparent);border:1px solid var(--line);border-radius:12px;padding:16px;margin:14px 0;overflow:auto}section.grid{background:none;border:0;padding:0}section.grid article{margin:0}h2{margin:0 0 12px;font-size:16px}h3{font-size:13px;color:var(--muted)}table{border-collapse:collapse;width:100%}th,td{text-align:left;border-bottom:1px solid var(--line);padding:7px}.tag{padding:3px 6px;border-radius:9px;background:#303947}.tag.measured,.tag.passed{background:#165449}.tag.failed{background:#6b2737}.metric-matrix td{font-variant-numeric:tabular-nums}.metric-pass{background:#123d35}.metric-fail{background:#51232e;color:#ffdce4}.metric-info{background:#1c2d3b}.unmeasured{color:var(--muted)}.empty{color:var(--muted);padding:24px;text-align:center;border:1px dashed var(--line);border-radius:8px}svg{width:100%;min-width:520px}svg line{stroke:var(--line)}svg polyline{fill:none;stroke:var(--accent);stroke-width:3}svg circle{fill:var(--accent)}svg text{fill:var(--muted);font-size:11px}.chart-title{fill:var(--ink);font-size:13px}.axis-label{fill:var(--ink);font-size:11px;font-weight:600}.axis-tick,.heatmap-note{fill:var(--muted);font-size:9px}.chart-grid-line{stroke:#253444;stroke-width:1}.cell-label{fill:white;font-size:8px}.cell-value{fill:white;font-size:11px;font-weight:700}dl{display:grid;grid-template-columns:1fr 1fr;gap:7px}dt{color:var(--muted)}dd{margin:0;text-align:right}.animation-intro,.animation-meta,.animation-events{color:var(--muted)}.evidence-source{display:block;margin-top:4px;color:#c9d3df}.animation-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}.animation-card{margin:0!important;padding:12px!important}.animation-card h3{margin:0;color:var(--ink);text-transform:capitalize}.animation-meta{min-height:54px;font-size:12px}.world-animation{display:block;min-width:0;background:#0a1119;border:1px solid var(--line);border-radius:8px}.animation-stage{fill:#0c1621;stroke:#344154}.animation-grid-lines{fill:none;stroke:#253444;stroke-width:1}.animation-axis{fill:#c9d3df;font-size:10px;font-weight:600}.animation-tick{fill:var(--muted);font-size:8px}.animation-trail{fill:none;stroke:var(--object-color);stroke-width:1.3;opacity:.5}.animation-trail-truth{stroke-dasharray:3 3;opacity:.25}.animation-model{fill:var(--object-color);stroke:#081018;stroke-width:1.5}.animation-truth{fill:none;stroke:var(--object-color);stroke-width:2;stroke-dasharray:2 2}.animation-readout{display:flex;justify-content:space-between;gap:8px;min-height:20px;margin-top:5px;font-size:11px}.animation-clock{color:#c9d3df;font-variant-numeric:tabular-nums}.animation-event{color:#f3bc61;font-weight:700}.animation-legend{display:flex;gap:12px;margin-top:3px;color:var(--muted);font-size:12px}.model-key{color:var(--accent)}.truth-key{color:#f3bc61}.animation-events{min-height:38px;font-size:12px}.animation-controls{display:flex;align-items:center;gap:8px}.animation-controls button{border:1px solid var(--line);border-radius:7px;background:#1c2d3b;color:var(--ink);padding:5px 11px;cursor:pointer}.animation-controls button:hover{border-color:var(--accent)}.animation-controls input{min-width:72px;flex:1;accent-color:var(--accent)}.run-list a{color:var(--accent)}.run-ledger summary{cursor:pointer;color:#c9d3df}.notice{border-left:3px solid #f3bc61;padding-left:10px;color:var(--muted)}footer{color:var(--muted);padding:20px 0}@media(max-width:900px){.animation-grid{grid-template-columns:1fr}}@media(max-width:760px){.two,.three{grid-template-columns:1fr}.hero{display:block}.score{margin-top:12px}}@media(prefers-reduced-motion:reduce){.animation-controls button{outline:1px solid var(--muted)}}
-.table-note{color:var(--muted);font-size:12px}.planning-slices,.run-ledger{margin-top:14px}.planning-slices summary,.run-ledger summary{cursor:pointer;color:#c9d3df;font-weight:600}.identity-key,.model-key,.truth-key{color:var(--muted)}.animation-orientation{stroke:var(--object-color);stroke-width:2.2;stroke-linecap:round}.animation-orientation-truth{stroke-dasharray:2 2;opacity:.8}.animation-contact{fill:none;stroke:#f3bc61;stroke-width:2;opacity:.95}
+.table-note{color:var(--muted);font-size:12px}.resource-source{display:block;color:var(--muted);font-size:10px;margin-top:2px}.planning-slices,.run-ledger{margin-top:14px}.planning-slices summary,.run-ledger summary{cursor:pointer;color:#c9d3df;font-weight:600}.identity-key,.model-key,.truth-key{color:var(--muted)}.animation-orientation{stroke:var(--object-color);stroke-width:2.2;stroke-linecap:round}.animation-orientation-truth{stroke-dasharray:2 2;opacity:.8}.animation-contact{fill:none;stroke:#f3bc61;stroke-width:2;opacity:.95}
 """
 
 

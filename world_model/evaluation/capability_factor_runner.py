@@ -87,7 +87,7 @@ from world_model.utils.io import atomic_write_text
 from world_model.utils.run_artifacts import enforce_run_budget, inventory_runs, write_run_manifest
 from world_model.visualisation.progress import build_progress_dashboard, write_run_report
 
-CAPABILITY_FACTOR_REPORT_SCHEMA = "world_model_capability_factor_report_v1"
+CAPABILITY_FACTOR_REPORT_SCHEMA = "world_model_capability_factor_report_v2"
 CAPABILITY_ANIMATION_SAMPLE_STRIDE = 4
 CAPABILITY_ANIMATION_MAX_EXAMPLES = 3
 CAPABILITY_ANIMATION_MAX_BYTES = 64 * 1024
@@ -191,6 +191,16 @@ def _model_from_workbench_checkpoint(
         "selection": _jsonable(payload.get("selection", {})),
         "construction_seed": seed,
         "velocity_variance_floor": float(variance_floor),
+        "measurement_position_variance": float(module.config.measurement_position_variance),
+        "measurement_variance_scale": float(
+            getattr(config.model.rgbd, "measurement_variance_scale", 1.0)
+        ),
+        "calibrated_process_noise_position": float(
+            model.dynamics.uncertainty.calibrated_position_process_variance_per_second
+        ),
+        "calibrated_process_noise_velocity": float(
+            model.dynamics.uncertainty.calibrated_velocity_process_variance_per_second
+        ),
     }
 
 

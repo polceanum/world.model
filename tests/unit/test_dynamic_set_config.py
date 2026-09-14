@@ -88,6 +88,7 @@ def test_dynamic_set_profile_loads_with_exact_specification_contract() -> None:
     assert config.model.rgbd.proposal_count == 8
     assert config.model.rgbd.birth_proposals == 2
     assert config.model.rgbd.set_log_variance_residual_limit == 20.0
+    assert config.model.rgbd.measurement_variance_scale == 0.5
     assert config.model.rgbd.temporal_history_size == 16
     assert config.model.rgbd.temporal_min_samples == 3
     assert config.model.rgbd.temporal_velocity_variance_floor == 1.0e-14
@@ -102,6 +103,8 @@ def test_dynamic_set_profile_loads_with_exact_specification_contract() -> None:
     assert not config.model.dynamics.packed_interactions_enabled
     assert config.model.dynamics.process_noise_position == 1.0e-14
     assert config.model.dynamics.process_noise_velocity == 1.0e-14
+    assert config.model.dynamics.calibrated_process_noise_position == 1.0e-4
+    assert config.model.dynamics.calibrated_process_noise_velocity == 1.0e-4
     assert not config.model.dynamics.attention_residual_enabled
     assert config.model.filter.min_log_variance == -32.0
     assert config.training.batch_size == 4

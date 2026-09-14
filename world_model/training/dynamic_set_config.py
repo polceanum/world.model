@@ -40,6 +40,9 @@ class RGBDConfig(_BaseRGBDConfig):
     birth_proposals: int = 2
     set_feature_dim: int = 32
     set_log_variance_residual_limit: float = 4.0
+    # Deployment-only calibration multiplier. One retains the exact legacy
+    # observation variance and checkpoint contract.
+    measurement_variance_scale: float = 1.0
 
 
 @dataclass(frozen=True)
@@ -53,6 +56,12 @@ class DynamicsConfig(_BaseDynamicsConfig):
     event_driven_state_only_enabled: bool = False
     relation_process_uncertainty_enabled: bool = False
     packed_interactions_enabled: bool = False
+    # Explicit non-learned uncertainty floors remain outside checkpoint state.
+    # They let a deployment protocol calibrate forecast spread without
+    # rewriting a learned process-noise bias inherited from an older
+    # checkpoint. Zero preserves the complete historical function.
+    calibrated_process_noise_position: float = 0.0
+    calibrated_process_noise_velocity: float = 0.0
 
 
 @dataclass(frozen=True)
@@ -183,6 +192,15 @@ class OrpheusConfig(_BaseOrpheusConfig):
             raise ValueError("set model.rgbd.temporal_min_samples must equal three")
 
         if rgbd.enabled:
+            if (
+                isinstance(rgbd.measurement_variance_scale, bool)
+                or not isinstance(rgbd.measurement_variance_scale, (int, float))
+                or not math.isfinite(float(rgbd.measurement_variance_scale))
+                or float(rgbd.measurement_variance_scale) <= 0.0
+            ):
+                raise ValueError(
+                    "model.rgbd.measurement_variance_scale must be finite and positive"
+                )
             if rgbd.observation_mode == "set":
                 if model.max_objects != rgbd.max_objects:
                     raise ValueError("set model.rgbd max_objects must equal model.max_objects")
@@ -223,6 +241,23 @@ class OrpheusConfig(_BaseOrpheusConfig):
             or dynamics.relation_hidden_dim <= 0
         ):
             raise ValueError("model.dynamics.relation_hidden_dim must be a positive integer")
+        for name, value in (
+            (
+                "calibrated_process_noise_position",
+                dynamics.calibrated_process_noise_position,
+            ),
+            (
+                "calibrated_process_noise_velocity",
+                dynamics.calibrated_process_noise_velocity,
+            ),
+        ):
+            if (
+                isinstance(value, bool)
+                or not isinstance(value, (int, float))
+                or not math.isfinite(float(value))
+                or float(value) < 0.0
+            ):
+                raise ValueError(f"model.dynamics.{name} must be finite and nonnegative")
         if dynamics.event_driven_state_only_enabled:
             if (
                 dynamics.modal_dynamics_enabled

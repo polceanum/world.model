@@ -52,7 +52,7 @@ def main(argv: list[str] | None = None) -> int:
         )
         return 0
     result = run_open_world_touching_recovery_capability(enforce_latency=True)
-    default_name = f"{datetime.now(timezone.utc):%Y%m%d}-open-world-touching-recovery-v1"
+    default_name = f"{datetime.now(timezone.utc):%Y%m%d}-open-world-touching-recovery-v2"
     run_directory = Path(parsed.run_directory or Path("runs") / default_name)
     summary = publish_open_world_touching_recovery_capability(
         result,

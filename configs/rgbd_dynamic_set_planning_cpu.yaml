@@ -85,6 +85,9 @@ model:
     minimum_boundary_clearance_pixels: 2.0
     maximum_surface_radius_relative_error: 0.05
     measurement_position_variance: 0.000064
+    # Calibrated jointly on the deterministic sensor-noise and varied-physics
+    # development families. This changes confidence, not the metric geometry.
+    measurement_variance_scale: 0.5
     temporal_history_size: 16
     temporal_min_samples: 3
     temporal_min_dt: 0.001
@@ -102,6 +105,10 @@ model:
     relation_process_uncertainty_enabled: true
     process_noise_position: 0.00000000000001
     process_noise_velocity: 0.00000000000001
+    # Explicit non-checkpoint floors cover bounded model mismatch from varied
+    # physical parameters while preserving strict legacy checkpoint loading.
+    calibrated_process_noise_position: 0.0001
+    calibrated_process_noise_velocity: 0.0001
     attention_residual_enabled: false
     analytic_free_motion_only: false
     contact_margin: 0.0
