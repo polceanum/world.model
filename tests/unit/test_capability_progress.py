@@ -166,6 +166,66 @@ def test_adaptive_model_overview_reports_size_training_and_belief_evolution() ->
     assert "Weights and architecture stayed fixed" in html
 
 
+def test_neural_model_overview_reports_architecture_and_real_training() -> None:
+    summary = replace(
+        _summary("neural-model", "completed"),
+        source_format="world_model_neural_adaptive_physics_v1",
+        configuration={
+            "model_profile": {
+                "name": "Single shared neural-adaptive structured world model",
+                "variant": "2-layer evidence transformer · analytic rigid rollout",
+                "stages": [
+                    {
+                        "role": "Learn",
+                        "name": "Evidence transformer",
+                        "detail": "2 layers · 4 heads · width 48",
+                    }
+                ],
+                "evolution_note": "Transformer weights learned across streamed episodes.",
+            }
+        },
+        provenance={"checkpoint_loaded": False, "trained_from_scratch": True},
+        resources={
+            "learned_parameter_count": 48_920,
+            "nonzero_learned_parameter_count": 48_920,
+            "changed_learned_parameter_count": 48_920,
+            "learned_weight_bytes": 195_680,
+            "optimizer_updates": 2_048,
+            "training_examples": 262_144,
+            "training_seconds": 120.5,
+            "online_adaptation_updates_accepted": 72,
+            "online_adaptation_updates_attempted": 72,
+            "adaptation_update_label": "observation-conditioned parameter adaptations",
+            "adaptation_update_detail": "neural inference; no online optimizer",
+        },
+        qualitative={
+            "parameter_convergence": [
+                {"stage": "neutral", "mean_relative_error": 0.5118},
+                {"stage": "neural evidence", "mean_relative_error": 0.0214},
+            ],
+            "training_curve": [
+                {"step": 1.0, "loss": 0.1979, "full_parameter_loss": 0.1979},
+                {"step": 2048.0, "loss": 0.0072, "full_parameter_loss": 0.0072},
+            ],
+        },
+    )
+
+    html = render_summary_html(summary)
+
+    assert "Single shared neural-adaptive structured world model" in html
+    assert "2 layers · 4 heads · width 48" in html
+    assert "48,920 / 48,920" in html
+    assert "48,920 changed from initialization" in html
+    assert "2,048 steps" in html
+    assert "262,144 examples in this run" in html
+    assert "observation-conditioned parameter adaptations" in html
+    assert "neural inference; no online optimizer" in html
+    assert "Neural training convergence" in html
+    assert "Optimizer step" in html
+    assert "Full normalized parameter loss" in html
+    assert "Planning outcomes are excluded from the optimized loss" in html
+
+
 def test_parameter_uncertainty_contraction_is_not_mislabeled_as_coverage() -> None:
     summary = replace(
         _summary("parameter-adaptation", "completed"),

@@ -2,6 +2,39 @@
 
 ## Unreleased — 2026-07-28
 
+### 2026-09-14 neural-adaptive physical belief
+
+- Added a `48,920`-parameter public-evidence transformer with two layers, four
+  heads, width 48, pre-RMSNorm attention, SwiGLU feed-forward blocks, a learned
+  summary query, and bounded distribution heads for mass, drag, restitution,
+  and friction.
+- Added causal evidence-token builders for public free motion, known impulses,
+  and stationary-boundary contacts plus an immutable belief-adaptation API.
+  Runtime inputs contain no true parameters, private IDs, or simulator state.
+- Added deterministic streamed AdamW training, held development and
+  compositional-edge evaluation, compact weights-only checkpoint publication,
+  public RGB-D N=4/N=6/N=8 transfer, and required K=8/K=32 planning checks.
+- Changed every learned element from initialization in 2,048 updates over
+  262,144 examples; reduced full normalized parameter loss from `0.1979` to
+  `0.0072` and achieved `3.26%` held mean parameter error.
+- Transferred the unchanged learned checkpoint to `2.25%/2.15%/2.00%` mean
+  parameter error and `0.04756/0.04157/0.03708 m` four-second endpoint RMSE at
+  public N=4/N=6/N=8, with correct zero-regret K=8/K=32 planning and exact
+  serial/vectorized parity.
+- Retained the failed v1 diagnostic that exposed synthetic absolute-time and
+  event-cadence shortcuts; removed absolute event time and matched causal
+  windows instead of hiding the failed evidence.
+- Extended the dashboard with an explicit neural-adaptive model diagram,
+  exact non-zero/changed parameter counts, optimizer steps/examples, adaptation
+  counts, and a named-axis training convergence SVG. Browser inspection found
+  no warnings.
+- Added strict weights-only checkpoint reload with schema, architecture,
+  tensor-finiteness, parameter-count, and state-shape validation.
+- Kept the passing run near `1.2 MiB`, with no optimizer state, training batch,
+  RGB-D frame, raster animation, or video retained.
+- Passed Ruff, Ruff format across 387 files, compileall, 37 focused tests, and
+  the 106-test affected compatibility suite in `341.86 s`.
+
 ### 2026-09-14 single-model adaptive-physics scale
 
 - Added public position-trace evidence for free motion, known impulses, and

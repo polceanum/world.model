@@ -1490,6 +1490,48 @@ def _parameter_convergence_section(summary: CapabilityRunSummary) -> str:
     )
 
 
+def _training_curve_section(summary: CapabilityRunSummary) -> str:
+    values = summary.qualitative.get("training_curve")
+    if not isinstance(values, list) or not values:
+        return ""
+    points: list[tuple[str, float]] = []
+    for item in values:
+        if not isinstance(item, Mapping):
+            continue
+        step = item.get("step")
+        loss = item.get("full_parameter_loss", item.get("loss"))
+        if (
+            isinstance(step, (int, float))
+            and isinstance(loss, (int, float))
+            and math.isfinite(float(step))
+            and math.isfinite(float(loss))
+        ):
+            points.append((f"{int(step)}", float(loss)))
+    if not points:
+        return ""
+    initial = points[0][1]
+    final = points[-1][1]
+    reduction = 100.0 * (1.0 - final / initial) if initial > 0.0 else 0.0
+    return (
+        '<section class="grid two"><article><h2>Neural training convergence</h2>'
+        + _svg_line_chart(
+            points,
+            title="Held training objective across optimizer updates",
+            x_label="Optimizer step",
+            y_label="Full normalized parameter loss",
+        )
+        + "</article><article><h2>Learning run</h2><dl>"
+        f"<dt>Initial loss</dt><dd>{_format_number(initial)}</dd>"
+        f"<dt>Final loss</dt><dd>{_format_number(final)}</dd>"
+        f"<dt>Objective reduction</dt><dd>{_format_number(reduction)}%</dd>"
+        f"<dt>Optimizer updates</dt><dd>{_format_number(summary.resources.get('optimizer_updates'), digits=0)}</dd>"
+        f"<dt>Streamed examples</dt><dd>{_format_number(summary.resources.get('training_examples'), digits=0)}</dd>"
+        f"<dt>Training time</dt><dd>{_format_number(summary.resources.get('training_seconds'))} s</dd>"
+        '</dl><p class="table-note">Planning outcomes are excluded from the optimized loss.</p>'
+        "</article></section>"
+    )
+
+
 def _per_object_prediction_section(summary: CapabilityRunSummary) -> str:
     values = summary.qualitative.get("per_object_prediction_errors")
     if not isinstance(values, list) or not values:
@@ -1700,10 +1742,15 @@ def _model_overview(summary: CapabilityRunSummary) -> str:
     learned_bytes = resources.get("learned_weight_bytes")
     learned_parameters = resources.get("learned_parameter_count")
     nonzero_parameters = resources.get("nonzero_learned_parameter_count")
+    changed_parameters = resources.get("changed_learned_parameter_count")
     optimizer_updates = resources.get("optimizer_updates")
     training_examples = resources.get("training_examples")
     accepted_updates = resources.get("public_parameter_updates_accepted")
     attempted_updates = resources.get("public_parameter_updates_attempted")
+    if accepted_updates is None:
+        accepted_updates = resources.get("online_adaptation_updates_accepted")
+    if attempted_updates is None:
+        attempted_updates = resources.get("online_adaptation_updates_attempted")
     if adaptive_physics:
         if learned_parameters is None and learned_bytes == 12_984:
             learned_parameters = 1_623
@@ -1773,6 +1820,7 @@ def _model_overview(summary: CapabilityRunSummary) -> str:
         else "Not reported"
     )
     checkpoint_loaded = summary.provenance.get("checkpoint_loaded")
+    trained_from_scratch = summary.provenance.get("trained_from_scratch")
     evolution_note = profile.get(
         "evolution_note",
         (
@@ -1781,16 +1829,27 @@ def _model_overview(summary: CapabilityRunSummary) -> str:
             else "Training and architecture evolution are shown only when the run records them."
         ),
     )
-    checkpoint_note = (
-        "fresh zero-initialized residuals"
-        if checkpoint_loaded is False or adaptive_physics
-        else "checkpoint state not reported"
+    if trained_from_scratch is True and isinstance(changed_parameters, (int, float)):
+        checkpoint_note = f"{int(changed_parameters):,} changed from initialization"
+    elif trained_from_scratch is True and isinstance(optimizer_updates, (int, float)):
+        checkpoint_note = "trained from scratch"
+    elif checkpoint_loaded is False or adaptive_physics:
+        checkpoint_note = "fresh zero-initialized residuals"
+    else:
+        checkpoint_note = "checkpoint state not reported"
+    adaptation_label = resources.get(
+        "adaptation_update_label",
+        "accepted public physics updates",
+    )
+    adaptation_detail = resources.get(
+        "adaptation_update_detail",
+        "analytic belief adaptation",
     )
     stats = (
         (parameter_value, "learned parameter slots", _format_compact_bytes(learned_bytes)),
         (active_value, "non-zero learned parameters", checkpoint_note),
         (training_value, "gradient training in this run", training_detail),
-        (update_value, "accepted public physics updates", "analytic belief adaptation"),
+        (update_value, str(adaptation_label), str(adaptation_detail)),
         (error_evolution, "physical-parameter error", reduction_detail),
     )
     stat_html = "".join(
@@ -1925,6 +1984,7 @@ def _summary_section(
       <article><h2>Planning parity</h2><p class="metric">{_escape(summary.planning.get("serial_vectorized_winner_parity", "—"))}</p><p>Maximum cost difference {_format_number(summary.planning.get("maximum_cost_difference"))}</p></article>
     </section>
     <section class="grid two"><article><h2>Capability coverage</h2>{_factor_table(summary)}</article><article><h2>Horizon error</h2>{position_chart}{velocity_chart}{orientation_chart}</article></section>
+    {_training_curve_section(summary)}
     {_parameter_convergence_section(summary)}
     {_per_object_prediction_section(summary)}
     <section><h2>Factor performance</h2>{_factor_metric_matrix(summary)}</section>

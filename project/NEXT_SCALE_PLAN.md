@@ -366,36 +366,79 @@ no generated frames, raster animation, or video. The exact final source passes
 Ruff, Ruff format, compileall, focused behavioral tests, browser inspection,
 and the complete repository suite: `2506 passed, 16 skipped` in `1:37:19`.
 
+## Phase L — Learned physical-evidence adaptation
+
+Status: **development bridge implemented and passing** in
+`runs/20260914-neural-adaptive-physics-v2`.
+
+1. Keep calibrated RGB-D geometry, persistent object state, exact known-action
+   application, contact resolution, and planning as the structured scaffold.
+   Replace the hand-written physical-parameter fit with one shared learned
+   adapter rather than learning an unconstrained trajectory shortcut.
+2. Encode only public object-motion evidence: metric position differences,
+   elapsed times, known impulse vectors, observed stationary-boundary normals,
+   and causal invariant candidate statistics. Private parameters are optimizer
+   targets only and never runtime inputs.
+3. Use a compact permutation-invariant evidence transformer: width 48, four
+   heads, two pre-RMSNorm self-attention blocks, SwiGLU width 96, one learned
+   query, and bounded mean/variance heads for mass, drag, restitution, and
+   friction. It has `48,920` trainable float32 parameters (`191.1 KiB`).
+4. Train from scratch on a deterministic streamed distribution for `2,048`
+   AdamW updates with batch size 128 (`262,144` examples). Retain only the
+   weights-only checkpoint, reduced metrics, HTML, and manifest; planning is
+   evaluated downstream and never enters the optimized loss.
+5. Require learning-curve reduction, held development and compositional-edge
+   parameter accuracy, evidence-order invariance, changed and non-zero weights,
+   the existing N=4/N=6/N=8 public RGB-D four-second forecast, and K=8/K=32
+   serial/vectorized planning agreement.
+
+The passing v2 run changes all `48,920` parameters from their deterministic
+initialization and reduces held training-distribution parameter error to
+`3.26%` (`11.17%` p95); the harder edge-compositional mean is `12.87%`.
+On the existing public RGB-D N=4/N=6/N=8 ladder, mean parameter error is
+`2.25%/2.15%/2.00%` and four-second endpoint position RMSE is
+`0.04756/0.04157/0.03708 m`. K=8 and K=32 both retain the correct winner, zero
+regret, goal success, and exact serial/vectorized cost parity. The compact run
+is about `1.2 MiB` and retains no training batches, optimizer state, RGB-D
+frames, or raster/video media.
+
+The failed v1 run remains visible because it exposed a real shortcut: the
+synthetic event token encoded an absolute time and used a different pre-action
+cadence than the public runtime. Removing absolute event time and matching the
+causal measurement cadence fixed the transfer failure. This phase establishes
+learned cross-episode inference plus observation-conditioned adaptation; it is
+not an end-to-end pixels-to-futures model, a protected incumbent promotion, or
+online gradient learning.
+
 ## Completion and next frontier
 
-Phases A--J are implemented in order and remain separate regression tiers. No
-learned module was widened because the only integrated development failure was
-owned by public geometry/state estimation: public face-plane and algebraic
-sphere fits removed it directly, while Phase G's failure owner was public
-support partitioning and metric association. Phase I now upgrades the N=4--8
-contact/planning bridge from state-first to public RGB-D evidence. Its first
-diagnostic likewise attributed error to near-cubic pose observability and
-short-window motion noise; both were corrected in the owning public-state seam
-without learned capacity. Phase J adds the permanent cross-tier regression
-envelope and corrects the remaining N=8 pose outlier with bounded causal public
-history; it does not erase or relabel historical failed experiments.
+Phases A--L are implemented in order and remain separate regression tiers.
+Before Phase L, no learned module was widened because every integrated failure
+was owned by public geometry/state estimation or support association. Public
+face-plane and algebraic sphere fits, bounded causal pose history, and
+geometry-only support partitioning corrected those owning seams directly.
+Phase J adds the permanent cross-tier regression envelope, and Phase K
+establishes an exact analytic physical-adaptation oracle. Phase L adds learned
+capacity only at that now-measurable evidence-fusion seam; it does not erase or
+relabel the earlier failed experiments.
 
-Phase K closes adaptive physical generalization at the same public visual
-scale without introducing an ensemble or widening learned capacity. The next
-highest-impact frontier is event-local contact refinement under heterogeneous
-physics: reduce the remaining N=8 four-second orientation tail and improve raw
-repeated-contact timing while leaving the ordinary free-motion path and its
-latency unchanged. Prefer a bounded event-time correction or continuous
-collision calculation inside the shared solver over globally smaller
-substeps; the rejected `1/80 s` trial showed that uniform extra integration
-cost did not own the error. Qualify any change against the full per-object and
-cross-capability envelope before moving public RGB-D qualification above N=8.
-Flush featureless unions, unknown calibration, and identity recovery through
+Phase K closes analytic adaptive physical generalization at the same public
+visual scale. Phase L then proves that one small transformer can learn the
+same adaptation interface from varied episodes and generalize it to the real
+public RGB-D ladder without an ensemble or trajectory-ranking loss. The next
+highest-impact frontier is to learn residual state transitions only where the
+existing truth-state ablations show systematic model error: begin with
+event-local heterogeneous rigid contact, keep the learned correction bounded
+and antisymmetric, and preserve the analytic solver as the zero-residual
+fallback. Qualify that correction against the complete per-object and
+cross-capability envelope before widening the transformer, moving RGB-D
+qualification above N=8, or attempting end-to-end perception. Flush
+featureless unions, unknown calibration, and identity recovery through
 unobserved impulses or collisions remain explicit observability limits.
 
-The Phase J aggregate governed gate is qualified, with isolated fresh-process
-latency evidence for both multi-contact and public visual tiers. The final
-implementation passes Ruff, Ruff format, compileall, diff hygiene, focused
-behavioral tests, and the complete repository suite: `2485 passed, 16 skipped`
-in `1:37:33`. Absolute timing remains separately adjudicated by the isolated
-strict runners rather than the thermally contaminated aggregate process.
+All earlier protected tiers remain separate compatibility gates, with isolated
+fresh-process latency evidence for multi-contact and public visual execution.
+Absolute timing remains separately adjudicated by those strict runners rather
+than by a thermally contaminated aggregate process. Phase L is a development
+bridge until it passes the complete repository regression suite and a later
+protected promotion protocol.

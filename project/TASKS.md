@@ -1,5 +1,36 @@
 # Tasks
 
+## Neural-adaptive physical belief — completed 2026-09-14
+
+- [x] Preserve metric RGB-D geometry, persistent belief, known-action timing,
+  analytic rigid contact, and the public planning interface as explicit
+  inductive biases.
+- [x] Replace the hand-written physical-parameter calibration step with one
+  shared compact evidence transformer, not an ensemble or unconstrained
+  trajectory predictor.
+- [x] Restrict runtime evidence to public positions, elapsed times, known
+  impulses, and observed boundary normals; use true parameters only as offline
+  supervised targets.
+- [x] Train all 48,920 parameters from scratch for 2,048 deterministic AdamW
+  updates over 262,144 streamed examples and retain a weights-only checkpoint.
+- [x] Prove evidence-order invariance, event-time translation invariance,
+  finite owner gradients, source-belief immutability, and active-slot-only
+  adaptation.
+- [x] Pass held development and compositional-edge learning screens, then
+  transfer the unchanged checkpoint to public RGB-D N=4/N=6/N=8 four-second
+  forecasts and K=8/K=32 downstream planning.
+- [x] Retain the failed v1 shortcut diagnostic and publish passing v2 with
+  exact architecture, training, checkpoint, metric, and artifact provenance.
+- [x] Add a named-axis neural training curve and accurate learned/non-zero/
+  changed parameter statistics to the static dashboard, then inspect it in the
+  integrated browser with a clean console.
+- [x] Keep the passing run near 1.2 MiB with no retained optimizer state,
+  generated episode, RGB-D frame, raster animation, or video.
+- [x] Strictly reload the weights-only checkpoint, then pass Ruff, Ruff format
+  across 387 files, compileall, 37 focused tests, the 106-test affected
+  compatibility suite, dashboard rebuild, browser inspection, and diff
+  hygiene.
+
 ## Single-model adaptive-physics scale — completed 2026-09-14
 
 - [x] Keep one shared `DynamicsModel` and existing belief/action/rollout

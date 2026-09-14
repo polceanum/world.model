@@ -39,6 +39,15 @@ contact, changing membership, camera motion, recovery, and known actions.
 Planning is a required downstream acceptance test and is never an optimized
 winner/ranking loss. Historical one-shot qualification code is audit-only.
 
+The newest development bridge adds actual cross-episode learning without
+discarding the reliable physical scaffold. One 48,920-parameter evidence
+transformer (2 layers, 4 heads, width 48, SwiGLU width 96) learns to infer each
+object's mass, drag, restitution, and friction from public motion, known-action,
+and boundary-contact evidence. Its adapted `WorldBelief` is executed by the
+same analytic rigid solver and planner. This is a single hybrid model, not an
+ensemble; it learns evidence fusion while metric geometry, causal actions, and
+contact structure remain explicit inductive biases.
+
 Build and open the portable static dashboard directly—no server or external
 assets are required:
 
@@ -103,6 +112,8 @@ conda run -n orpheus python scripts/run_visual_dynamic_scale.py --dry-run
 conda run -n orpheus python scripts/run_visual_dynamic_scale.py
 conda run -n orpheus python scripts/run_adaptive_physics_scale.py --dry-run
 conda run -n orpheus python scripts/run_adaptive_physics_scale.py
+conda run -n orpheus python scripts/run_neural_adaptive_physics.py --dry-run
+conda run -n orpheus python scripts/run_neural_adaptive_physics.py
 conda run -n orpheus python scripts/run_capability_hardening.py --dry-run
 conda run -n orpheus python scripts/run_capability_hardening.py
 ```

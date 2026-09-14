@@ -90,6 +90,27 @@ downstream counterfactual planning with quaternion-geodesic error while keeping
 position-only costs bit-for-bit compatible and keeping planning out of the
 training objective.
 
+The neural-adaptive development path replaces that hand-written fit with a
+single `NeuralPhysicsAdapter`, while deliberately retaining the same
+interpretable belief seam. Each object contributes an unordered set of public
+motion-event tokens: evidence kind, relative duration, finite-difference
+velocity, known impulse, observed boundary normal, and rotationally invariant
+candidate statistics. Absolute event time and slot identity are excluded. A
+learned query passes through two width-48, four-head pre-RMSNorm self-attention
+blocks with width-96 SwiGLU feed-forward layers. Bounded heads emit means and
+log variances for belief-native log mass, log drag, restitution logit, and
+friction logit. The complete adapter has 48,920 float32 parameters.
+
+Weights learn across streamed episodes. At inference, the same fixed adapter
+conditions each active object on its current public evidence and returns a new
+`WorldBelief`; it neither mutates the source belief nor performs online
+backpropagation. The established analytic rigid solver then executes the
+learned physical belief, and the existing counterfactual planner evaluates it.
+This hybrid makes the boundary explicit: learning owns robust evidence fusion
+and generalization, while observable geometry, causal action application,
+conservation/contact structure, and planning remain hard inductive biases and
+rollback oracles. Planning outcomes never appear in the optimizer objective.
+
 RGB discovery has an optional structured image prior for the synthetic disc
 world. It uses RGB pixels only:
 

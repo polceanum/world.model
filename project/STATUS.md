@@ -1,5 +1,50 @@
 # Project status
 
+## Neural-adaptive physical belief — 2026-09-14
+
+The first genuinely optimized successor is passing as a development bridge in
+`runs/20260914-neural-adaptive-physics-v2`. The previous model worked mainly
+because its useful physical structure was specified explicitly: metric RGB-D
+geometry, persistent IDs, exact known actions, rigid contact, and analytic
+parameter fits. The new path keeps those valuable inductive biases but replaces
+the hand-written mass/drag/restitution/friction fit with a shared learned
+evidence transformer.
+
+The adapter has two pre-RMSNorm self-attention layers, four heads, width 48,
+SwiGLU width 96, one learned query, and bounded parameter mean/variance heads.
+It contains `48,920` trainable float32 parameters (`191.1 KiB`). All
+`48,920/48,920` are non-zero after training and every element changed from the
+deterministic initialization. AdamW ran for `2,048` steps over `262,144`
+streamed examples in `120.64 s`; full normalized parameter loss fell from
+`0.1979` to `0.0072`. Planning was excluded from the loss.
+
+Runtime inputs contain only public metric position transitions, elapsed time,
+known impulse vectors, and observed stationary-boundary normals. Simulator
+parameters are used as supervised targets during synthetic training but never
+enter runtime inference. Evidence ordering is invariant to `2.38e-7`. Held
+development mean parameter error is `3.26%` (`11.17%` p95), and the deliberately
+harder compositional edge mean is `12.87%`.
+
+The learned checkpoint is then used unchanged on the established public RGB-D
+N=4/N=6/N=8 scenarios. Mean parameter error is
+`2.25%/2.15%/2.00%`; four-second endpoint position RMSE is
+`0.04756/0.04157/0.03708 m`. K=8 and K=32 planning both select the private
+oracle winner with zero regret, successful goals, exact serial/vectorized
+parity, and no source-belief mutation. The run adapts `72/72` public parameter
+blocks and remains about `1.2 MiB` with no optimizer state, training batches,
+RGB-D frames, or raster/video artifacts.
+
+The first neural v1 diagnostic is retained as a failure. It learned a synthetic
+absolute-event-time and measurement-cadence shortcut, reaching good synthetic
+accuracy but failing public mass inference. Event tokens now erase absolute
+scene time, training matches public causal windows, and tests freeze that
+invariance. The result establishes a real learned and observation-adaptive
+hybrid model, not yet end-to-end learned pixels-to-futures, protected incumbent
+promotion, or online backpropagation. Browser inspection confirms the new
+model strip and named-axis training curve render without warnings. The final
+tree passes Ruff, Ruff format across 387 files, compileall, the 37-test focused
+suite, and a 106-test affected compatibility suite in `341.86 s`.
+
 ## Single-model adaptive-physics scale — 2026-09-14
 
 The next scale rung is qualified in

@@ -6,6 +6,7 @@ import hashlib
 import json
 import math
 import time
+from collections.abc import Callable
 from dataclasses import asdict, dataclass, replace
 from datetime import datetime, timezone
 from pathlib import Path
@@ -608,6 +609,12 @@ def _tolerance_aligned_repeated_contact_f1(
 
 def _evaluate_scenario(
     object_count: int,
+    *,
+    parameter_calibrator: Callable[
+        [WorldBelief, RigidBodyState, Tensor],
+        tuple[WorldBelief, int, int, float, tuple[dict[str, Any], ...]],
+    ]
+    | None = None,
 ) -> tuple[
     AdaptivePhysicsScenarioResult,
     DynamicsModel,
@@ -620,7 +627,8 @@ def _evaluate_scenario(
     )
     truth = _heterogeneous_truth(base_truth, object_count)
     initial_errors = _parameter_errors(belief, truth, truth_by_slot)
-    belief, accepted, contracted, fit_error, stages = _calibrate_parameters(
+    calibrator = _calibrate_parameters if parameter_calibrator is None else parameter_calibrator
+    belief, accepted, contracted, fit_error, stages = calibrator(
         belief,
         truth,
         truth_by_slot,
