@@ -410,9 +410,55 @@ learned cross-episode inference plus observation-conditioned adaptation; it is
 not an end-to-end pixels-to-futures model, a protected incumbent promotion, or
 online gradient learning.
 
+## Phase M — Learned twelve-second stability
+
+Status: **implemented and passing** in
+`runs/20260914-neural-long-horizon-v1`.
+
+1. Measure the Phase-L checkpoint against the independent simulator through
+   12 seconds before changing the architecture. Retain N=4/N=6/N=8 curves at
+   0.5/1/2/4/6/8/10/12 seconds plus a truth-parameter solver floor.
+2. Keep the exact 48,920-parameter, two-layer/four-head/width-48 evidence
+   transformer. Anchor its prediction to causal sufficient statistics already
+   carried by public evidence, and learn only a bounded normalized residual.
+3. Add a differentiable multi-horizon physical-response objective for free
+   decay, accumulated travel, known-action response, normal restitution, and
+   tangential retention at 0.5/2/4/8/12 seconds. Planning remains excluded
+   from training.
+4. Train for 8,192 deterministic AdamW updates over 1,048,576 streamed
+   examples with warmup and cosine decay. Retain a weights-only checkpoint and
+   reduced evidence; discard batches and optimizer state.
+5. Require every N=4/N=6/N=8 position slice at 2/4/8/12 seconds to improve by
+   at least 2% against the prior neural checkpoint. Also require absolute
+   12-second limits, unchanged contact F1, finite immutable rollouts, complete
+   weight learning, and exact K=8/K=32 planning winners and costs.
+
+The incumbent audit confirmed genuine accelerating drift: N=4 rose from
+`0.02210 m` at two seconds to `0.04756/0.20500/0.38369 m` at 4/8/12 seconds.
+The new model lowers those points to
+`0.00599/0.02989/0.07460/0.12375 m`. At 12 seconds, N=4/N=6/N=8 improve from
+`0.38369/0.17512/0.18273 m` to `0.12375/0.15255/0.07668 m`, reductions of
+`67.75%/12.89%/58.04%`. Every declared per-horizon comparison passes; contact
+F1 remains `1.0` at all counts.
+
+Held mean parameter error falls from `3.26%` to `2.35%`, and compositional OOD
+error falls from `12.87%` to `5.11%`. The multi-horizon objective falls
+`53.78%`. All `48,920/48,920` parameters are non-zero and changed from
+initialization; learned weights remain `191.1 KiB`. K=8/K=32 planning keeps the
+same exact private-oracle winner, zero regret, successful goals, and zero
+serial/vectorized cost difference. The compact run is `2,397,914` bytes and
+contains three downsampled inline vector forecasts through the true 12-second
+endpoint, with no frame directories, raster media, optimizer state, or
+training batches.
+
+The truth-parameter 12-second solver floor is still
+`0.10054/0.13972/0.06982 m` at N=4/N=6/N=8. The remaining candidate gap is
+therefore small for N=6/N=8 but material for contact-heavy N=4. This phase does
+not claim indefinite prediction or twelve-second planning qualification.
+
 ## Completion and next frontier
 
-Phases A--L are implemented in order and remain separate regression tiers.
+Phases A--M are implemented in order and remain separate regression tiers.
 Before Phase L, no learned module was widened because every integrated failure
 was owned by public geometry/state estimation or support association. Public
 face-plane and algebraic sphere fits, bounded causal pose history, and
@@ -420,13 +466,16 @@ geometry-only support partitioning corrected those owning seams directly.
 Phase J adds the permanent cross-tier regression envelope, and Phase K
 establishes an exact analytic physical-adaptation oracle. Phase L adds learned
 capacity only at that now-measurable evidence-fusion seam; it does not erase or
-relabel the earlier failed experiments.
+relabel the earlier failed experiments. Phase M extends that same compact model
+to twelve seconds and makes its solver floor explicit.
 
 Phase K closes analytic adaptive physical generalization at the same public
 visual scale. Phase L then proves that one small transformer can learn the
 same adaptation interface from varied episodes and generalize it to the real
-public RGB-D ladder without an ensemble or trajectory-ranking loss. The next
-highest-impact frontier is to learn residual state transitions only where the
+public RGB-D ladder without an ensemble or trajectory-ranking loss. Phase M
+then stabilizes its open-loop extrapolation through 12 seconds without adding
+capacity or a planning loss. The next highest-impact frontier is to learn
+residual state transitions only where the
 existing truth-state ablations show systematic model error: begin with
 event-local heterogeneous rigid contact, keep the learned correction bounded
 and antisymmetric, and preserve the analytic solver as the zero-residual
@@ -439,6 +488,5 @@ unobserved impulses or collisions remain explicit observability limits.
 All earlier protected tiers remain separate compatibility gates, with isolated
 fresh-process latency evidence for multi-contact and public visual execution.
 Absolute timing remains separately adjudicated by those strict runners rather
-than by a thermally contaminated aggregate process. Phase L is a development
-bridge until it passes the complete repository regression suite and a later
-protected promotion protocol.
+than by a thermally contaminated aggregate process. Phase M is a governed
+development promotion, not a protected historical qualification.

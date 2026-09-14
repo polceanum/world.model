@@ -12,9 +12,10 @@ from __future__ import annotations
 import copy
 import hashlib
 import json
+import math
 import os
 import time
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from dataclasses import asdict, dataclass, replace
 from datetime import datetime, timezone
 from pathlib import Path
@@ -299,23 +300,107 @@ def _permuted(evidence: Tensor, valid: Tensor, generator: torch.Generator) -> tu
     return evidence[:, order], valid[:, order]
 
 
+def physical_rollout_signature(
+    belief_values: Tensor,
+    horizons: Tensor,
+) -> Tensor:
+    """Return stable free/action/contact consequences of physical parameters.
+
+    The signature is an inexpensive differentiable proxy for recursive
+    rollouts.  It emphasizes quantities whose small bias accumulates over long
+    horizons without introducing a learned trajectory or planning objective.
+    """
+
+    if belief_values.ndim != 2 or belief_values.shape[-1] != 4:
+        raise ValueError("physical rollout signature expects belief values [B,4]")
+    if horizons.ndim != 1 or horizons.numel() == 0 or not bool((horizons > 0.0).all()):
+        raise ValueError("physical rollout horizons must be a positive vector")
+    if not bool(torch.isfinite(belief_values).all() and torch.isfinite(horizons).all()):
+        raise ValueError("physical rollout signature inputs contain NaN or Inf")
+    physical = _physical_values(belief_values)
+    mass, drag, restitution, friction = physical.unbind(dim=-1)
+    elapsed = horizons.to(device=belief_values.device, dtype=belief_values.dtype).unsqueeze(0)
+    drag = drag.unsqueeze(-1)
+    decay = torch.exp(-drag * elapsed)
+    travel = -torch.expm1(-drag * elapsed) / drag.clamp_min(1.0e-6)
+    inverse_mass = mass.reciprocal().unsqueeze(-1)
+    bounce = restitution.unsqueeze(-1)
+    tangent_retention = (
+        1.0 - friction.unsqueeze(-1) * (1.0 + restitution.unsqueeze(-1))
+    ).clamp_min(0.0)
+    displacement_scale = elapsed.new_tensor(12.0)
+    return torch.stack(
+        (
+            decay,
+            travel / displacement_scale,
+            inverse_mass * decay,
+            inverse_mass * travel / displacement_scale,
+            bounce * decay,
+            tangent_retention * decay,
+        ),
+        dim=-1,
+    )
+
+
+def multihorizon_stability_loss(
+    predicted_belief_values: Tensor,
+    target_belief_values: Tensor,
+    *,
+    horizons: tuple[float, ...] = (0.5, 2.0, 4.0, 8.0, 12.0),
+) -> Tensor:
+    """Penalize accumulated physical-response error across several horizons."""
+
+    if predicted_belief_values.shape != target_belief_values.shape:
+        raise ValueError("predicted and target physical values must share shape")
+    horizon_tensor = predicted_belief_values.new_tensor(horizons)
+    predicted = physical_rollout_signature(predicted_belief_values, horizon_tensor)
+    target = physical_rollout_signature(target_belief_values, horizon_tensor)
+    point_loss = F.smooth_l1_loss(predicted, target, beta=0.005, reduction="none").mean(dim=-1)
+    weights = 0.5 + horizon_tensor / horizon_tensor.max()
+    return (point_loss * weights.unsqueeze(0)).sum() / (weights.sum() * point_loss.shape[0])
+
+
 def train_neural_physics_adapter(
     *,
     steps: int = DEFAULT_TRAINING_STEPS,
     batch_size: int = DEFAULT_BATCH_SIZE,
     seed: int = DEFAULT_TRAINING_SEED,
+    stability_loss_weight: float = 0.0,
+    model_factory: Callable[[], NeuralPhysicsAdapter] = NeuralPhysicsAdapter,
+    learning_rate: float = 7.5e-4,
+    warmup_steps: int = 0,
+    cosine_decay_to: float = 1.0,
 ) -> tuple[NeuralPhysicsAdapter, tuple[dict[str, float], ...], float, int]:
     """Train the compact adapter with deterministic streamed synthetic draws."""
 
     if steps <= 0 or batch_size <= 0:
         raise ValueError("training steps and batch size must be positive")
+    if not math.isfinite(stability_loss_weight) or stability_loss_weight < 0.0:
+        raise ValueError("stability loss weight must be finite and nonnegative")
+    if not math.isfinite(learning_rate) or learning_rate <= 0.0:
+        raise ValueError("learning rate must be finite and positive")
+    if warmup_steps < 0 or warmup_steps >= steps:
+        raise ValueError("warmup steps must lie in [0, training steps)")
+    if not math.isfinite(cosine_decay_to) or not 0.0 < cosine_decay_to <= 1.0:
+        raise ValueError("cosine decay floor must lie in (0,1]")
     torch.manual_seed(seed)
     generator = torch.Generator().manual_seed(seed + 1)
-    model = NeuralPhysicsAdapter().train()
+    model = model_factory().train()
     initial_state = {
         name: parameter.detach().clone() for name, parameter in model.named_parameters()
     }
-    optimizer = torch.optim.AdamW(model.parameters(), lr=7.5e-4, weight_decay=1.0e-4)
+    optimizer = torch.optim.AdamW(model.parameters(), lr=learning_rate, weight_decay=1.0e-4)
+    scheduler = None
+    if warmup_steps > 0 or cosine_decay_to < 1.0:
+
+        def learning_rate_multiplier(completed_steps: int) -> float:
+            if completed_steps < warmup_steps:
+                return (completed_steps + 1) / max(warmup_steps, 1)
+            progress = (completed_steps - warmup_steps) / max(steps - warmup_steps - 1, 1)
+            cosine = 0.5 * (1.0 + math.cos(math.pi * min(progress, 1.0)))
+            return cosine_decay_to + (1.0 - cosine_decay_to) * cosine
+
+        scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, learning_rate_multiplier)
     trace: list[dict[str, float]] = []
     started = time.perf_counter()
     for step in range(1, steps + 1):
@@ -359,11 +444,27 @@ def train_neural_physics_adapter(
             detached_residual * torch.exp(-full_prediction.normalized_log_variance)
             + full_prediction.normalized_log_variance
         ).mean()
-        loss = 0.20 * free_loss + 0.30 * action_loss + full_loss + 0.01 * uncertainty_loss
+        stability_loss = (
+            multihorizon_stability_loss(
+                full_prediction.belief_values,
+                batch.target_belief_values,
+            )
+            if stability_loss_weight > 0.0
+            else full_loss.new_zeros(())
+        )
+        loss = (
+            0.20 * free_loss
+            + 0.30 * action_loss
+            + full_loss
+            + stability_loss_weight * stability_loss
+            + 0.01 * uncertainty_loss
+        )
         optimizer.zero_grad(set_to_none=True)
         loss.backward()
         torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
         optimizer.step()
+        if scheduler is not None:
+            scheduler.step()
         if step == 1 or step % 16 == 0 or step == steps:
             trace.append(
                 {
@@ -371,6 +472,8 @@ def train_neural_physics_adapter(
                     "loss": float(full_loss.detach()),
                     "optimized_loss": float(loss.detach()),
                     "full_parameter_loss": float(full_loss.detach()),
+                    "long_horizon_stability_loss": float(stability_loss.detach()),
+                    "learning_rate": float(optimizer.param_groups[0]["lr"]),
                 }
             )
     changed_parameters = sum(
@@ -1093,7 +1196,9 @@ __all__ = [
     "SyntheticPhysicsBatch",
     "evaluate_neural_physics_adapter",
     "load_neural_physics_adapter",
+    "multihorizon_stability_loss",
     "neural_adaptive_protocol_sha256",
+    "physical_rollout_signature",
     "publish_neural_adaptive_physics",
     "run_neural_adaptive_physics",
     "synthetic_physics_batch",

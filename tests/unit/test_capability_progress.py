@@ -11,11 +11,24 @@ from world_model.evaluation.capability_summary import (
     write_capability_summary,
 )
 from world_model.visualisation.progress import (
+    _compact_animation_events,
+    _numeric_curve_points,
     build_progress_dashboard,
     discover_run_summaries,
     render_summary_html,
     write_run_report,
 )
+
+
+def test_animation_event_ledger_compacts_repeated_long_horizon_contacts() -> None:
+    events = [
+        ("known action", "+0.10 s"),
+        *(("contact", f"+{index / 10:.2f} s") for index in range(1, 11)),
+    ]
+
+    compact = _compact_animation_events(events)
+
+    assert compact == "known action @ +0.10 s · contact ×10 (+0.10 s–+1.00 s)"
 
 
 def _summary(run_id: str, status: str = "completed") -> CapabilityRunSummary:
@@ -224,6 +237,54 @@ def test_neural_model_overview_reports_architecture_and_real_training() -> None:
     assert "Optimizer step" in html
     assert "Full normalized parameter loss" in html
     assert "Planning outcomes are excluded from the optimized loss" in html
+
+
+def test_long_horizon_dashboard_names_comparison_curves_and_training_objective() -> None:
+    summary = replace(
+        _summary("long-horizon", "completed"),
+        horizon_curves={
+            "candidate_position_rmse_m": {
+                "0.5": 0.01,
+                "1": 0.02,
+                "10": 0.11,
+                "12": 0.14,
+                "2": 0.025,
+                "4": 0.03,
+                "8": 0.08,
+            },
+            "incumbent_position_rmse_m": {"4": 0.05, "8": 0.16, "12": 0.30},
+            "oracle_parameter_position_rmse_m": {"4": 0.02, "8": 0.05, "12": 0.09},
+        },
+        resources={
+            "optimizer_updates": 4096,
+            "training_examples": 524288,
+            "training_seconds": 250.0,
+        },
+        qualitative={
+            "training_curve": [
+                {"step": 1.0, "long_horizon_stability_loss": 0.16},
+                {"step": 4096.0, "long_horizon_stability_loss": 0.005},
+            ],
+            "training_curve_metric": "long_horizon_stability_loss",
+            "training_curve_title": "Held multi-horizon physical-response objective",
+            "training_curve_y_label": "Multi-horizon stability loss",
+        },
+    )
+
+    html = render_summary_html(summary)
+
+    assert "Prior neural incumbent position RMSE" in html
+    assert "Truth-parameter solver floor" in html
+    assert "Prediction horizon (s)" in html
+    assert "Held multi-horizon physical-response objective" in html
+    assert "Multi-horizon stability loss" in html
+    candidate_chart = html[: html.index("Prior neural incumbent position RMSE")]
+    assert candidate_chart.index(">2s</text>") < candidate_chart.index(">10s</text>")
+    assert _numeric_curve_points({"10": 0.10, "2": 0.02, "1": 0.01}) == [
+        ("1s", 0.01),
+        ("2s", 0.02),
+        ("10s", 0.10),
+    ]
 
 
 def test_parameter_uncertainty_contraction_is_not_mislabeled_as_coverage() -> None:
@@ -1016,7 +1077,7 @@ def test_long_horizon_animation_uses_declared_endpoint_and_frame_rate() -> None:
 
     content = render_summary_html(summary)
 
-    assert "Four/eight-second causal forecasts" in content
+    assert "Causal forecasts through 8 seconds" in content
     assert "8 s RMSE 0.1200 m" in content
     assert "known action @ +4.00 s" in content
     assert "state-first or state-only pressure test" in content

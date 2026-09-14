@@ -114,9 +114,18 @@ conda run -n orpheus python scripts/run_adaptive_physics_scale.py --dry-run
 conda run -n orpheus python scripts/run_adaptive_physics_scale.py
 conda run -n orpheus python scripts/run_neural_adaptive_physics.py --dry-run
 conda run -n orpheus python scripts/run_neural_adaptive_physics.py
+conda run -n orpheus python scripts/run_neural_long_horizon.py --dry-run
+conda run -n orpheus python scripts/run_neural_long_horizon.py
 conda run -n orpheus python scripts/run_capability_hardening.py --dry-run
 conda run -n orpheus python scripts/run_capability_hardening.py
 ```
+
+The neural long-horizon runner keeps the same 48,920-parameter evidence
+transformer and structured rigid solver, adds a multi-horizon physical-response
+loss, and evaluates public RGB-D initialized N=4/N=6/N=8 forecasts through 12
+seconds against both the prior neural checkpoint and a truth-parameter solver
+floor. It retains only a weights-only checkpoint, reduced metrics, portable
+HTML, and downsampled vector animation data.
 
 The first gate spans all N=7/8 separated, action, contact, lifecycle,
 occlusion-recovery, and compositional cells. The second qualifies observable

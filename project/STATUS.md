@@ -1,5 +1,44 @@
 # Project status
 
+## Learned twelve-second stability — 2026-09-14
+
+The compact neural world model now passes its first governed 12-second
+stability rung in `runs/20260914-neural-long-horizon-v1`. A direct audit showed
+that the Phase-L N=4 error was not a plotting illusion: it grew from
+`0.02210 m` at two seconds to `0.04756/0.20500/0.38369 m` at 4/8/12 seconds.
+The dashboard also exposed and now fixes a separate presentation bug: JSON
+horizon keys were connected lexicographically. Every horizon chart is sorted
+and spaced by its numeric time coordinate.
+
+The successor keeps one 48,920-parameter model: two pre-RMSNorm transformer
+layers, four heads, width 48, and the existing analytic rigid rollout. It adds
+no ensemble or larger network. The learned output is a bounded residual around
+causal sufficient-statistic estimates derived from public observations, and
+training adds a multi-horizon physical-response loss at 0.5/2/4/8/12 seconds.
+Planning remains a downstream acceptance test and does not enter the loss.
+
+AdamW ran for `8,192` updates over `1,048,576` streamed examples in `509.81 s`.
+The stability objective fell `53.78%`; held mean parameter error improved from
+`3.26%` to `2.35%`, while compositional OOD error improved from `12.87%` to
+`5.11%`. All `48,920` elements are non-zero and changed from initialization,
+and the weights occupy `195,680` bytes.
+
+At 12 seconds, N=4/N=6/N=8 position RMSE falls from
+`0.38369/0.17512/0.18273 m` to `0.12375/0.15255/0.07668 m`. All twelve paired
+2/4/8/12-second checks improve by at least 2%; the smallest endpoint gain is
+the N=6 12-second slice at `12.89%`. Contact-pair F1 remains `1.0`. K=8 and
+K=32 planning both select the exact private-oracle winner with zero regret,
+successful goals, source immutability, and zero serial/vectorized cost
+difference.
+
+The report includes separate candidate, prior-neural, and truth-parameter
+curves plus three vector-only 12-second animations. The run is about `2.4 MB`
+with no retained optimizer, batch, RGB-D frame, raster, or video data. The
+truth-parameter endpoint floor remains `0.10054/0.13972/0.06982 m`; repeated
+contact accumulation is therefore the next owned accuracy seam, especially at
+N=4. This result does not claim indefinite prediction or 12-second planning
+qualification.
+
 ## Neural-adaptive physical belief — 2026-09-14
 
 The first genuinely optimized successor is passing as a development bridge in

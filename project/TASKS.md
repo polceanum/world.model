@@ -1,5 +1,31 @@
 # Tasks
 
+## Learned twelve-second stability — completed 2026-09-14
+
+- [x] Audit the learned incumbent at 0.5/1/2/4/6/8/10/12 seconds for public
+  RGB-D initialized N=4/N=6/N=8 scenarios and retain a truth-parameter solver
+  floor.
+- [x] Keep the single 48,920-parameter transformer and analytic solver; add a
+  bounded learned residual around observable causal parameter estimates rather
+  than an ensemble or unconstrained trajectory predictor.
+- [x] Add a differentiable multi-horizon physical-response loss while keeping
+  planning winners, regret, and task success out of training.
+- [x] Train for 8,192 deterministic AdamW updates over 1,048,576 streamed
+  examples with warmup/cosine decay; change and activate all learned elements.
+- [x] Pass every per-cardinality 2/4/8/12-second paired regression gate,
+  absolute 12-second ceiling, contact, finiteness, source-mutation, parameter,
+  size, and K=8/K=32 planning/parity gate.
+- [x] Reduce 12-second N=4/N=6/N=8 position RMSE from
+  `0.38369/0.17512/0.18273 m` to `0.12375/0.15255/0.07668 m`.
+- [x] Add separate candidate/incumbent/truth-parameter charts, named axes,
+  numeric horizon sorting and spacing, stability-loss history, and three
+  lightweight vector forecasts through 12 seconds.
+- [x] Strictly load schema-bound weights-only checkpoints and test malformed
+  schema, causal baseline initialization, permutation invariance, gradient
+  flow, per-cardinality gating, and dashboard semantics.
+- [x] Keep the run around 2.4 MB and the managed run tree far below 250 MB,
+  with no optimizer state, batches, image frames, raster animations, or video.
+
 ## Neural-adaptive physical belief — completed 2026-09-14
 
 - [x] Preserve metric RGB-D geometry, persistent belief, known-action timing,

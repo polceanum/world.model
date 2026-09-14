@@ -15,6 +15,11 @@ from world_model.identification.local_optimiser import (
     LocalOptimiserConfig,
     LocalParameterOptimiser,
 )
+from world_model.identification.long_horizon_adapter import (
+    LongHorizonAdapterConfig,
+    LongHorizonPhysicsAdapter,
+    causal_parameter_baseline,
+)
 from world_model.identification.observability import (
     Observability,
     ObservabilityConfig,
@@ -50,6 +55,8 @@ __all__ = [
     "EvidenceTransformerConfig",
     "LocalOptimiserConfig",
     "LocalParameterOptimiser",
+    "LongHorizonAdapterConfig",
+    "LongHorizonPhysicsAdapter",
     "FreeMotionEvidence",
     "FreeMotionPositionEvidence",
     "KnownImpulseEvidence",
@@ -70,6 +77,7 @@ __all__ = [
     "RigidParameterUpdate",
     "physical_parameter_vector",
     "project_parameter_tensors",
+    "causal_parameter_baseline",
     "event_transition_token",
     "free_motion_tokens",
     "normalized_parameter_targets",

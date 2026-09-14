@@ -2,6 +2,30 @@
 
 ## Unreleased — 2026-07-28
 
+### 2026-09-14 learned twelve-second stability
+
+- Audited the Phase-L checkpoint through 12 seconds and confirmed real
+  post-four-second drift, while also correcting lexicographic horizon plotting
+  so every curve is numerically ordered and spaced on its time axis.
+- Added a zero-residual-compatible `LongHorizonPhysicsAdapter`: the same
+  48,920-parameter evidence transformer learns a bounded correction around
+  public causal sufficient-statistic estimates.
+- Added a differentiable physical-response loss across 0.5/2/4/8/12 seconds,
+  deterministic warmup/cosine scheduling, strict configuration validation,
+  and a schema-bound weights-only checkpoint loader. Planning remains absent
+  from the optimized loss.
+- Trained for 8,192 AdamW updates over 1,048,576 streamed examples, reducing
+  the stability objective by `53.78%`, held mean parameter error from `3.26%`
+  to `2.35%`, and compositional OOD error from `12.87%` to `5.11%`.
+- Reduced N=4/N=6/N=8 12-second position RMSE from
+  `0.38369/0.17512/0.18273 m` to `0.12375/0.15255/0.07668 m`, with every
+  2/4/8/12-second paired slice improving, contact F1 `1.0`, and exact
+  zero-regret K=8/K=32 planning.
+- Added distinct candidate, prior-neural, and truth-parameter solver-floor
+  charts plus three lightweight vector forecasts through the 12-second
+  endpoint. The compact run is about `2.4 MB` and retains no optimizer state,
+  generated frames, raster animation, or video.
+
 ### 2026-09-14 neural-adaptive physical belief
 
 - Added a `48,920`-parameter public-evidence transformer with two layers, four

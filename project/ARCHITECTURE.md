@@ -111,6 +111,16 @@ and generalization, while observable geometry, causal action application,
 conservation/contact structure, and planning remain hard inductive biases and
 rollback oracles. Planning outcomes never appear in the optimizer objective.
 
+The long-horizon variant keeps that architecture and parameter count. Its
+parameter mean is a bounded learned residual around causal sufficient
+statistics already present in the public evidence tokens; zero residual is the
+interpretable observable estimate. Training adds a differentiable physical-
+response objective over free decay, accumulated displacement, known-action
+response, normal restitution, and tangential retention at 0.5--12 seconds.
+This teaches stable extrapolation without learning candidate winners or
+replacing the recursive contact solver. Twelve-second reports retain the prior
+neural checkpoint and truth-parameter solver as distinct comparison floors.
+
 RGB discovery has an optional structured image prior for the synthetic disc
 world. It uses RGB pixels only:
 

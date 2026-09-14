@@ -392,7 +392,7 @@ class NeuralPhysicsAdapter(nn.Module):
     def parameter_count(self) -> int:
         return sum(parameter.numel() for parameter in self.parameters())
 
-    def forward(self, evidence: Tensor, valid: Tensor) -> PhysicsParameterPrediction:
+    def _summarize(self, evidence: Tensor, valid: Tensor) -> Tensor:
         if evidence.ndim != 3 or evidence.shape[-1] != EVIDENCE_FEATURE_DIM:
             raise ValueError(f"physical evidence must have shape [B,T,{EVIDENCE_FEATURE_DIM}]")
         if valid.shape != evidence.shape[:2] or valid.dtype is not torch.bool:
@@ -414,7 +414,10 @@ class NeuralPhysicsAdapter(nn.Module):
         )
         for block in self.blocks:
             tokens = block(tokens, token_valid)
-        summary = self.output_norm(tokens[:, 0])
+        return self.output_norm(tokens[:, 0])
+
+    def forward(self, evidence: Tensor, valid: Tensor) -> PhysicsParameterPrediction:
+        summary = self._summarize(evidence, valid)
         normalized_mean = torch.sigmoid(self.mean_head(summary))
         normalized_log_variance = self.log_variance_head(summary).clamp(-8.0, 2.0)
         lower, upper = _parameter_bounds(self.config, normalized_mean)

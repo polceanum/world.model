@@ -187,6 +187,7 @@ def _svg_line_chart(
     title: str,
     x_label: str,
     y_label: str,
+    x_values: Sequence[float] | None = None,
 ) -> str:
     width, height = 720, 250
     left, right, top, bottom = 78, 20, 30, 62
@@ -197,13 +198,19 @@ def _svg_line_chart(
     if high <= low:
         pad = max(abs(low) * 0.05, 1.0e-9)
         low, high = low - pad, high + pad
-    span_x = max(1, len(points) - 1)
+    if x_values is not None:
+        if len(x_values) != len(points) or not all(math.isfinite(value) for value in x_values):
+            raise ValueError("chart x coordinates must be finite and match the points")
+        x_low, x_high = min(x_values), max(x_values)
+    else:
+        x_low, x_high = 0.0, float(max(1, len(points) - 1))
     coords: list[tuple[float, float]] = []
     for index, (_, value) in enumerate(points):
+        horizontal_value = x_values[index] if x_values is not None else float(index)
         x = (
             (left + width - right) / 2
-            if len(points) == 1
-            else left + index * (width - left - right) / span_x
+            if x_high <= x_low
+            else left + (horizontal_value - x_low) * (width - left - right) / (x_high - x_low)
         )
         y = top + (high - value) * (height - top - bottom) / (high - low)
         coords.append((x, y))
@@ -253,6 +260,27 @@ def _svg_line_chart(
         f"{_escape(y_label)}</text>"
         f'<polyline points="{polyline}"/>{circles}</svg>'
     )
+
+
+def _numeric_curve_points(curve: object) -> list[tuple[str, float]]:
+    """Return finite curve values in numeric horizon order after JSON reload."""
+
+    if not isinstance(curve, Mapping):
+        return []
+    parsed: list[tuple[float, float]] = []
+    for raw_horizon, raw_value in curve.items():
+        try:
+            horizon = float(raw_horizon)
+            value = float(raw_value)
+        except (TypeError, ValueError):
+            continue
+        if math.isfinite(horizon) and math.isfinite(value):
+            parsed.append((horizon, value))
+    return [(f"{horizon:g}s", value) for horizon, value in sorted(parsed)]
+
+
+def _numeric_curve_x(points: Sequence[tuple[str, float]]) -> list[float]:
+    return [float(label.removesuffix("s")) for label, _ in points]
 
 
 def _trend_charts(history: Sequence[CapabilityRunSummary]) -> str:
@@ -964,6 +992,30 @@ _ANIMATION_PLOT_WIDTH = 268.0
 _ANIMATION_PLOT_HEIGHT = 184.0
 
 
+def _compact_animation_events(events: list[tuple[str, str | None]]) -> str:
+    """Keep animation cards compact while preserving event timing and multiplicity."""
+    if not events:
+        return "none"
+    if len(events) <= 8:
+        return " · ".join(
+            kind if event_time is None else f"{kind} @ {event_time}" for kind, event_time in events
+        )
+
+    grouped: dict[str, list[str | None]] = {}
+    for kind, event_time in events:
+        grouped.setdefault(kind, []).append(event_time)
+    summaries: list[str] = []
+    for kind, event_times in grouped.items():
+        timed = [value for value in event_times if value is not None]
+        if len(event_times) == 1:
+            summaries.append(kind if not timed else f"{kind} @ {timed[0]}")
+        elif len(timed) == len(event_times):
+            summaries.append(f"{kind} ×{len(event_times)} ({timed[0]}–{timed[-1]})")
+        else:
+            summaries.append(f"{kind} ×{len(event_times)}")
+    return " · ".join(summaries)
+
+
 def _animation_section(
     summary: CapabilityRunSummary,
     *,
@@ -1120,14 +1172,15 @@ def _animation_section(
                         f'style="--object-color:{color}"/>'
                     )
         event_kinds = animation.get("events", [])
-        event_labels: list[str] = []
+        event_labels: list[tuple[str, str | None]] = []
         for item in event_kinds:
             if not isinstance(item, Mapping) or not item.get("kind"):
                 continue
+            event_kind = str(item["kind"])
             try:
                 event_frame = float(item.get("frame"))
             except (TypeError, ValueError):
-                event_labels.append(str(item["kind"]))
+                event_labels.append((event_kind, None))
                 continue
             if mode == "forecast":
                 frame_rate = animation.get("frame_rate", 20.0)
@@ -1153,7 +1206,7 @@ def _animation_section(
                 if not math.isfinite(frame_rate_value) or frame_rate_value <= 0.0:
                     frame_rate_value = 20.0
                 event_time = f"{event_frame / frame_rate_value:.2f} s"
-            event_labels.append(f"{item['kind']} @ {event_time}")
+            event_labels.append((event_kind, event_time))
         if mode == "forecast":
             endpoint = animation.get("long_horizon_endpoint_s", 2.0)
             try:
@@ -1217,7 +1270,7 @@ def _animation_section(
             '<div class="animation-legend"><span class="identity-key">Colour = object identity</span>'
             '<span class="model-key">● filled / solid = model</span>'
             '<span class="truth-key">○ open / dashed = private reference</span></div>'
-            f'<p class="animation-events">Events: {_escape(" · ".join(event_labels) or "none")}</p>'
+            f'<p class="animation-events">Events: {_escape(_compact_animation_events(event_labels))}</p>'
             '<div class="animation-controls">'
             f'<button type="button" data-animation-toggle aria-label="Pause {_escape(animation.get("label", "example"))} animation">Pause</button>'
             f'<button type="button" data-animation-replay aria-label="Replay {_escape(animation.get("label", "example"))} animation">Replay</button>'
@@ -1274,10 +1327,12 @@ def _animation_cards(summary: CapabilityRunSummary) -> str:
             if isinstance(endpoint, (int, float)) and math.isfinite(float(endpoint)):
                 long_endpoints.append(float(endpoint))
     if long_endpoints and max(long_endpoints) > 2.0:
+        maximum_endpoint = max(long_endpoints)
+        endpoint_label = f"{maximum_endpoint:g} seconds"
         forecast_title = (
-            "Pose-aware and four/eight-second causal forecasts"
+            f"Pose-aware causal forecasts through {endpoint_label}"
             if has_pose_markers
-            else "Four/eight-second causal forecasts"
+            else f"Causal forecasts through {endpoint_label}"
         )
         forecast_introduction = (
             "Long-horizon rollouts apply each declared future impulse exactly once and continue "
@@ -1494,12 +1549,25 @@ def _training_curve_section(summary: CapabilityRunSummary) -> str:
     values = summary.qualitative.get("training_curve")
     if not isinstance(values, list) or not values:
         return ""
+    metric_key = str(summary.qualitative.get("training_curve_metric", "full_parameter_loss"))
+    chart_title = str(
+        summary.qualitative.get(
+            "training_curve_title",
+            "Held training objective across optimizer updates",
+        )
+    )
+    y_label = str(
+        summary.qualitative.get(
+            "training_curve_y_label",
+            "Full normalized parameter loss",
+        )
+    )
     points: list[tuple[str, float]] = []
     for item in values:
         if not isinstance(item, Mapping):
             continue
         step = item.get("step")
-        loss = item.get("full_parameter_loss", item.get("loss"))
+        loss = item.get(metric_key, item.get("loss"))
         if (
             isinstance(step, (int, float))
             and isinstance(loss, (int, float))
@@ -1516,9 +1584,9 @@ def _training_curve_section(summary: CapabilityRunSummary) -> str:
         '<section class="grid two"><article><h2>Neural training convergence</h2>'
         + _svg_line_chart(
             points,
-            title="Held training objective across optimizer updates",
+            title=chart_title,
             x_label="Optimizer step",
-            y_label="Full normalized parameter loss",
+            y_label=y_label,
         )
         + "</article><article><h2>Learning run</h2><dl>"
         f"<dt>Initial loss</dt><dd>{_format_number(initial)}</dd>"
@@ -1886,23 +1954,16 @@ def _summary_section(
     candidate_score = _score_value(summary, "candidate")
     incumbent_score = _score_value(summary, "incumbent")
     horizon = summary.horizon_curves.get("candidate_position_rmse_m", {})
-    horizon_points = (
-        [(f"{key}s", float(value)) for key, value in horizon.items()]
-        if isinstance(horizon, Mapping)
-        else []
-    )
+    horizon_points = _numeric_curve_points(horizon)
     recovery_horizon = summary.horizon_curves.get("recovery_position_rmse_m", {})
-    recovery_horizon_points = (
-        [(f"{key}s", float(value)) for key, value in recovery_horizon.items()]
-        if isinstance(recovery_horizon, Mapping)
-        else []
-    )
+    recovery_horizon_points = _numeric_curve_points(recovery_horizon)
     position_chart = (
         _svg_line_chart(
             recovery_horizon_points,
             title="Position RMSE through observation gap and recovery",
             x_label="Elapsed sequence time (s)",
             y_label="Position RMSE (m)",
+            x_values=_numeric_curve_x(recovery_horizon_points),
         )
         if recovery_horizon_points
         else _svg_line_chart(
@@ -1910,49 +1971,61 @@ def _summary_section(
             title="Position RMSE across horizon",
             x_label="Prediction horizon (s)",
             y_label="Position RMSE (m)",
+            x_values=_numeric_curve_x(horizon_points),
         )
     )
+    incumbent_horizon = summary.horizon_curves.get("incumbent_position_rmse_m", {})
+    incumbent_horizon_points = _numeric_curve_points(incumbent_horizon)
+    if incumbent_horizon_points:
+        position_chart += _svg_line_chart(
+            incumbent_horizon_points,
+            title="Prior neural incumbent position RMSE",
+            x_label="Prediction horizon (s)",
+            y_label="Position RMSE (m)",
+            x_values=_numeric_curve_x(incumbent_horizon_points),
+        )
+    oracle_horizon = summary.horizon_curves.get("oracle_parameter_position_rmse_m", {})
+    oracle_horizon_points = _numeric_curve_points(oracle_horizon)
+    if oracle_horizon_points:
+        position_chart += _svg_line_chart(
+            oracle_horizon_points,
+            title="Truth-parameter solver floor",
+            x_label="Prediction horizon (s)",
+            y_label="Position RMSE (m)",
+            x_values=_numeric_curve_x(oracle_horizon_points),
+        )
     protected_horizon = summary.horizon_curves.get("protected_long_horizon_position_rmse_m", {})
-    protected_horizon_points = (
-        [(f"{key}s", float(value)) for key, value in protected_horizon.items()]
-        if isinstance(protected_horizon, Mapping)
-        else []
-    )
+    protected_horizon_points = _numeric_curve_points(protected_horizon)
     if protected_horizon_points:
         position_chart += _svg_line_chart(
             protected_horizon_points,
             title="Protected long-horizon position RMSE",
             x_label="Prediction horizon (s)",
             y_label="Position RMSE (m)",
+            x_values=_numeric_curve_x(protected_horizon_points),
         )
     velocity_horizon = summary.horizon_curves.get("candidate_velocity_rmse_mps", {})
-    velocity_horizon_points = (
-        [(f"{key}s", float(value)) for key, value in velocity_horizon.items()]
-        if isinstance(velocity_horizon, Mapping)
-        else []
-    )
+    velocity_horizon_points = _numeric_curve_points(velocity_horizon)
     velocity_chart = (
         _svg_line_chart(
             velocity_horizon_points,
             title="Velocity RMSE across horizon",
             x_label="Prediction horizon (s)",
             y_label="Velocity RMSE (m/s)",
+            x_values=_numeric_curve_x(velocity_horizon_points),
         )
         if velocity_horizon_points
         else ""
     )
     orientation_horizon = summary.horizon_curves.get("candidate_orientation_rmse_degrees", {})
-    orientation_horizon_points = (
-        [(f"{key}s", float(value)) for key, value in orientation_horizon.items()]
-        if isinstance(orientation_horizon, Mapping)
-        else []
-    )
+    orientation_horizon_points = _numeric_curve_points(orientation_horizon)
     orientation_chart = (
         _svg_line_chart(
             orientation_horizon_points,
             title="Orientation RMSE across horizon",
             x_label="Prediction horizon (s)",
             y_label="Orientation RMSE (degrees)",
+            x_values=_numeric_curve_x(orientation_horizon_points),
         )
         if orientation_horizon_points
         else ""

@@ -9,14 +9,24 @@ from world_model.belief import BeliefFactory
 from world_model.evaluation.neural_adaptive_physics import (
     NEURAL_ADAPTIVE_PHYSICS_SCHEMA,
     load_neural_physics_adapter,
+    multihorizon_stability_loss,
     neural_adaptive_protocol_sha256,
+    physical_rollout_signature,
     synthetic_physics_batch,
+)
+from world_model.evaluation.neural_long_horizon import (
+    NEURAL_LONG_HORIZON_SCHEMA,
+    load_long_horizon_physics_adapter,
+    neural_long_horizon_protocol_sha256,
 )
 from world_model.identification import (
     EVIDENCE_FEATURE_DIM,
     EvidenceTransformerConfig,
+    LongHorizonAdapterConfig,
+    LongHorizonPhysicsAdapter,
     NeuralPhysicsAdapter,
     PhysicsEvidenceKind,
+    causal_parameter_baseline,
     event_transition_token,
     normalized_parameter_targets,
 )
@@ -176,3 +186,95 @@ def test_weights_only_checkpoint_roundtrip_and_schema_validation(tmp_path) -> No
     torch.save(payload, checkpoint)
     with pytest.raises(ValueError, match="schema"):
         load_neural_physics_adapter(checkpoint)
+
+
+def test_multihorizon_stability_signature_is_differentiable_and_exact_at_truth() -> None:
+    target = torch.tensor(
+        [[0.0, -2.0, torch.logit(torch.tensor(0.7)), torch.logit(torch.tensor(0.2))]]
+    )
+    predicted = (target + torch.tensor([[0.1, -0.1, 0.05, -0.05]])).requires_grad_()
+    horizons = torch.tensor([0.5, 2.0, 4.0, 8.0, 12.0])
+
+    signature = physical_rollout_signature(predicted, horizons)
+    loss = multihorizon_stability_loss(predicted, target)
+    exact = multihorizon_stability_loss(target, target)
+    loss.backward()
+
+    assert signature.shape == (1, 5, 6)
+    assert float(loss.detach()) > 0.0
+    assert float(exact.detach()) == 0.0
+    assert predicted.grad is not None
+    assert torch.isfinite(predicted.grad).all()
+    assert float(predicted.grad.abs().sum().detach()) > 0.0
+    with pytest.raises(ValueError, match="positive vector"):
+        physical_rollout_signature(predicted.detach(), torch.empty(0))
+
+
+def test_long_horizon_adapter_starts_at_permutation_invariant_causal_baseline() -> None:
+    batch = synthetic_physics_batch(
+        8,
+        generator=torch.Generator().manual_seed(62),
+    )
+    model = LongHorizonPhysicsAdapter()
+    order = torch.tensor([4, 0, 3, 2, 1])
+
+    baseline = causal_parameter_baseline(batch.evidence, batch.valid, model.config)
+    prediction = model(batch.evidence, batch.valid)
+    permuted = model(batch.evidence[:, order], batch.valid[:, order])
+
+    assert model.parameter_count() == 48_920
+    torch.testing.assert_close(prediction.normalized_mean, baseline)
+    torch.testing.assert_close(prediction.normalized_mean, permuted.normalized_mean)
+    with pytest.raises(ValueError, match="residual bound"):
+        LongHorizonAdapterConfig(max_normalized_residual=0.0).validate()
+
+
+def test_long_horizon_checkpoint_roundtrip_and_protocol_binding(tmp_path) -> None:
+    torch.manual_seed(71)
+    model = LongHorizonPhysicsAdapter().eval()
+    batch = synthetic_physics_batch(
+        3,
+        generator=torch.Generator().manual_seed(72),
+    )
+    checkpoint = tmp_path / "long-horizon.pt"
+    payload = {
+        "schema": NEURAL_LONG_HORIZON_SCHEMA,
+        "model": "LongHorizonPhysicsAdapter",
+        "config": asdict(model.long_horizon_config),
+        "learned_parameter_count": model.parameter_count(),
+        "state_dict": model.state_dict(),
+    }
+    torch.save(payload, checkpoint)
+
+    restored = load_long_horizon_physics_adapter(checkpoint)
+    expected = model(batch.evidence, batch.valid)
+    actual = restored(batch.evidence, batch.valid)
+    torch.testing.assert_close(actual.belief_values, expected.belief_values)
+    torch.testing.assert_close(actual.belief_log_variance, expected.belief_log_variance)
+
+    first = neural_long_horizon_protocol_sha256(
+        incumbent_checkpoint_sha256="a" * 64,
+        training_steps=8_192,
+        batch_size=128,
+    )
+    assert first == neural_long_horizon_protocol_sha256(
+        incumbent_checkpoint_sha256="a" * 64,
+        training_steps=8_192,
+        batch_size=128,
+    )
+    assert first != neural_long_horizon_protocol_sha256(
+        incumbent_checkpoint_sha256="b" * 64,
+        training_steps=8_192,
+        batch_size=128,
+    )
+    with pytest.raises(ValueError, match="positive"):
+        neural_long_horizon_protocol_sha256(
+            incumbent_checkpoint_sha256="a" * 64,
+            training_steps=0,
+            batch_size=128,
+        )
+
+    payload["schema"] = "wrong-schema"
+    torch.save(payload, checkpoint)
+    with pytest.raises(ValueError, match="schema"):
+        load_long_horizon_physics_adapter(checkpoint)
