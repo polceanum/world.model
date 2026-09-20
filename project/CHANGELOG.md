@@ -2,6 +2,14 @@
 
 ## Unreleased — 2026-07-28
 
+### 2026-09-20 event-local contact screening
+
+- Added a deterministic, no-write N=4/N=6/N=8 relation-impulse probe for the
+  Phase-M checkpoint. Its first N=4 twelve-second screen rejects an unconditioned
+  normal-impulse correction: `-0.5/0.0/+0.5` logits yield
+  `0.30379/0.12375/0.21856 m` endpoint position RMSE. The analytic zero-output
+  fallback remains selected.
+
 ### 2026-09-14 learned twelve-second stability
 
 - Audited the Phase-L checkpoint through 12 seconds and confirmed real

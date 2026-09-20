@@ -1,5 +1,18 @@
 # Project status
 
+## Event-local contact screening — 2026-09-20
+
+Phase N begins from the Phase-M twelve-second checkpoint without changing the
+public RGB-D belief or analytic resolver. The reproducible no-write
+`scripts/probe_event_local_contact.py` screen tests the existing bounded
+relation normal-impulse row directly. On the contact-heavy N=4 case, logits
+`-0.5/0.0/+0.5` produce twelve-second endpoint position RMSE
+`0.30379/0.12375/0.21856 m`. The zero-output analytic resolver is the local
+best result, so a global learned impulse bias is rejected rather than being
+trained or promoted. The next test must establish a geometry- and
+event-timing-conditioned ownership signal before introducing a relation
+checkpoint.
+
 ## Learned twelve-second stability — 2026-09-14
 
 The compact neural world model now passes its first governed 12-second

@@ -456,6 +456,38 @@ The truth-parameter 12-second solver floor is still
 therefore small for N=6/N=8 but material for contact-heavy N=4. This phase does
 not claim indefinite prediction or twelve-second planning qualification.
 
+## Phase N — Event-local rigid-contact correction
+
+Status: **in progress**.
+
+The first N=4 twelve-second screen rejects a context-free normal-impulse
+correction: relation multiplier logits of `-0.5/0.0/+0.5` produce endpoint
+position RMSE `0.30379/0.12375/0.21856 m`.  The zero-output analytic resolver
+is therefore the local optimum for that scalar intervention.  Phase N will not
+promote a global impulse bias; it proceeds only with evidence that a
+geometry- and event-timing-conditioned residual owns a protected error slice.
+
+1. Keep Phase M's public RGB-D belief, learned physical-parameter adapter, and
+   analytic six-DoF resolver fixed as the control.  Attribute the remaining
+   long-horizon error with truth-parameter and truth-state rollouts before
+   training any new capacity.
+2. Train only the existing zero-initialized relation impulse rows on causal,
+   event-local pair features.  Disable continuous pair forces and node
+   acceleration so the learned output can only make a bounded symmetric
+   correction to an already-resolved normal impulse.
+3. Require exact analytic equality at zero output, antisymmetric momentum
+   exchange, immutable source beliefs, finite rollouts, and no learned effect
+   outside geometrically applicable active pairs.  Candidate selection and
+   planning remain evaluation-only.
+4. Compare a fixed N=4/N=6/N=8 mixed-rigid repeated-contact manifest against
+   the Phase M checkpoint and its truth-parameter solver floor through twelve
+   seconds.  Keep per-count, per-horizon position and orientation evidence
+   separate; reject a pooled gain that regresses any protected slice.
+5. Retain a compact checkpoint and reduced report only if the one-component
+   screen demonstrates a real improvement.  Otherwise preserve the analytic
+   fallback and record the contact correction as rejected rather than widening
+   the model.
+
 ## Completion and next frontier
 
 Phases A--M are implemented in order and remain separate regression tiers.
