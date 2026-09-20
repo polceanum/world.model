@@ -366,6 +366,7 @@ def train_neural_physics_adapter(
     batch_size: int = DEFAULT_BATCH_SIZE,
     seed: int = DEFAULT_TRAINING_SEED,
     stability_loss_weight: float = 0.0,
+    stability_horizons: tuple[float, ...] = (0.5, 2.0, 4.0, 8.0, 12.0),
     model_factory: Callable[[], NeuralPhysicsAdapter] = NeuralPhysicsAdapter,
     learning_rate: float = 7.5e-4,
     warmup_steps: int = 0,
@@ -377,6 +378,12 @@ def train_neural_physics_adapter(
         raise ValueError("training steps and batch size must be positive")
     if not math.isfinite(stability_loss_weight) or stability_loss_weight < 0.0:
         raise ValueError("stability loss weight must be finite and nonnegative")
+    if (
+        not stability_horizons
+        or any(not math.isfinite(horizon) or horizon <= 0.0 for horizon in stability_horizons)
+        or tuple(sorted(stability_horizons)) != stability_horizons
+    ):
+        raise ValueError("stability horizons must be a nonempty increasing positive tuple")
     if not math.isfinite(learning_rate) or learning_rate <= 0.0:
         raise ValueError("learning rate must be finite and positive")
     if warmup_steps < 0 or warmup_steps >= steps:
@@ -448,6 +455,7 @@ def train_neural_physics_adapter(
             multihorizon_stability_loss(
                 full_prediction.belief_values,
                 batch.target_belief_values,
+                horizons=stability_horizons,
             )
             if stability_loss_weight > 0.0
             else full_loss.new_zeros(())

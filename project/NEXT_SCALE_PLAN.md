@@ -500,39 +500,38 @@ substantially longer-horizon stability rather than a narrow short-contact gain.
    fallback and record the contact correction as rejected rather than widening
    the model.
 
-## Phase O — Twenty-four-second stability frontier
+## Phase O — Forty-eight-second stability frontier
 
 Status: **diagnostic implementation in progress**.
 
 The next meaningful scale-up is not another contact micro-optimization. It is
-to double the open-loop horizon from twelve to twenty-four seconds, then admit
-forty-eight seconds only after the 24-second result identifies a stable error
-owner. The model remains one shared 48,920-parameter bounded causal-residual
-transformer plus analytic rigid rollout; no ensemble, trajectory-ranking loss,
-or hidden-state shortcut is introduced.
+to quadruple the open-loop horizon from twelve to forty-eight seconds and
+optimize the complete 12--48-second tail. The model remains one shared
+48,920-parameter bounded causal-residual transformer plus analytic rigid
+rollout; no ensemble, trajectory-ranking loss, or hidden-state shortcut is
+introduced.
 
-1. Establish a deterministic no-write N=4/N=6/N=8 24-second audit from the
-   Phase-M checkpoint. Report `2/4/8/12/16/20/24 s` position and velocity
-   curves, contact quality, finiteness, source immutability, and the exact
-   known-action schedule. The same compact probe supports 48 seconds but is
-   an exploratory measurement, never automatic promotion evidence.
+1. Establish a deterministic no-write N=4/N=6/N=8 48-second audit from the
+   Phase-M checkpoint. Report `2/4/8/12/16/20/24/32/40/48 s` position and
+   velocity curves, contact quality, finiteness, source immutability, and the
+   exact known-action schedule.
 2. Attribute the tail separately with public-belief, truth-parameter, and
    truth-state solver controls. Do not train longer merely because error
    increases: change only the smallest owner supported by that comparison.
 3. If physical-parameter error owns the tail, extend the existing causal
-   physical-response objective to balanced `0.5/2/4/8/12/16/20/24 s` samples
-   and train the same model from scratch. Preserve the 12-second curriculum as
-   a compatibility stratum; planning stays downstream-only.
+   physical-response objective to balanced `12/16/20/24/32/40/48 s` tail
+   samples and train the same model from scratch. Preserve 2--12 second
+   performance as a compatibility envelope; planning stays downstream-only.
 4. If the truth-state solver owns the tail, improve the analytic integration
    only through a separately gated, all-cardinality intervention. If public
    belief owns it, improve observable-state history before widening the
    transformer. Do not combine these changes in one run.
-5. Promote a 24-second candidate only if every N=4/N=6/N=8 slice preserves all
+5. Promote a 48-second candidate only if every N=4/N=6/N=8 slice preserves all
    2--12 second gates (no slice regresses by more than 2%), improves the
-   16--24 second paired score, remains finite and source-immutable, preserves
-   K=8/K=32 serial/vectorized planning parity, and stays within the existing
-   model-size and artifact limits. Set absolute 24-second floors after the
-   frozen baseline audit, not retrospectively.
+   12--48 second paired tail score, remains finite and source-immutable,
+   preserves K=8/K=32 serial/vectorized planning parity, and stays within the
+   existing model-size and artifact limits. Set absolute 48-second floors
+   after the frozen baseline audit, not retrospectively.
 6. Publish only the run summary, portable report, dashboard data, and at most
    three vector long-horizon animations. Each animation must visibly label
    prediction versus reference and show its horizon; no frame directory,

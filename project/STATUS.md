@@ -19,6 +19,17 @@ remains `1.0`; state stays finite and the source belief is unchanged. This is
 accumulated open-loop drift rather than a contact-collapse signal. N=6/N=8 and
 truth-parameter/truth-state attribution remain pending before retraining.
 
+## Forty-eight-second tail baseline — 2026-09-20
+
+The same N=4 public-state audit now reaches 48 seconds. Position RMSE grows
+smoothly from `0.37595 m` at 24 seconds to `0.46930/0.51499/0.53711 m` at
+32/40/48 seconds, while collision pair F1 remains `1.0`, all state remains
+finite, source state is unchanged, and velocity error decays. A disposable
+256-update tail screen reduces its balanced 12--48-second physical-response
+loss from `0.00540` to `0.00302` with all 48,920 model parameters changing.
+This warrants a proper candidate evaluation, but is not predictive evidence
+until the candidate is rolled out through the same N=4/N=6/N=8 envelope.
+
 ## Event-local contact screening — 2026-09-20
 
 Phase N begins from the Phase-M twelve-second checkpoint without changing the

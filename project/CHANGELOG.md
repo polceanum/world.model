@@ -9,6 +9,18 @@
   at 12/16/20/24 seconds with collision F1 `1.0`, finite state, and immutable
   source belief. This is baseline attribution, not a candidate or promotion.
 
+### 2026-09-20 forty-eight-second tail screen
+
+- Extended the no-write audit through 48 seconds and added a disposable,
+  full-tail learning screen. N=4 baseline position RMSE is
+  `0.37595/0.46930/0.51499/0.53711 m` at 24/32/40/48 seconds, with collision
+  F1 `1.0`, finite state, and immutable source belief.
+- The unchanged single 48,920-parameter transformer now accepts explicit
+  stability horizons. A 256-update `12/16/20/24/32/40/48 s` screen reduces
+  physical-response loss from `0.00540` to `0.00302`; it retains no model,
+  episode, batch, or media data. A full candidate must still pass rollout,
+  planning, and protected short-horizon gates.
+
 ### 2026-09-20 contact-timing screen rejected
 
 - A disposable N=4 four-second local-grid contact screen reduced endpoint
