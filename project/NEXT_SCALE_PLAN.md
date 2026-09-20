@@ -467,14 +467,26 @@ is therefore the local optimum for that scalar intervention.  Phase N will not
 promote a global impulse bias; it proceeds only with evidence that a
 geometry- and event-timing-conditioned residual owns a protected error slice.
 
+A second deterministic public-state N=4, four-second screen found a finite
+integration-timing seam around an imminent rigid contact: a disposable local
+half-grid reduced endpoint position RMSE from `0.02989 m` to `0.00522 m` and
+made first-contact timing exact.  It did not generalize: the same direction
+raised the N=6 twelve-second endpoint from `0.15255 m` to `0.16662 m`.
+Accordingly no timing-refinement runtime path is retained or promoted.  The
+screen remains useful attribution evidence, but the next milestone must target
+substantially longer-horizon stability rather than a narrow short-contact gain.
+
 1. Keep Phase M's public RGB-D belief, learned physical-parameter adapter, and
    analytic six-DoF resolver fixed as the control.  Attribute the remaining
    long-horizon error with truth-parameter and truth-state rollouts before
    training any new capacity.
-2. Train only the existing zero-initialized relation impulse rows on causal,
-   event-local pair features.  Disable continuous pair forces and node
-   acceleration so the learned output can only make a bounded symmetric
-   correction to an already-resolved normal impulse.
+2. Do not pursue a global or local grid refinement as a Phase-N model change:
+   the N=6 counterexample rejects that intervention. Only if a residual timing
+   error remains material after the extended-horizon work below, train the
+   existing zero-initialized relation impulse rows on causal, event-local pair features.
+   Disable continuous pair forces and node acceleration so the learned output
+   can only make a bounded symmetric correction to an already-resolved normal
+   impulse.
 3. Require exact analytic equality at zero output, antisymmetric momentum
    exchange, immutable source beliefs, finite rollouts, and no learned effect
    outside geometrically applicable active pairs.  Candidate selection and
@@ -487,6 +499,44 @@ geometry- and event-timing-conditioned residual owns a protected error slice.
    screen demonstrates a real improvement.  Otherwise preserve the analytic
    fallback and record the contact correction as rejected rather than widening
    the model.
+
+## Phase O — Twenty-four-second stability frontier
+
+Status: **diagnostic implementation in progress**.
+
+The next meaningful scale-up is not another contact micro-optimization. It is
+to double the open-loop horizon from twelve to twenty-four seconds, then admit
+forty-eight seconds only after the 24-second result identifies a stable error
+owner. The model remains one shared 48,920-parameter bounded causal-residual
+transformer plus analytic rigid rollout; no ensemble, trajectory-ranking loss,
+or hidden-state shortcut is introduced.
+
+1. Establish a deterministic no-write N=4/N=6/N=8 24-second audit from the
+   Phase-M checkpoint. Report `2/4/8/12/16/20/24 s` position and velocity
+   curves, contact quality, finiteness, source immutability, and the exact
+   known-action schedule. The same compact probe supports 48 seconds but is
+   an exploratory measurement, never automatic promotion evidence.
+2. Attribute the tail separately with public-belief, truth-parameter, and
+   truth-state solver controls. Do not train longer merely because error
+   increases: change only the smallest owner supported by that comparison.
+3. If physical-parameter error owns the tail, extend the existing causal
+   physical-response objective to balanced `0.5/2/4/8/12/16/20/24 s` samples
+   and train the same model from scratch. Preserve the 12-second curriculum as
+   a compatibility stratum; planning stays downstream-only.
+4. If the truth-state solver owns the tail, improve the analytic integration
+   only through a separately gated, all-cardinality intervention. If public
+   belief owns it, improve observable-state history before widening the
+   transformer. Do not combine these changes in one run.
+5. Promote a 24-second candidate only if every N=4/N=6/N=8 slice preserves all
+   2--12 second gates (no slice regresses by more than 2%), improves the
+   16--24 second paired score, remains finite and source-immutable, preserves
+   K=8/K=32 serial/vectorized planning parity, and stays within the existing
+   model-size and artifact limits. Set absolute 24-second floors after the
+   frozen baseline audit, not retrospectively.
+6. Publish only the run summary, portable report, dashboard data, and at most
+   three vector long-horizon animations. Each animation must visibly label
+   prediction versus reference and show its horizon; no frame directory,
+   video, or raw trajectory tensor is retained.
 
 ## Completion and next frontier
 

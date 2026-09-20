@@ -2,6 +2,21 @@
 
 ## Unreleased — 2026-07-28
 
+### 2026-09-20 twenty-four-second baseline
+
+- Added a no-write, compact 24/48-second public-state audit. Its first N=4
+  24-second run establishes `0.12375/0.20002/0.29935/0.37595 m` position RMSE
+  at 12/16/20/24 seconds with collision F1 `1.0`, finite state, and immutable
+  source belief. This is baseline attribution, not a candidate or promotion.
+
+### 2026-09-20 contact-timing screen rejected
+
+- A disposable N=4 four-second local-grid contact screen reduced endpoint
+  RMSE from `0.02989 m` to `0.00522 m`, but the same direction regressed the
+  N=6 twelve-second endpoint from `0.15255 m` to `0.16662 m`. No source,
+  checkpoint, or artifact was retained; the counterexample is recorded to
+  prevent selecting a narrow improvement over broad long-horizon stability.
+
 ### 2026-09-20 event-local contact screening
 
 - Added a deterministic, no-write N=4/N=6/N=8 relation-impulse probe for the

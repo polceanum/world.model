@@ -1,5 +1,24 @@
 # Project status
 
+## Contact-timing screen rejected — 2026-09-20
+
+A disposable public-state contact-timing screen improved the fixed N=4,
+four-second repeated-contact endpoint from `0.02989 m` to `0.00522 m`, but
+the same local-grid direction regressed N=6 at twelve seconds from `0.15255 m`
+to `0.16662 m`. It is therefore rejected and no runtime path or checkpoint is
+retained. This prevents a small local gain from distracting the next phase:
+substantially longer-horizon stability and clear error attribution now take
+priority.
+
+## Twenty-four-second baseline — 2026-09-20
+
+The new no-write public-state audit establishes the first Phase-O tail curve
+for N=4: position RMSE is `0.12375 m` at 12 seconds, then `0.20002 m`,
+`0.29935 m`, and `0.37595 m` at 16, 20, and 24 seconds. Collision pair F1
+remains `1.0`; state stays finite and the source belief is unchanged. This is
+accumulated open-loop drift rather than a contact-collapse signal. N=6/N=8 and
+truth-parameter/truth-state attribution remain pending before retraining.
+
 ## Event-local contact screening — 2026-09-20
 
 Phase N begins from the Phase-M twelve-second checkpoint without changing the
